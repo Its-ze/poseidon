@@ -96,7 +96,12 @@ static void triton_learn_load(void)
         s_visits[i] = 0;
         s_wins[i] = 0;
     }
-    sd_remount();  /* ensure SD is accessible after CC1101 may have stolen SPI */
+    /* NOT sd_remount() — tearing down HSPI (SD.end + sd_spi.end +
+     * SD.begin) while promiscuous RX is hot deadlocks the SD card
+     * ("sdCommand: no token received") and freezes the whole system.
+     * Rely on boot-time sd_mount. If the brain file doesn't exist yet,
+     * the neutral prior above is the fallback. */
+    if (!sd_is_mounted()) return;
     File f = SD.open("/poseidon/triton_brain.bin", FILE_READ);
     if (f && f.size() == (int)(sizeof(s_q) + sizeof(s_visits) + sizeof(s_wins))) {
         f.read((uint8_t *)s_q, sizeof(s_q));
@@ -108,7 +113,10 @@ static void triton_learn_load(void)
 
 static void triton_learn_save(void)
 {
-    sd_remount();
+    /* Same reasoning as triton_learn_load — no sd_remount. Especially
+     * critical here: the pre-fix periodic 30 s save from hop_task was
+     * the confirmed source of the "Triton freezes after ~30-120 s" bug. */
+    if (!sd_is_mounted()) return;
     File f = SD.open("/poseidon/triton_brain.bin", FILE_WRITE);
     if (!f) return;
     f.write((const uint8_t *)s_q, sizeof(s_q));
@@ -611,10 +619,14 @@ static void hop_task(void *)
         }
         delay(dwell_ms);
 
-        if (millis() - last_save > 30000) {
-            last_save = millis();
-            triton_learn_save();
-        }
+        /* NO mid-session triton_learn_save(). Any SD write path from
+         * hop_task while promiscuous RX is saturating triggers
+         * "sdCommand: no token received" and deadlocks the card. The
+         * learn state is flushed to SD once on session exit below,
+         * after the capture loop drops. Losing learn updates on hard
+         * reset is cheap — worst case we start with the last-session
+         * save. */
+        (void)last_save;
     }
     capture_flush();       /* flush any trailing captures before exit */
     wdr_flush();
