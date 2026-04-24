@@ -29,3 +29,6 @@ src/idf_component.yml
 
 # Staged release artifacts (binary + release-notes draft) — attach to GitHub release instead of committing
 _release/
+
+# Superpowers brainstorm session output (HTML mockups, server state) — local only
+.superpowers/
