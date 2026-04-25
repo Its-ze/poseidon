@@ -99,6 +99,7 @@ extern void feat_nrf24_jammer(void);
 extern void feat_nrf24_finder(void);
 extern void feat_subghz_finder(void);
 extern void feat_mimir(void);
+extern void feat_theme_picker(void);
 extern void feat_sfx_settings(void);
 extern void feat_ambient_preview(void);
 
@@ -583,11 +584,16 @@ static const menu_node_t MENU_SYS[] = {
       "attached and has a fix." },
     { 's', "Settings", "Config + preferences", nullptr, feat_settings,
       "Saved WiFi management, clear creds log, format prefs, reboot." },
+    { 't', "Theme", "POSEIDON / MATRIX / E-INK", nullptr, feat_theme_picker,
+      "Three curated palettes: POSEIDON (cyberpunk cyan/magenta/purple, "
+      "default), MATRIX (souped-up hacker green-on-black with cinematic "
+      "rain), E-INK (paper white for daylight / minimal mode). Live "
+      "preview, ENTER to commit." },
     { 'b', "Ambient", "Live ambient motion preview", nullptr, feat_ambient_preview,
-      "Live preview of the procedural cyberpunk ambient motion: TRON "
-      "purple grid scrolling underneath, cyan/magenta motes drifting, "
-      "magenta packet hopping the L-path. [A] toggles the NVS-backed "
-      "enable flag globally if you ever want it off." },
+      "Live preview of the active theme's ambient: POSEIDON paints TRON "
+      "grid + cyan/magenta motes + magenta L-path packet, MATRIX runs "
+      "souped-up phosphor rain, E-INK is intentionally clean. [A] toggles "
+      "the NVS-backed enable flag globally if you ever want it off." },
     { 'n', "Sound", "Speaker volume + mute + SFX test", nullptr, feat_sfx_settings,
       "Adjust SFX volume 0-10, toggle global mute. Every menu click, "
       "deauth, handshake capture, and splash boot sequence has a tone. "
@@ -688,12 +694,15 @@ static void draw_menu(const menu_node_t *parent, int cursor)
     ui_ambient_tick(0, BODY_Y, SCR_W, BODY_H);
     auto &d = M5Cardputer.Display;
 
-    /* Title with count + scroll indicator. */
+    /* Title with count + scroll indicator. Title underline is a strategic
+     * magenta splash — full body width, 2 px thick — so the cyberpunk
+     * accent color reads from across the room as the dominant pop. */
     d.setTextColor(T_ACCENT, T_BG);
     d.setCursor(4, BODY_Y + 2);
     d.printf("%s", parent->label);
-    int tw = d.textWidth(parent->label);
-    d.drawFastHLine(4, BODY_Y + 12, tw + 6, T_ACCENT);
+    (void)d.textWidth(parent->label);   /* kept for API parity with prior version */
+    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
+    d.drawFastHLine(4, BODY_Y + 13, SCR_W - 8, T_ACCENT2);
 
     /* Root-menu-only C5/TRIDENT status panel. Larger + more prominent
      * than the global status-bar badge so the user sees satellite

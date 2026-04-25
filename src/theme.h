@@ -1,15 +1,17 @@
 /*
- * theme.h — single POSEIDON cyberpunk palette.
+ * theme.h — three curated palettes.
  *
- * One theme. Cyan / magenta / purple on black. Designed for legibility
- * (T_DIM is medium ice-cyan, NOT grey) and for the cyberpunk + TRON
- * aesthetic. The earlier multi-theme picker (PHANTOM, MATRIX, AMBER,
- * E-INK, TRON, HI-CONTRAST) was scrapped — too many mediocre palettes,
- * not enough effort on the one we actually use.
+ *   POSEIDON cyberpunk: cyan / magenta / purple on black with strategic
+ *                       magenta splashes. The default. Designed for
+ *                       readability (T_DIM is medium ice-cyan, not grey).
+ *   MATRIX hacker:      bright phosphor green on pure black. Souped-up
+ *                       cinematic rain in the ambient layer.
+ *   E-INK paper:        black on white. Daytime / outdoor / minimal.
+ *                       Ambient is a no-op so the page stays clean.
  *
- * The enum + theme_id_t + NVS plumbing is kept so we can re-introduce
- * additional palettes later without re-architecting; right now there's
- * only one valid value.
+ * The other earlier palettes (PHANTOM, AMBER, TRON-as-its-own-theme,
+ * HI-CONTRAST) got scrapped — better to have three great ones than
+ * seven mediocre ones.
  */
 #pragma once
 
@@ -34,12 +36,15 @@ struct poseidon_theme_t {
 };
 
 enum theme_id_t {
-    THEME_POSEIDON = 0,
+    THEME_POSEIDON = 0,   /* cyberpunk cyan/magenta/purple — default */
+    THEME_MATRIX,         /* souped-up hacker green-on-black */
+    THEME_EINK,           /* paper white, daytime / minimal */
     THEME__COUNT
 };
 
 void theme_init(void);               /* load from NVS on boot */
 void theme_set(theme_id_t id);       /* apply + persist to NVS */
+void theme_preview(theme_id_t id);   /* apply in RAM only — no NVS write */
 theme_id_t theme_current_id(void);
 const poseidon_theme_t &theme(void);
 

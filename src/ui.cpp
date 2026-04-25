@@ -206,7 +206,10 @@ void ui_draw_status(const char *radio, const char *extra)
         }
     }
 
-    d.drawFastHLine(0, STATUS_H - 1, SCR_W, T_ACCENT);
+    /* Magenta divider line at the bottom of the status bar — the
+     * second strategic magenta splash (title underline is the first).
+     * Two parallel lines together give the cyberpunk edge-pop. */
+    d.drawFastHLine(0, STATUS_H - 1, SCR_W, T_ACCENT2);
 
     strncpy(s_st_radio, rr, sizeof(s_st_radio) - 1); s_st_radio[sizeof(s_st_radio) - 1] = 0;
     strncpy(s_st_extra, ee, sizeof(s_st_extra) - 1); s_st_extra[sizeof(s_st_extra) - 1] = 0;

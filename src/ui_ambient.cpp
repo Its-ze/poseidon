@@ -1,16 +1,13 @@
 /*
  * ui_ambient.cpp — see ui_ambient.h.
  *
- * Single combined cyberpunk ambient: three layers painted every frame.
- *   1. TRON grid scrolling diagonally at low brightness — gives the
- *      world structure.
- *   2. POSEIDON motes drifting bottom -> top in cyan/magenta — gives
- *      life.
- *   3. Magenta packet hopping an L-path on a slow loop — gives accent.
- *
- * The earlier per-theme dispatch (5 painters) was scrapped when we
- * collapsed to a single POSEIDON theme. All three layers stay subtle
- * enough that menu rows remain readable on top.
+ * Per-theme dispatch:
+ *   POSEIDON  ->  combined cyberpunk: TRON purple grid + cyan/magenta
+ *                 motes + magenta L-path packet (three layers).
+ *   MATRIX    ->  souped-up phosphor rain at full T_FG brightness;
+ *                 ui_matrix_rain handles the bright leading char +
+ *                 fading green trail internally.
+ *   E-INK     ->  no-op, paper aesthetic preserved.
  *
  * State invariants:
  *   - All per-frame state derives from millis() and esp_random(); no
@@ -55,24 +52,19 @@ void ui_ambient_enabled_set(bool on)
     }
 }
 
-/* Intentional non-theme literals. AMB_GRID is the dim purple for the
- * TRON grid layer — has to sit BELOW T_DIM in luminance so menu hint
- * text on top stays the dominant visual element. Not theme-derived
- * because the grid color IS the cyberpunk-grid identity. */
+/* Intentional non-theme literal. AMB_GRID is the dim purple for the
+ * TRON grid layer in the POSEIDON painter — has to sit BELOW T_DIM in
+ * luminance so menu hint text on top stays the dominant visual element.
+ * Not theme-derived because the grid color IS the cyberpunk-grid identity. */
 #define AMB_GRID  0x1004u  /* very dark cyan-purple */
 
-void ui_ambient_tick(int x, int y, int w, int h)
+/* ---- POSEIDON: combined cyberpunk cyberscape ---- */
+static void amb_poseidon(int x, int y, int w, int h)
 {
-    if (!ui_ambient_enabled()) return;
-    if (w <= 0 || h <= 0)      return;
-
     auto &d = M5Cardputer.Display;
     uint32_t now = millis();
 
-    /* ---- Layer 1: TRON grid (scrolling diagonally) ----
-     * 30 px spacing both axes. Grid offset advances 1 cell per 6 s for
-     * a subtle parallax drift. Lines drawn in AMB_GRID — well below
-     * T_DIM so menu hints sit comfortably on top. */
+    /* Layer 1: TRON grid scrolling diagonally. */
     int scroll = (int)((now % 6000u) * 30u / 6000u);
     for (int gx = -scroll; gx < w; gx += 30) {
         if (gx >= 0 && gx < w) d.drawFastVLine(x + gx, y, h, AMB_GRID);
@@ -81,15 +73,12 @@ void ui_ambient_tick(int x, int y, int w, int h)
         if (gy >= 0 && gy < h) d.drawFastHLine(x, y + gy, w, AMB_GRID);
     }
 
-    /* ---- Layer 2: POSEIDON motes drifting bottom -> top ----
-     * 8 motes, each on its own period + x-position + cyan/magenta tint.
-     * 3 px tall (centre + halo above/below). Phase keyed off millis +
-     * per-mote seed so they don't sync. */
+    /* Layer 2: POSEIDON motes drifting bottom -> top. */
     static const struct mote_t {
         uint8_t  col_pct;
         uint16_t period_ms;
         uint32_t seed;
-        bool     alt;          /* true = T_ACCENT2 (magenta) */
+        bool     alt;
     } MOTES[8] = {
         {  8, 5000, 0x1111u, false },
         { 22, 7000, 0x2222u, true  },
@@ -100,7 +89,6 @@ void ui_ambient_tick(int x, int y, int w, int h)
         { 88, 6500, 0x7777u, true  },
         { 14, 9000, 0x8888u, false },
     };
-
     for (int i = 0; i < 8; ++i) {
         uint32_t period = MOTES[i].period_ms;
         uint32_t phase  = (now + MOTES[i].seed) % period;
@@ -113,11 +101,7 @@ void ui_ambient_tick(int x, int y, int w, int h)
         if (my < h - 1) d.drawPixel(x + mx, y + my + 1, color);
     }
 
-    /* ---- Layer 3: magenta packet hopping the L-path ----
-     * 8000 ms cycle, four 25% segments tracing an L through the body
-     * region. 3x3 magenta block + 4-pixel cross halo. Slower than the
-     * old per-theme TRON packet so it reads as "occasional accent"
-     * rather than "constant motion". */
+    /* Layer 3: magenta packet hopping the L-path on an 8 s loop. */
     uint32_t pkt_period = 8000u;
     uint32_t pphase     = now % pkt_period;
     uint32_t quarter    = pkt_period / 4u;
@@ -137,10 +121,30 @@ void ui_ambient_tick(int x, int y, int w, int h)
     default: px = (w * 75) / 100;
              py = (h * (75 + (95 - 75) * seg_pct / 100)) / 100; break;
     }
-
     d.fillRect(x + px - 1, y + py - 1, 3, 3, T_ACCENT2);
     d.drawPixel(x + px - 2, y + py,     T_ACCENT2);
     d.drawPixel(x + px + 2, y + py,     T_ACCENT2);
     d.drawPixel(x + px,     y + py - 2, T_ACCENT2);
     d.drawPixel(x + px,     y + py + 2, T_ACCENT2);
+}
+
+/* ---- MATRIX: souped-up phosphor rain ----
+ * Calls ui_matrix_rain at full T_FG brightness so the body chars are
+ * full-bright green, the leading char is white, and the trail fades
+ * through medium green to dark — straight out of the movie. */
+static void amb_matrix(int x, int y, int w, int h)
+{
+    ui_matrix_rain(x, y, w, h, T_FG);
+}
+
+void ui_ambient_tick(int x, int y, int w, int h)
+{
+    if (!ui_ambient_enabled()) return;
+    if (w <= 0 || h <= 0)      return;
+    switch (theme_current_id()) {
+    case THEME_POSEIDON:  amb_poseidon(x, y, w, h); break;
+    case THEME_MATRIX:    amb_matrix  (x, y, w, h); break;
+    case THEME_EINK:      /* paper aesthetic — no ambient */    break;
+    default:              break;
+    }
 }
