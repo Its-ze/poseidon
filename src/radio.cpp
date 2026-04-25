@@ -82,8 +82,11 @@ bool radio_switch(radio_domain_t target)
         WiFi.disconnect(false, true);
         break;
     case RADIO_BLE:
-        NimBLEDevice::init("POSEIDON");
-        NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+        /* DON'T init NimBLE here. The BLE feature modules (ble_scan,
+         * ble_spam, etc.) manage the full NimBLE lifecycle themselves
+         * following Bruce's verbatim pattern (deinit + 500ms settle +
+         * init). Double-init from both sides caused controller-state
+         * races that crashed the device. */
         break;
     case RADIO_LORA:
         break;

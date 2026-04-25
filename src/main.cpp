@@ -14,6 +14,17 @@
 #include "version.h"
 #include "utility/Keyboard/KeyboardReader/TCA8418.h"
 
+/* Strong override: tell Arduino-ESP32 core that BT is in use. Without
+ * this the core calls esp_bt_controller_mem_release(ESP_BT_MODE_BTDM)
+ * at boot (before app_main), releasing ~36KB of BT memory. After that
+ * any esp_bt_controller_enable() will fail silently — NimBLE init
+ * looks successful but the controller stays stuck at status 2 (INITED)
+ * and BLE scans return zero devices. The weak default implementation
+ * in esp32-hal-bt.c returns _btLibraryInUse which is only set to true
+ * if a BT library includes esp32-hal-bt-mem.h — NimBLE-Arduino 2.5.0
+ * does NOT include it, so on our stack we must opt in manually. */
+extern "C" bool btInUse(void) { return true; }
+
 /* Background GPS poller — keeps NMEA parsed continuously so that by
  * the time the user opens Wardrive or GPS fix page the last fix is
  * already fresh. Low priority, tiny stack. */
@@ -85,12 +96,30 @@ void setup()
 
     ui_init();
 
-    /* Bring up ESP-NOW + the C5/TRIDENT HELLO listener at boot so the
-     * global status-bar satellite badge lights up as soon as a C5 is
-     * powered on — without the user having to open a C5 feature first.
-     * c5_begin is idempotent; features that need ESP-NOW for their own
-     * commands still call it. */
-    c5_begin();
+    /* Deferred boot: c5_begin() used to fire here so the satellite
+     * badge would light up before any feature was opened. But starting
+     * WiFi at boot claims the coex slot before BLE gets a chance to
+     * init — esp_bt_controller_enable then fails on first BLE scan
+     * (status stuck at 2/INITED). Bruce doesn't run WiFi at boot
+     * either. c5_begin is idempotent and called from every WiFi
+     * feature entry, so moving it out of boot costs us only the
+     * pre-feature satellite badge. */
+#ifdef POSEIDON_AUTO_DEAUTH_TEST
+    {
+        extern void poseidon_autotest_show_last_crash(void);
+        poseidon_autotest_show_last_crash();
+    }
+#endif
+
+#ifdef POSEIDON_AUTO_DEAUTH_TEST
+    /* No-UI deauth self-test: 3 stages (basic, burst, triton-hop).
+     * Marks progress to NVS so a reboot trace is visible on next boot
+     * without serial. Skip splash so we get feedback fast. */
+    {
+        extern void poseidon_deauth_autotest(void);
+        poseidon_deauth_autotest();
+    }
+#endif
 
     ui_splash();  /* animates, then waits for a key press internally */
 }

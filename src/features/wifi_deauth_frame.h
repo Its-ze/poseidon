@@ -57,18 +57,14 @@ extern "C" {
  *
  * Side-effect: a hidden AP briefly exists on the target channel.
  * Marauder users have shipped this for years. */
-/* MAC spoof support. Call before wifi_silent_ap_begin to set the softAP's
- * MAC to the target BSSID. esp_wifi_internal_tx requires addr2 (source)
- * to match our interface's MAC — spoofing makes our deauth frames claim
- * to come from the target AP, matching both frame addressing and the
- * driver's TX-disallow check. */
-static uint8_t s_spoof_mac[6] = {0};
-static bool    s_spoof_active = false;
-static inline void wifi_silent_ap_set_source_mac(const uint8_t mac[6])
-{
-    if (mac) { memcpy(s_spoof_mac, mac, 6); s_spoof_active = true; }
-    else     { s_spoof_active = false; }
-}
+/* Interface-MAC spoof is retained as a no-op shim for call sites that still
+ * invoke it. Spoofing the softAP interface's MAC caused ieee80211_hostap_attach
+ * to null-deref (esp_wifi_stop → set_mac → esp_wifi_start runs BEFORE the AP
+ * config is set by WiFi.softAP, so the hostap attach path reads empty config
+ * and crashes). Bruce, Marauder, and Ghost ESP all skip interface-MAC spoofing
+ * and rely on addr2 in the frame bytes (which _deauth_build already sets to
+ * the target BSSID). That's the working pattern — we do the same now. */
+static inline void wifi_silent_ap_set_source_mac(const uint8_t *mac) { (void)mac; }
 
 static inline esp_err_t wifi_silent_ap_begin(uint8_t channel)
 {
@@ -83,20 +79,8 @@ static inline esp_err_t wifi_silent_ap_begin(uint8_t channel)
     WiFi.mode(WIFI_AP_STA);
     delay(10);
 
-    /* Spoof the AP's MAC to the target BSSID so addr2 in our frames
-     * matches the TX interface MAC (required by esp_wifi_internal_tx
-     * TX-disallow check). set_mac requires WiFi stopped. */
-    if (s_spoof_active) {
-        esp_wifi_stop();
-        delay(5);
-        esp_err_t mrc = esp_wifi_set_mac(WIFI_IF_AP, s_spoof_mac);
-        Serial.printf("[deauth] set_mac AP=%02X:%02X:%02X:%02X:%02X:%02X rc=%d\n",
-                      s_spoof_mac[0], s_spoof_mac[1], s_spoof_mac[2],
-                      s_spoof_mac[3], s_spoof_mac[4], s_spoof_mac[5], (int)mrc);
-        esp_wifi_start();
-    }
-
-    /* Random-ish SSID to avoid collisions. Keep it hidden. */
+    /* Random-ish SSID to avoid collisions. Keep it hidden. softAP sets the AP
+     * config and brings the radio up for raw TX on WIFI_IF_AP. */
     char ssid[16];
     snprintf(ssid, sizeof(ssid), "P%04X", (unsigned)(esp_random() & 0xFFFF));
     if (!WiFi.softAP(ssid, "", channel, /*hidden*/ 1, /*max_conn*/ 4, /*ftm_responder*/ false)) {
@@ -105,8 +89,23 @@ static inline esp_err_t wifi_silent_ap_begin(uint8_t channel)
     }
 
     /* Promiscuous on top of AP lets our client-sniffer callback run while
-     * the AP is the authorized TX source for deauth frames. */
-    wifi_promiscuous_filter_t filter = { .filter_mask = WIFI_PROMIS_FILTER_MASK_ALL };
+     * the AP is the authorized TX source for deauth frames.
+     *
+     * Filter is MGMT + DATA + DATA_AMPDU — FILTER_MASK_ALL includes
+     * CTRL (ACK/RTS/CTS) which on a busy channel floods the shared
+     * WiFi buffer pool and starves the TX queue. Every
+     * esp_wifi_80211_tx then returns ESP_ERR_NO_MEM (257) with no
+     * frames landing on air. MGMT finds associations/EAPOL; DATA +
+     * DATA_AMPDU both needed to harvest STA MACs — modern APs (any
+     * 802.11n AP) aggregate data frames and without DATA_AMPDU the
+     * sniffer sees almost no client traffic (sta count stays at 0).
+     * See prior commit 0f8e9a5 — dropping AMPDU also drops EAPOL.
+     * This combo is the sweet spot: catches traffic without flooding. */
+    wifi_promiscuous_filter_t filter = {
+        .filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT
+                     | WIFI_PROMIS_FILTER_MASK_DATA
+                     | WIFI_PROMIS_FILTER_MASK_DATA_AMPDU
+    };
     esp_wifi_set_promiscuous_filter(&filter);
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
