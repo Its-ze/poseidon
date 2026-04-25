@@ -295,9 +295,38 @@ void feat_wifi_scan(void)
     ui_draw_footer("/=flt O=open S=save R=rescan ENTER=info `=back");
     draw_list(s_saved_cursor);
 
+    /* Inline sync scan — Evil-M5Project pattern. Wrapping in a
+     * FreeRTOS task (our prior approach) was triggering a stack
+     * canary overflow on the wifi_scan task, even at 8 KB. The lib's
+     * own scan loop wants to run on the caller task. Block the UI for
+     * the ~2 s scan; it's fine. */
     if (!s_have_results) {
         s_ap_count = 0;
-        xTaskCreate(scan_task, "wifi_scan", 4096, nullptr, 4, nullptr);
+        s_scan_running = true;
+        s_scan_done = false;
+        if (!c5_any_online()) {
+            /* Only switch radio if we don't need to keep ESP-NOW alive
+             * for a follow-up 5 GHz C5 merge. Switching toggles WiFi
+             * init which fragments heap. */
+        }
+        WiFi.mode(WIFI_STA);
+        int n = WiFi.scanNetworks(false, false);   /* sync, no hidden */
+        Serial.printf("[wifi_scan] inline -> %d\n", n);
+        if (n > 0) {
+            for (int i = 0; i < n && s_ap_count < MAX_APS; ++i) {
+                ap_t &a = s_aps[s_ap_count++];
+                strncpy(a.ssid, WiFi.SSID(i).c_str(), sizeof(a.ssid) - 1);
+                a.ssid[sizeof(a.ssid) - 1] = '\0';
+                memcpy(a.bssid, WiFi.BSSID(i), 6);
+                a.rssi    = WiFi.RSSI(i);
+                a.channel = WiFi.channel(i);
+                a.auth    = (uint8_t)WiFi.encryptionType(i);
+                a.is_5g   = false;
+            }
+        }
+        WiFi.scanDelete();
+        s_scan_running = false;
+        s_scan_done = true;
     }
 
     int cursor = s_saved_cursor;
@@ -350,7 +379,7 @@ void feat_wifi_scan(void)
             if (!s_scan_running) {
                 s_ap_count = 0;
                 s_have_results = false;
-                xTaskCreate(scan_task, "wifi_scan", 4096, nullptr, 4, nullptr);
+                xTaskCreate(scan_task, "wifi_scan", 8192, nullptr, 4, nullptr);
             }
             break;
         case '?':

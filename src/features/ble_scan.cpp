@@ -23,6 +23,9 @@
 #include "sd_helper.h"
 #include <NimBLEDevice.h>
 #include <SD.h>
+#include <WiFi.h>
+#include <esp_wifi.h>
+#include <esp_bt.h>
 
 /* Shared with other BLE features. */
 ble_target_t g_ble_target = {};
@@ -114,8 +117,11 @@ static void classify(const NimBLEAdvertisedDevice *d, char *out, size_t out_sz)
     snprintf(out, out_sz, "BLE");
 }
 
+static volatile uint32_t s_cb_fire_count = 0;
+
 class scan_cb : public NimBLEScanCallbacks {
     void onResult(const NimBLEAdvertisedDevice *d) override {
+        s_cb_fire_count++;
         /* Dedup by address. */
         NimBLEAddress addr = d->getAddress();
         for (int i = 0; i < s_count; ++i) {
@@ -208,19 +214,118 @@ static void draw_list(int cursor)
     }
 }
 
+/* Drain a NimBLEScanResults into s_devs as a belt-and-suspenders pass.
+ * The scan callback populates s_devs live during the scan, but if the
+ * callback was somehow registered too late (miss the first few adverts)
+ * this backfill catches them from the in-memory results list. */
+static void drain_scan_results(NimBLEScanResults &results)
+{
+    for (int i = 0; i < (int)results.getCount() && s_count < BLE_MAX_DEVS; ++i) {
+        const NimBLEAdvertisedDevice *d = results.getDevice(i);
+        if (!d) continue;
+        NimBLEAddress addr = d->getAddress();
+        bool dup = false;
+        for (int j = 0; j < s_count; ++j) {
+            if (memcmp(s_devs[j].addr, addr.getBase()->val, 6) == 0) { dup = true; break; }
+        }
+        if (dup) continue;
+        ble_dev_t &x = s_devs[s_count++];
+        memcpy(x.addr, addr.getBase()->val, 6);
+        x.rssi = d->getRSSI();
+        x.is_public = (addr.getType() == BLE_ADDR_PUBLIC);
+        x.name[0] = '\0';
+        if (d->haveName()) sanitize(d->getName().c_str(), x.name, sizeof(x.name));
+        classify(d, x.type, sizeof(x.type));
+    }
+}
+
 static void start_scan(void)
 {
-    NimBLEScan *scan = NimBLEDevice::getScan();
-    /* s_cb is static-allocated; no alloc needed. */
-    scan->setScanCallbacks(s_cb, /*wantDuplicates=*/true);
-    scan->setActiveScan(false);
-    scan->setInterval(45);
-    scan->setWindow(30);
+    Serial.printf("[ble] entry heap=%u\n", (unsigned)ESP.getFreeHeap());
+    Serial.flush();
+
+    /* Bruce's exact pattern from selectTargetFromScan in BLE_Suite.cpp.
+     * Bruce ships this on the same Cardputer + NimBLE 2.x stack and it
+     * populates 30+ devices reliably. Deviations from this recipe caused
+     * all our prior no-scan / crash regressions — so match it verbatim.
+     *
+     * Key points:
+     *   - Always deinit first (no-op when uninit; resets stale state).
+     *   - 500 ms settle before init — BT controller needs it.
+     *   - Empty device name "" — minimizes NimBLE internal allocations.
+     *   - Interval 97 / Window 67 (NOT 100/99).
+     *   - setDuplicateFilter(false).
+     *   - getResults(ms) is blocking — populates the list internally;
+     *     we iterate the returned object, not a callback buffer. */
+    if (NimBLEDevice::isInitialized()) {
+        Serial.println("[ble] deinit"); Serial.flush();
+        NimBLEDevice::deinit(true);
+    }
+    delay(500);
+
+    Serial.println("[ble] init"); Serial.flush();
+    if (!NimBLEDevice::init("")) {
+        Serial.println("[ble] init FAILED"); Serial.flush();
+        return;
+    }
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+
+    NimBLEScan *pBLEScan = NimBLEDevice::getScan();
+    pBLEScan->setInterval(97);
+    pBLEScan->setWindow(67);
+    pBLEScan->setDuplicateFilter(false);
+
+    auto ingest = [](NimBLEScanResults &results) {
+        for (int i = 0; i < (int)results.getCount() && s_count < BLE_MAX_DEVS; ++i) {
+            const NimBLEAdvertisedDevice *device = results.getDevice(i);
+            if (!device) continue;
+            NimBLEAddress addr = device->getAddress();
+
+            bool dup = false;
+            for (int j = 0; j < s_count; ++j) {
+                if (memcmp(s_devs[j].addr, addr.getBase()->val, 6) == 0) {
+                    if (device->getRSSI() > s_devs[j].rssi) s_devs[j].rssi = device->getRSSI();
+                    dup = true; break;
+                }
+            }
+            if (dup) continue;
+
+            ble_dev_t &x = s_devs[s_count++];
+            memcpy(x.addr, addr.getBase()->val, 6);
+            x.rssi      = device->getRSSI();
+            x.is_public = (addr.getType() == BLE_ADDR_PUBLIC);
+            x.name[0]   = '\0';
+            if (device->haveName()) sanitize(device->getName().c_str(), x.name, sizeof(x.name));
+            classify(device, x.type, sizeof(x.type));
+        }
+    };
+
     s_scanning = true;
-    /* NimBLE 2.x: start(duration_ms, is_continue). Callback on completion
-     * is gone — we poll s_scanning from the UI loop which calls
-     * scan->isScanning() directly via the poll on line ~240. */
-    scan->start(6000, false);  /* 6000ms = 6s, matches pre-migration behaviour */
+
+    /* Dual-pass scan matching Bruce's selectTargetFromScan: 8 s active
+     * (fetches scan-response packets — where device names and some
+     * tracker-specific data live) + 5 s passive (catches trackers like
+     * AirTag / Tile / SmartTag that advertise without responding to
+     * scan-req, and devices running in LE-only low-power mode). */
+    pBLEScan->setActiveScan(true);
+    Serial.println("[ble] active pass"); Serial.flush();
+    NimBLEScanResults active_results = pBLEScan->getResults(8000, false);
+    Serial.printf("[ble] active: %d devices\n", (int)active_results.getCount());
+    Serial.flush();
+    ingest(active_results);
+    pBLEScan->clearResults();
+
+    pBLEScan->setActiveScan(false);
+    Serial.println("[ble] passive pass"); Serial.flush();
+    NimBLEScanResults passive_results = pBLEScan->getResults(5000, false);
+    Serial.printf("[ble] passive: %d devices (total s_count=%d)\n",
+                  (int)passive_results.getCount(), s_count);
+    Serial.flush();
+    ingest(passive_results);
+    pBLEScan->clearResults();
+
+    qsort(s_devs, s_count, sizeof(ble_dev_t), sort_fn);
+    s_scanning = false;
 }
 
 void feat_ble_scan(void)
@@ -228,12 +333,36 @@ void feat_ble_scan(void)
     radio_switch(RADIO_BLE);
     s_count = 0;
     s_filter[0] = '\0';
+    s_cb_fire_count = 0;
 
     ui_draw_status(radio_name(), "scan");
     ui_draw_footer("/=flt S=save R=rescan ENTER=info `=back");
     draw_list(0);
 
     start_scan();
+
+    /* On-screen diagnostic — serial CDC is unreliable here so dump the
+     * scan outcome directly to the display and pause until a keypress. */
+    {
+        auto &dd = M5Cardputer.Display;
+        dd.fillRect(0, BODY_Y, SCR_W, BODY_H, T_BG);
+        dd.setTextColor(T_ACCENT, T_BG);
+        dd.setCursor(4, BODY_Y + 4); dd.print("BLE SCAN DIAG");
+        dd.drawFastHLine(4, BODY_Y + 14, SCR_W - 8, T_ACCENT);
+        dd.setTextColor(T_FG, T_BG);
+        bool init_ok = NimBLEDevice::isInitialized();
+        NimBLEScan *sc = NimBLEDevice::getScan();
+        esp_bt_controller_status_t bts = esp_bt_controller_get_status();
+        wifi_mode_t wm2 = WIFI_MODE_NULL; esp_wifi_get_mode(&wm2);
+        dd.setCursor(4, BODY_Y + 20);  dd.printf("nimble init: %s", init_ok ? "yes" : "NO");
+        dd.setCursor(4, BODY_Y + 30);  dd.printf("scan obj   : %s", sc ? "yes" : "NO");
+        dd.setCursor(4, BODY_Y + 40);  dd.printf("bt ctrl    : %d (need 3)", (int)bts);
+        dd.setCursor(4, BODY_Y + 50);  dd.printf("wifi mode  : %d (0=off)", (int)wm2);
+        dd.setCursor(4, BODY_Y + 60);  dd.printf("cb fires   : %lu", (unsigned long)s_cb_fire_count);
+        dd.setCursor(4, BODY_Y + 70);  dd.printf("s_count    : %d", s_count);
+        dd.setCursor(4, BODY_Y + 85);  dd.setTextColor(T_DIM, T_BG); dd.print("any key to continue");
+        while (input_poll() == PK_NONE) delay(20);
+    }
 
     int cursor = 0;
     uint32_t last_redraw = 0;

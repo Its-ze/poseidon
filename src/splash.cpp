@@ -65,7 +65,7 @@ void ui_splash(void)
         extern void sfx_boot(void);
         sfx_boot();
         vTaskDelete(nullptr);
-    }, "splash_sfx", 2048, nullptr, 2, nullptr);
+    }, "splash_sfx", 4096, nullptr, 2, nullptr);
 
     /* ---- Phase 1: fade in with magenta scanline sweep ---- */
     for (int f = 0; f <= 25; ++f) {
