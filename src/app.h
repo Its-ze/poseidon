@@ -26,4 +26,6 @@
 #define FOOTER_Y (SCR_H - FOOTER_H)
 
 /* ---- build info ---- */
-#define POSEIDON_VERSION "0.1.0"
+/* POSEIDON_VERSION comes from -D in platformio.ini; src/version.h
+ * provides an #ifndef-guarded fallback. Defining it here too caused
+ * a compiler "redefined" warning on every build. */
