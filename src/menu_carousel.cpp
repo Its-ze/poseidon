@@ -27,6 +27,7 @@
  * for the visual cost.
  */
 #include "menu_carousel.h"
+#include "menu_icons.h"
 #include "ui.h"
 #include "ui_ambient.h"
 #include "input.h"
@@ -148,12 +149,18 @@ static void draw_card(const menu_node_t *parent, int cursor, int slide_x)
     d.fillCircle(bx, by, br, T_SEL_BG);
     d.drawCircle(bx, by, br,     pulse);
     d.drawCircle(bx, by, br - 1, T_ACCENT);
-    d.setTextColor(T_FG, T_SEL_BG);
-    d.setTextSize(2);
-    /* Letter is 12x16 at size 2. Center it in the 28-px-diameter circle. */
-    d.setCursor(bx - 6, by - 7);
-    d.printf("%c", toupper(item->hotkey));
-    d.setTextSize(1);
+    /* Try the icon dispatcher first — top-level POSEIDON entries get
+     * their pictograph (cyan in POSEIDON theme, green in MATRIX, black
+     * in E-INK because drawBitmap inherits the passed color). Submenu
+     * items fall through to the big-letter rendering. */
+    if (!draw_menu_icon(bx, by, T_FG, parent, item)) {
+        d.setTextColor(T_FG, T_SEL_BG);
+        d.setTextSize(2);
+        /* Letter is 12x16 at size 2. Center it in the 28-px-diameter circle. */
+        d.setCursor(bx - 6, by - 7);
+        d.printf("%c", toupper(item->hotkey));
+        d.setTextSize(1);
+    }
 
     /* Big label: size 2, to the right of the badge. Truncate to fit. */
     int lx = bx + br + 10;
