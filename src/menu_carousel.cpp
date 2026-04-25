@@ -78,9 +78,20 @@ static uint16_t blend565(uint16_t a, uint16_t b, uint8_t t)
     return (uint16_t)((r << 11) | (g << 5) | bl);
 }
 
-/* Render one card. slide_x lets the caller offset the entire card
- * horizontally during the slide-in animation. */
-static void draw_card(const menu_node_t *parent, int cursor, int slide_x)
+/* Compute the pulse color for the badge ring at the current millis().
+ * Used by both the full-paint and the lightweight idle path. */
+static uint16_t pulse_color_now(void)
+{
+    uint32_t now   = millis();
+    float    phase = (float)(now % 1500) / 1500.0f;
+    float    cosw  = (1.0f - cosf(phase * 2.0f * 3.14159f)) * 0.5f;
+    uint8_t  blend = (uint8_t)(cosw * 255.0f);
+    return blend565(T_ACCENT, T_ACCENT2, blend);
+}
+
+/* Full card paint — every layer, every glyph, every bracket. Called on
+ * cursor change, on slide animation frames, and on initial entry. */
+static void draw_card_full(const menu_node_t *parent, int cursor, int slide_x)
 {
     auto &d = M5Cardputer.Display;
     int n = count_children(parent);
@@ -140,12 +151,7 @@ static void draw_card(const menu_node_t *parent, int cursor, int slide_x)
     int  bx = cx + 22;
     int  by = cy + ch / 2;
     int  br = 14;
-    uint32_t now    = millis();
-    /* cosine-shaped pulse so the rate-of-change tapers at the peaks. */
-    float    phase  = (float)(now % 1500) / 1500.0f;       /* 0..1   */
-    float    cosw   = (1.0f - cosf(phase * 2.0f * 3.14159f)) * 0.5f;  /* 0..1 */
-    uint8_t  blend  = (uint8_t)(cosw * 255.0f);
-    uint16_t pulse  = blend565(T_ACCENT, T_ACCENT2, blend);
+    uint16_t pulse = pulse_color_now();
     d.fillCircle(bx, by, br, T_SEL_BG);
     d.drawCircle(bx, by, br,     pulse);
     d.drawCircle(bx, by, br - 1, T_ACCENT);
@@ -211,6 +217,68 @@ static void draw_card(const menu_node_t *parent, int cursor, int slide_x)
     d.print(">");
 }
 
+/* Lightweight idle paint — only touches the parts of the card that
+ * actually change frame-to-frame: two ambient strips (above and below
+ * the text band) and the pulsing outer ring of the badge. The label,
+ * hint, brackets, dividers, type indicator, and scroll arrows are NOT
+ * touched, so they don't strobe.
+ *
+ * Layout (matching draw_card_full):
+ *
+ *  +-                               -+    <- top corner brackets at cy
+ *  | [ambient zone above text]       |    <- amb_top strip
+ *  |                                  |
+ *  |  ((W))   WIFI                   |    <- TEXT BAND — never repainted
+ *  |   ===    recon + attacks        |       in idle path
+ *  |                                  |
+ *  | [ambient zone below text]       |    <- amb_bot strip
+ *  |                       MENU >    |
+ *  +-                               -+    <- bottom corner brackets
+ */
+static void draw_card_anim(const menu_node_t *parent, int cursor)
+{
+    auto &d = M5Cardputer.Display;
+    int n = count_children(parent);
+    if (n <= 0 || cursor < 0 || cursor >= n) return;
+
+    /* Card geometry — must match draw_card_full with slide_x = 0. */
+    const int cx = 6;
+    const int cy = BODY_Y + 18;
+    const int cw = SCR_W - 12;
+    const int ch = BODY_H - 24;
+    const int bx = cx + 22;
+    const int by = cy + ch / 2;
+    const int br = 14;
+
+    /* Ambient strips — inset 8 px from card edges (so corner brackets
+     * + magenta accent dots are never erased), starting below the top
+     * brackets and ending above the type indicator / bottom brackets. */
+    const int amb_x      = cx + 8;
+    const int amb_w      = cw - 16;
+    const int amb_top_y  = cy + 4;
+    const int amb_top_h  = (ch / 2) - 20;
+    const int amb_bot_y  = cy + (ch / 2) + 14;
+    const int amb_bot_h  = (ch / 2) - 27;
+
+    /* Clear both strips back to T_BG, then paint ambient — clipped per
+     * strip so the ambient mote/grid/packet positions stay computed
+     * against the FULL card bounds (otherwise motes would loop in a
+     * strip-sized box and the animation would feel cramped). */
+    d.fillRect(amb_x, amb_top_y, amb_w, amb_top_h, T_BG);
+    d.setClipRect(amb_x, amb_top_y, amb_w, amb_top_h);
+    ui_ambient_tick(0, BODY_Y, SCR_W, BODY_H);
+
+    d.fillRect(amb_x, amb_bot_y, amb_w, amb_bot_h, T_BG);
+    d.setClipRect(amb_x, amb_bot_y, amb_w, amb_bot_h);
+    ui_ambient_tick(0, BODY_Y, SCR_W, BODY_H);
+
+    d.clearClipRect();
+
+    /* Repaint just the pulsing outer ring of the badge. The fill,
+     * inner ring, and icon stay where they are. */
+    d.drawCircle(bx, by, br, pulse_color_now());
+}
+
 void carousel_run_submenu(const menu_node_t *parent)
 {
     int      cursor       = 0;
@@ -226,7 +294,7 @@ void carousel_run_submenu(const menu_node_t *parent)
     ui_draw_footer(CAROUSEL_FOOTER);
 
     /* Initial paint. */
-    draw_card(parent, cursor, 0);
+    draw_card_full(parent, cursor, 0);
 
     while (true) {
         uint32_t now = millis();
@@ -237,19 +305,20 @@ void carousel_run_submenu(const menu_node_t *parent)
             uint32_t elapsed = now - slide_start;
             if (elapsed >= 200) {
                 animating = false;
-                draw_card(parent, cursor, 0);
+                draw_card_full(parent, cursor, 0);
             } else {
                 int slide_x = (int)((int64_t)slide_dir * (200 - (int)elapsed) * SCR_W / 200);
-                draw_card(parent, cursor, slide_x);
+                draw_card_full(parent, cursor, slide_x);
             }
         } else {
-            /* Even when idle the badge ring pulses, so we keep redrawing
-             * the card every ~33 ms (~30 fps). Cheap on this screen — the
-             * card is mostly static other than badge ring + ambient. */
+            /* Idle: only repaint the parts that actually animate — the
+             * two ambient strips (above + below the text band) and the
+             * pulsing outer ring of the badge. Text / brackets / divider
+             * / type indicator / arrows stay put, so they don't strobe. */
             static uint32_t last_idle_paint = 0;
             if (now - last_idle_paint > 33) {
                 last_idle_paint = now;
-                draw_card(parent, cursor, 0);
+                draw_card_anim(parent, cursor);
             }
         }
 
@@ -266,7 +335,7 @@ void carousel_run_submenu(const menu_node_t *parent)
             g_current_feature_item = nullptr;
             ui_draw_status(radio_name(), "");
             ui_draw_footer(CAROUSEL_FOOTER);
-            draw_card(parent, cursor, 0);
+            draw_card_full(parent, cursor, 0);
             continue;
         }
 
@@ -293,12 +362,12 @@ void carousel_run_submenu(const menu_node_t *parent)
                 g_current_feature_item = nullptr;
                 ui_draw_status(radio_name(), "");
                 ui_draw_footer(CAROUSEL_FOOTER);
-                draw_card(parent, cursor, 0);
+                draw_card_full(parent, cursor, 0);
             } else if (sel->children) {
                 carousel_run_submenu(sel);
                 ui_draw_status(radio_name(), "");
                 ui_draw_footer(CAROUSEL_FOOTER);
-                draw_card(parent, cursor, 0);
+                draw_card_full(parent, cursor, 0);
             }
             continue;
         }
@@ -309,7 +378,7 @@ void carousel_run_submenu(const menu_node_t *parent)
             int i = index_of(parent, (char)k);
             if (i >= 0) {
                 cursor = i;
-                draw_card(parent, cursor, 0);
+                draw_card_full(parent, cursor, 0);
                 const menu_node_t *sel = &parent->children[cursor];
                 if (sel->action) {
                     g_current_feature_item = sel;
@@ -317,12 +386,12 @@ void carousel_run_submenu(const menu_node_t *parent)
                     g_current_feature_item = nullptr;
                     ui_draw_status(radio_name(), "");
                     ui_draw_footer(CAROUSEL_FOOTER);
-                    draw_card(parent, cursor, 0);
+                    draw_card_full(parent, cursor, 0);
                 } else if (sel->children) {
                     carousel_run_submenu(sel);
                     ui_draw_status(radio_name(), "");
                     ui_draw_footer(CAROUSEL_FOOTER);
-                    draw_card(parent, cursor, 0);
+                    draw_card_full(parent, cursor, 0);
                 }
             }
         }
