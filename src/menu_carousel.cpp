@@ -34,6 +34,7 @@
 #include "radio.h"
 #include "theme.h"
 #include "app.h"
+#include "screensaver.h"
 #include <M5Cardputer.h>
 #include <Arduino.h>
 #include <ctype.h>
@@ -323,7 +324,18 @@ void carousel_run_submenu(const menu_node_t *parent)
         }
 
         uint16_t k = input_poll();
-        if (k == PK_NONE) { delay(8); continue; }
+        if (k == PK_NONE) {
+            /* Screensaver takeover on idle. After it returns, force a
+             * full card repaint (menu state was clobbered). */
+            if (screensaver_check_idle()) {
+                ui_status_invalidate();
+                ui_draw_status(radio_name(), "");
+                ui_draw_footer(CAROUSEL_FOOTER);
+                draw_card_full(parent, cursor, 0);
+            }
+            delay(8);
+            continue;
+        }
 
         if (k == PK_ESC || k == '`') return;
 

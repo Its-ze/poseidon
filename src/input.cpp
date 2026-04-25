@@ -21,6 +21,12 @@
 /* Last-seen debug state — shown by input_debug_draw(). */
 static uint16_t s_last_key = PK_NONE;
 
+/* millis() of last real (non-PK_NONE) event. Drives screensaver idle
+ * trigger. Updated via the input_poll() wrapper below. */
+static uint32_t s_last_input_ms = 0;
+
+uint32_t input_last_input_ms(void) { return s_last_input_ms; }
+
 /* ---- injected key ring buffer (for TRIDENT PC Bridge) ---- */
 static uint16_t s_injected[16];
 static uint8_t s_inj_head = 0, s_inj_tail = 0;
@@ -35,7 +41,18 @@ void input_inject(uint16_t code)
 
 uint16_t input_last_key(void) { return s_last_key; }
 
+/* Forward decl of the raw poller, then a thin wrapper that records
+ * idle-tracking on every real (non-PK_NONE) event. */
+static uint16_t input_poll_raw(void);
+
 uint16_t input_poll(void)
+{
+    uint16_t k = input_poll_raw();
+    if (k != PK_NONE) s_last_input_ms = millis();
+    return k;
+}
+
+static uint16_t input_poll_raw(void)
 {
     /* Drain injected keys first (from TRIDENT PC Bridge). */
     if (s_inj_head != s_inj_tail) {

@@ -31,6 +31,11 @@ uint16_t input_poll(void);
 /* Last key code returned (for debug overlays / diagnostics). */
 uint16_t input_last_key(void);
 
+/* millis() of the most recent input_poll() call that returned a real
+ * event. Used by the screensaver idle trigger. Returns 0 until the
+ * first key press. */
+uint32_t input_last_input_ms(void);
+
 /* Modal line editor. Returns true on ENTER, false on ESC. */
 bool input_line(const char *prompt, char *out_buf, size_t out_sz);
 

@@ -292,6 +292,18 @@ void feat_settings(void)
     }
 }
 
+/* ===== Screensaver toggle =====
+ * NVS-persistent. Default on, 120 s idle threshold. Flips with toast. */
+#include "../screensaver.h"
+
+void feat_screensaver_toggle(void)
+{
+    bool now_on = !screensaver_enabled();
+    screensaver_enabled_set(now_on);
+    ui_toast(now_on ? "Screensaver ON" : "Screensaver OFF",
+             now_on ? T_GOOD : T_WARN, 900);
+}
+
 /* ===== Layout toggle =====
  * Flips the menu render style between the dense Terminal list and the
  * big-card Carousel layout. Persists to NVS via menu_style_set. The

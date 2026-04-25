@@ -13,6 +13,7 @@
 #include "theme.h"
 #include "c5_cmd.h"
 #include "menu_carousel.h"
+#include "screensaver.h"
 #include <Preferences.h>
 
 /* ---- menu render style: NVS-backed terminal/carousel toggle ---- */
@@ -136,6 +137,7 @@ extern void feat_theme_picker(void);
 extern void feat_sfx_settings(void);
 extern void feat_ambient_preview(void);
 extern void feat_menu_style_toggle(void);
+extern void feat_screensaver_toggle(void);
 
 /* SaltyJack — LAN attack suite, homage to @7h30th3r0n3's Evil-M5Project.
  * See src/features/saltyjack/ for credits + implementation. */
@@ -634,6 +636,13 @@ static const menu_node_t MENU_SYS[] = {
       "single-focus layout with corner brackets, pulsing hotkey badge, "
       "size-2 label, slide animation between siblings. Letter mnemonics "
       "still work in Carousel mode. Persists to NVS." },
+    { 'v', "Screensaver", "Toggle 2-min idle takeover", nullptr, feat_screensaver_toggle,
+      "Flip the screensaver on/off. After 2 minutes of no input, takes "
+      "over the screen with a theme-appropriate animation: POSEIDON gets "
+      "WARDRIVE.cinema (fake AP scroll, channel hop, capture flashes, "
+      "magenta packet streaks), MATRIX gets full-screen phosphor rain at "
+      "max brightness, E-INK gets a Breathing wordmark fade-in/out that "
+      "drifts position to prevent burn-in. Any key wakes it." },
     { 'n', "Sound", "Speaker volume + mute + SFX test", nullptr, feat_sfx_settings,
       "Adjust SFX volume 0-10, toggle global mute. Every menu click, "
       "deauth, handshake capture, and splash boot sequence has a tone. "
@@ -925,7 +934,19 @@ static void run_submenu(const menu_node_t *parent)
 
     while (true) {
         uint16_t k = input_poll();
-        if (k == PK_NONE) { delay(10); continue; }
+        if (k == PK_NONE) {
+            /* Screensaver takeover when idle threshold passes. Returns
+             * true if it ran — repaint the menu so the user sees their
+             * cursor position again. */
+            if (screensaver_check_idle()) {
+                ui_status_invalidate();
+                ui_draw_status(radio_name(), "");
+                ui_draw_footer(FOOTER_HINTS);
+                draw_menu(parent, cursor);
+            }
+            delay(10);
+            continue;
+        }
 
         if (k == PK_ESC) return;
         if (k == '=' || k == '?') {
