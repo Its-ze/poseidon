@@ -291,3 +291,40 @@ void feat_settings(void)
         }
     }
 }
+
+/* ===== Ambient Preview =====
+ * Live preview of the active theme's procedural ambient motion. Hit ESC
+ * to exit. 'a' / 'A' toggles the NVS-backed enable flag so the user can
+ * disable ambient globally if it's distracting under menus. */
+extern void ui_ambient_tick(int x, int y, int w, int h);
+extern bool ui_ambient_enabled(void);
+extern void ui_ambient_enabled_set(bool on);
+
+void feat_ambient_preview(void)
+{
+    auto &d = M5Cardputer.Display;
+    d.fillScreen(T_BG);
+    ui_status_invalidate();
+    ui_draw_status("AMBIENT", "preview");
+    ui_draw_footer("[A] toggle on/off  [ESC] exit");
+
+    while (true) {
+        uint16_t k = input_poll();
+        if (k == PK_ESC) break;
+        if (k == 'a' || k == 'A') {
+            ui_ambient_enabled_set(!ui_ambient_enabled());
+            ui_toast(ui_ambient_enabled() ? "ambient ON" : "ambient OFF",
+                     ui_ambient_enabled() ? T_GOOD : T_WARN, 700);
+        }
+        d.fillRect(0, BODY_Y, SCR_W, BODY_H, T_BG);
+        ui_ambient_tick(0, BODY_Y, SCR_W, BODY_H);
+        d.setTextColor(T_ACCENT, T_BG);
+        d.setCursor(4, BODY_Y + 2);
+        d.print(theme().name);
+        d.setTextColor(T_DIM, T_BG);
+        d.setCursor(4, BODY_Y + 12);
+        d.print(ui_ambient_enabled() ? "ambient: on" : "ambient: off");
+        delay(33);
+    }
+    ui_force_clear_body();
+}

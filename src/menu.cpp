@@ -101,6 +101,7 @@ extern void feat_mimir(void);
 extern void feat_theme_picker(void);
 extern void feat_ux_accessibility(void);
 extern void feat_sfx_settings(void);
+extern void feat_ambient_preview(void);
 
 /* SaltyJack — LAN attack suite, homage to @7h30th3r0n3's Evil-M5Project.
  * See src/features/saltyjack/ for credits + implementation. */
@@ -587,6 +588,12 @@ static const menu_node_t MENU_SYS[] = {
       "Choose from 7 visual themes: POSEIDON (cyan/magenta), PHANTOM "
       "(purple), MATRIX (green), AMBER (retro), E-INK (paper), TRON "
       "(neon cyberpunk), HI-CONTRAST (accessibility). Live preview." },
+    { 'b', "Ambient", "Live ambient motion preview", nullptr, feat_ambient_preview,
+      "Live preview of the active theme's procedural ambient motion "
+      "(POSEIDON motes, AMBER scanline, TRON grid + packet, MATRIX rain, "
+      "PHANTOM glyph flashes). [A] toggles the NVS-backed enable flag — "
+      "turn ambient off globally if you don't want it under menus. "
+      "E-INK and HI-CONTRAST intentionally no-op." },
     { 'u', "UI / Accessibility", "Readability shortcut", nullptr, feat_ux_accessibility,
       "Dedicated one-tap accessibility panel for users who have trouble "
       "reading the UI. [H] applies HI-CONTRAST (pure white on black, "
