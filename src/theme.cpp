@@ -1,144 +1,54 @@
 /*
- * theme.cpp — built-in palettes.
+ * theme.cpp — single POSEIDON cyberpunk palette.
  *
- * Active theme persists to NVS (namespace "pui", key "theme") so the
- * user's pick survives reboots. theme_init() loads it; theme_set()
- * writes on change. Keys kept ≤15 chars — Preferences NVS limit.
+ * Cyan / magenta / purple on pure black. T_DIM is medium ice-cyan
+ * (not grey) so every "hint" / "muted" string in the UI stays legible
+ * while still reading as secondary.
+ *
+ * Persists current id to NVS namespace "pui" key "theme" — kept for
+ * forward-compat in case we add more palettes later. Right now the
+ * persistence is effectively a no-op since there's only one valid id.
  */
 #include "theme.h"
 #include <M5Cardputer.h>
 #include <Preferences.h>
 
 static const poseidon_theme_t THEMES[] = {
-    /* POSEIDON — cyan/magenta on black. The original. */
+    /* POSEIDON CYBERPUNK — cyan / magenta / purple on black.
+     *
+     * Color choices:
+     *   bg          0x0000  pure black, max contrast for text
+     *   fg          0xBFFF  ice cyan-white — slightly cool, still pops
+     *   accent      0x07FF  pure cyan — titles, hotkey letters, primary
+     *   accent2     0xF81F  pure magenta — selection borders, alarms
+     *   warn        0xFC60  warm orange — distinct from cyan accents
+     *   bad         0xF82A  saturated red-pink — disasters
+     *   good        0x07F8  mint cyan — fits palette without breaking it
+     *   dim         0x6BFF  medium ice cyan — REPLACES grey, this is
+     *                       the readability fix that made hints legible
+     *   sel_bg      0x2807  deep cyan-purple — selected row fill
+     *   sel_border  0xF81F  magenta — selected row outline pops
+     *   status_bg   0x2007  dark cyan-purple — status bar top
+     *   status_bg2  0x1004  near-black purple — status bar bottom (gradient)
+     *   footer_bg   0x1004  matches status_bg2
+     *   rule        0xC81F  bright magenta-purple divider lines
+     */
     {
         "POSEIDON",
-        0x0000,             /* bg: pure black */
-        0xFFFF,             /* fg: white */
-        0x07FF,             /* accent: cyan */
-        0xF81F,             /* accent2: magenta */
-        0xFFE0,             /* warn: yellow */
-        0xF800,             /* bad: red */
-        0x07E0,             /* good: green */
-        0x7BEF,             /* dim: gray */
-        0x3007,             /* sel_bg: deep cyan-purple */
-        0xF81F,             /* sel_border: magenta */
-        0x20A5,             /* status_bg: teal */
-        0x0841,             /* status_bg2: dark blue-green */
-        0x1082,             /* footer_bg: deep slate */
-        0x2124,             /* rule: muted cyan */
-    },
-    /* PHANTOM — deep purple/violet. */
-    {
-        "PHANTOM",
-        0x0000,
-        0xDEDB,             /* fg: soft white */
-        0xC01F,             /* accent: bright violet */
-        0x780F,             /* accent2: deep purple */
-        0xFBE0,             /* warn: gold */
-        0xF800,
-        0x87F0,             /* good: mint */
-        0x630C,             /* dim: purple-gray */
-        0x2808,             /* sel_bg: dark purple */
-        0xC01F,             /* sel_border: violet */
-        0x3808,             /* status_bg: purple */
-        0x1004,             /* status_bg2: near-black purple */
-        0x1804,             /* footer_bg */
-        0x4810,             /* rule: muted violet */
-    },
-    /* MATRIX — green phosphor on black. */
-    {
-        "MATRIX",
-        0x0000,
-        0x07E0,             /* fg: bright green */
-        0x07E0,             /* accent: green */
-        0x03E0,             /* accent2: darker green */
-        0x07E0,             /* warn: green (mono) */
-        0x04A0,             /* bad: dim green */
-        0x07E0,             /* good: bright green */
-        0x0320,             /* dim: dark green */
-        0x0120,             /* sel_bg: very dark green */
-        0x07E0,             /* sel_border: green */
-        0x01A0,             /* status_bg: dark green */
-        0x0060,             /* status_bg2: near-black green */
-        0x00C0,             /* footer_bg */
-        0x0260,             /* rule: muted green */
-    },
-    /* AMBER — warm retro terminal. */
-    {
-        "AMBER",
-        0x0000,
-        0xFCA0,             /* fg: amber */
-        0xFCA0,             /* accent: amber */
-        0xC460,             /* accent2: dark amber */
-        0xFCA0,             /* warn: amber (mono) */
-        0xA300,             /* bad: dark orange */
-        0xFCA0,             /* good: amber */
-        0x6180,             /* dim: dark amber */
-        0x2080,             /* sel_bg: very dark amber */
-        0xFCA0,             /* sel_border: amber */
-        0x4100,             /* status_bg: brown-amber */
-        0x1040,             /* status_bg2 */
-        0x2080,             /* footer_bg */
-        0x4100,             /* rule */
-    },
-    /* E-INK — paper white, minimal. */
-    {
-        "E-INK",
-        0xFFFF,             /* bg: white */
-        0x0000,             /* fg: black */
-        0x0000,             /* accent: black */
-        0x4208,             /* accent2: dark gray */
-        0x4208,             /* warn: gray */
-        0x0000,             /* bad: black */
-        0x4208,             /* good: dark gray */
-        0x8410,             /* dim: medium gray */
-        0xC618,             /* sel_bg: light gray */
-        0x0000,             /* sel_border: black */
-        0xDEFB,             /* status_bg: off-white */
-        0xC618,             /* status_bg2: light gray */
-        0xDEFB,             /* footer_bg */
-        0x8410,             /* rule: gray */
-    },
-    /* TRON — neon circuit glow. */
-    {
-        "TRON",
-        0x0000,
-        0xBFFF,             /* fg: ice blue */
-        0x07FF,             /* accent: neon cyan */
-        0x04DF,             /* accent2: electric blue */
-        0xFFE0,             /* warn: yellow */
-        0xF800,             /* bad: red */
-        0x07FF,             /* good: cyan */
-        0x2967,             /* dim: dark steel blue */
-        0x0113,             /* sel_bg: deep dark blue */
-        0x07FF,             /* sel_border: neon cyan */
-        0x010B,             /* status_bg: deep navy */
-        0x0005,             /* status_bg2: near-black blue */
-        0x0109,             /* footer_bg: dark blue */
-        0x04DF,             /* rule: electric blue */
-    },
-    /* HI-CONTRAST — accessibility. Pure white on pure black, saturated
-     * semantic colours. "dim" is not dim; it's full white so low-vision
-     * users never see the grey hint text the other palettes use. Selected
-     * rows use a bright accent rather than a muted one so the focus point
-     * is unambiguous. */
-    {
-        "HI-CONTRAST",
-        0x0000,             /* bg: pure black */
-        0xFFFF,             /* fg: pure white */
-        0xFFE0,             /* accent: yellow — max chroma title */
-        0xFFFF,             /* accent2: white */
-        0xFD20,             /* warn: saturated orange */
-        0xF800,             /* bad: saturated red */
-        0x07E0,             /* good: saturated green */
-        0xFFFF,             /* dim: WHITE (not dim) so hints are legible */
-        0xFFE0,             /* sel_bg: yellow highlight */
-        0x0000,             /* sel_border: black border inside yellow = contrast */
-        0x0000,             /* status_bg: black */
-        0x0000,             /* status_bg2: black (no gradient smear) */
-        0x0000,             /* footer_bg: black */
-        0xFFFF,             /* rule: white */
+        0x0000,             /* bg */
+        0xBFFF,             /* fg */
+        0x07FF,             /* accent */
+        0xF81F,             /* accent2 */
+        0xFC60,             /* warn */
+        0xF82A,             /* bad */
+        0x07F8,             /* good */
+        0x6BFF,             /* dim */
+        0x2807,             /* sel_bg */
+        0xF81F,             /* sel_border */
+        0x2007,             /* status_bg */
+        0x1004,             /* status_bg2 */
+        0x1004,             /* footer_bg */
+        0xC81F,             /* rule */
     },
 };
 
@@ -162,23 +72,11 @@ void theme_set(theme_id_t id)
 {
     if (id >= THEME__COUNT) id = THEME_POSEIDON;
     s_current = id;
-    /* Always write through on commit — s_current may have been shifted
-     * around by theme_preview() between the last NVS read and this call,
-     * so we can't elide based on the RAM copy. */
     Preferences p;
-    if (p.begin("pui", false)) {  /* read-write */
+    if (p.begin("pui", false)) {
         p.putUChar("theme", (uint8_t)id);
         p.end();
     }
-}
-
-/* Live-preview helper — changes the in-RAM theme without touching NVS.
- * Used by the theme picker for per-frame swatch rendering and arrow-key
- * browsing, which would otherwise thrash flash at ~300 writes/sec. */
-void theme_preview(theme_id_t id)
-{
-    if (id >= THEME__COUNT) id = THEME_POSEIDON;
-    s_current = id;
 }
 
 theme_id_t theme_current_id(void) { return s_current; }

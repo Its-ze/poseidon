@@ -99,8 +99,6 @@ extern void feat_nrf24_jammer(void);
 extern void feat_nrf24_finder(void);
 extern void feat_subghz_finder(void);
 extern void feat_mimir(void);
-extern void feat_theme_picker(void);
-extern void feat_ux_accessibility(void);
 extern void feat_sfx_settings(void);
 extern void feat_ambient_preview(void);
 
@@ -585,22 +583,11 @@ static const menu_node_t MENU_SYS[] = {
       "attached and has a fix." },
     { 's', "Settings", "Config + preferences", nullptr, feat_settings,
       "Saved WiFi management, clear creds log, format prefs, reboot." },
-    { 't', "Theme", "Switch color palette", nullptr, feat_theme_picker,
-      "Choose from 7 visual themes: POSEIDON (cyan/magenta), PHANTOM "
-      "(purple), MATRIX (green), AMBER (retro), E-INK (paper), TRON "
-      "(neon cyberpunk), HI-CONTRAST (accessibility). Live preview." },
     { 'b', "Ambient", "Live ambient motion preview", nullptr, feat_ambient_preview,
-      "Live preview of the active theme's procedural ambient motion "
-      "(POSEIDON motes, AMBER scanline, TRON grid + packet, MATRIX rain, "
-      "PHANTOM glyph flashes). [A] toggles the NVS-backed enable flag — "
-      "turn ambient off globally if you don't want it under menus. "
-      "E-INK and HI-CONTRAST intentionally no-op." },
-    { 'u', "UI / Accessibility", "Readability shortcut", nullptr, feat_ux_accessibility,
-      "Dedicated one-tap accessibility panel for users who have trouble "
-      "reading the UI. [H] applies HI-CONTRAST (pure white on black, "
-      "saturated semantic colours, no grey hint text). [P] resets to "
-      "POSEIDON default. [T] opens the full theme picker. Choice "
-      "persists to NVS." },
+      "Live preview of the procedural cyberpunk ambient motion: TRON "
+      "purple grid scrolling underneath, cyan/magenta motes drifting, "
+      "magenta packet hopping the L-path. [A] toggles the NVS-backed "
+      "enable flag globally if you ever want it off." },
     { 'n', "Sound", "Speaker volume + mute + SFX test", nullptr, feat_sfx_settings,
       "Adjust SFX volume 0-10, toggle global mute. Every menu click, "
       "deauth, handshake capture, and splash boot sequence has a tone. "

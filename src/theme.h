@@ -1,8 +1,15 @@
 /*
- * theme.h — swappable color palettes + UI chrome config.
+ * theme.h — single POSEIDON cyberpunk palette.
  *
- * Every COL_* reference in features should use theme_xxx() instead
- * of hardcoded values. Theme persists via Preferences.
+ * One theme. Cyan / magenta / purple on black. Designed for legibility
+ * (T_DIM is medium ice-cyan, NOT grey) and for the cyberpunk + TRON
+ * aesthetic. The earlier multi-theme picker (PHANTOM, MATRIX, AMBER,
+ * E-INK, TRON, HI-CONTRAST) was scrapped — too many mediocre palettes,
+ * not enough effort on the one we actually use.
+ *
+ * The enum + theme_id_t + NVS plumbing is kept so we can re-introduce
+ * additional palettes later without re-architecting; right now there's
+ * only one valid value.
  */
 #pragma once
 
@@ -27,19 +34,12 @@ struct poseidon_theme_t {
 };
 
 enum theme_id_t {
-    THEME_POSEIDON = 0,   /* cyan/magenta on black — the OG */
-    THEME_PHANTOM,        /* deep purple/violet */
-    THEME_MATRIX,         /* green on black */
-    THEME_AMBER,          /* amber/orange on black (retro) */
-    THEME_EINK,           /* black on white (paper) */
-    THEME_TRON,           /* neon blue + cyan glow, circuit aesthetic */
-    THEME_HICONTRAST,     /* accessibility: pure white on black, bright accents */
+    THEME_POSEIDON = 0,
     THEME__COUNT
 };
 
 void theme_init(void);               /* load from NVS on boot */
 void theme_set(theme_id_t id);       /* apply + persist to NVS */
-void theme_preview(theme_id_t id);   /* apply in RAM only — no NVS write */
 theme_id_t theme_current_id(void);
 const poseidon_theme_t &theme(void);
 
