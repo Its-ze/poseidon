@@ -292,6 +292,24 @@ void feat_settings(void)
     }
 }
 
+/* ===== Layout toggle =====
+ * Flips the menu render style between the dense Terminal list and the
+ * big-card Carousel layout. Persists to NVS via menu_style_set. The
+ * change takes effect the next time we re-enter run_submenu, which
+ * happens when this feature returns. */
+#include "../menu.h"
+
+void feat_menu_style_toggle(void)
+{
+    menu_style_t cur  = menu_style_get();
+    menu_style_t next = (cur == MENU_STYLE_TERMINAL) ? MENU_STYLE_CAROUSEL
+                                                     : MENU_STYLE_TERMINAL;
+    menu_style_set(next);
+    ui_toast(next == MENU_STYLE_CAROUSEL ? "Carousel layout"
+                                         : "Terminal layout",
+             T_GOOD, 900);
+}
+
 /* ===== Ambient Preview =====
  * Live preview of the active theme's procedural ambient motion. Hit ESC
  * to exit. 'a' / 'A' toggles the NVS-backed enable flag so the user can

@@ -26,6 +26,19 @@ struct menu_node_t {
     const char *info;            /* long-form info shown on ?-key press */
 };
 
+/* Two render styles for menu navigation. TERMINAL is the dense 7-row
+ * letter-mnemonic list (default). CAROUSEL is the big-card single-focus
+ * style with corner brackets, big hotkey badge, slide animation. The
+ * keyboard semantics are identical (letter mnemonics, ENTER, ESC). */
+enum menu_style_t {
+    MENU_STYLE_TERMINAL = 0,
+    MENU_STYLE_CAROUSEL = 1,
+    MENU_STYLE__COUNT
+};
+
+menu_style_t menu_style_get(void);
+void         menu_style_set(menu_style_t s);
+
 /* Enter the main menu loop. Returns when user quits (rare). */
 void menu_run(void);
 

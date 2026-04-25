@@ -12,6 +12,39 @@
 #include "radio.h"
 #include "theme.h"
 #include "c5_cmd.h"
+#include "menu_carousel.h"
+#include <Preferences.h>
+
+/* ---- menu render style: NVS-backed terminal/carousel toggle ---- */
+static menu_style_t s_style        = MENU_STYLE_TERMINAL;
+static bool         s_style_loaded = false;
+
+menu_style_t menu_style_get(void)
+{
+    if (!s_style_loaded) {
+        Preferences p;
+        if (p.begin("pui", true)) {
+            uint8_t v = p.getUChar("mnustyle", (uint8_t)MENU_STYLE_TERMINAL);
+            p.end();
+            if (v >= MENU_STYLE__COUNT) v = MENU_STYLE_TERMINAL;
+            s_style = (menu_style_t)v;
+        }
+        s_style_loaded = true;
+    }
+    return s_style;
+}
+
+void menu_style_set(menu_style_t s)
+{
+    if (s >= MENU_STYLE__COUNT) s = MENU_STYLE_TERMINAL;
+    s_style        = s;
+    s_style_loaded = true;
+    Preferences p;
+    if (p.begin("pui", false)) {
+        p.putUChar("mnustyle", (uint8_t)s);
+        p.end();
+    }
+}
 
 /* ---- forward decls for feature entry points ---- */
 extern void feat_wifi_scan(void);
@@ -102,6 +135,7 @@ extern void feat_mimir(void);
 extern void feat_theme_picker(void);
 extern void feat_sfx_settings(void);
 extern void feat_ambient_preview(void);
+extern void feat_menu_style_toggle(void);
 
 /* SaltyJack — LAN attack suite, homage to @7h30th3r0n3's Evil-M5Project.
  * See src/features/saltyjack/ for credits + implementation. */
@@ -594,6 +628,12 @@ static const menu_node_t MENU_SYS[] = {
       "grid + cyan/magenta motes + magenta L-path packet, MATRIX runs "
       "souped-up phosphor rain, E-INK is intentionally clean. [A] toggles "
       "the NVS-backed enable flag globally if you ever want it off." },
+    { 'l', "Layout", "Terminal / Carousel toggle", nullptr, feat_menu_style_toggle,
+      "Flip the menu render style. TERMINAL is the dense 7-row list with "
+      "letter mnemonics — fast for power-users. CAROUSEL is the big-card "
+      "single-focus layout with corner brackets, pulsing hotkey badge, "
+      "size-2 label, slide animation between siblings. Letter mnemonics "
+      "still work in Carousel mode. Persists to NVS." },
     { 'n', "Sound", "Speaker volume + mute + SFX test", nullptr, feat_sfx_settings,
       "Adjust SFX volume 0-10, toggle global mute. Every menu click, "
       "deauth, handshake capture, and splash boot sequence has a tone. "
@@ -867,6 +907,15 @@ static void slide_to(const menu_node_t *p, int c, int dir) {
 
 static void run_submenu(const menu_node_t *parent)
 {
+    /* Style dispatch — when the user has selected the carousel layout
+     * we hand off to the standalone carousel renderer + input loop.
+     * The keyboard semantics are identical (letter mnemonics, ENTER,
+     * ESC) so calling code doesn't care which renderer is active. */
+    if (menu_style_get() == MENU_STYLE_CAROUSEL) {
+        carousel_run_submenu(parent);
+        return;
+    }
+
     int cursor = 0;
     int n = count_children(parent);
 
