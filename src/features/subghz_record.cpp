@@ -7,6 +7,7 @@
 #include "../app.h"
 #include "../theme.h"
 #include "../ui.h"
+#include "../ui_subghz.h"
 #include "../input.h"
 #include "../radio.h"
 #include "../cc1101_hw.h"
@@ -87,51 +88,42 @@ void feat_subghz_record(void)
     float freq = 433.92f;
     s_raw_len = 0;
     bool recorded = false;
+    ui_rssi_scope_reset();
 
     while (true) {
         ui_clear_body();
         ui_draw_status(radio_name(), "record");
-        d.setTextColor(T_ACCENT2, T_BG);
-        d.setCursor(4, BODY_Y + 2); d.printf("RAW RECORD  %.3f MHz", freq);
-        d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
+
+        /* Band picker across the top — shows which ISM band we're on. */
+        ui_draw_freq_band(4, BODY_Y + 2, SCR_W - 8, 10, freq);
 
         if (recorded) {
             d.setTextColor(T_GOOD, T_BG);
-            d.setCursor(4, BODY_Y + 20); d.printf("captured %d pulses", s_raw_len);
-            /* Protocol decode result inline, if any. */
+            d.setCursor(4, BODY_Y + 26); d.printf("captured %d pulses", s_raw_len);
             if (s_decoded.valid) {
                 d.setTextColor(T_ACCENT, T_BG);
-                d.setCursor(4, BODY_Y + 32);
-                d.printf("%s  0x%lX  %u bits",
+                d.setCursor(4, BODY_Y + 38);
+                d.printf("%s 0x%lX %ub",
                          s_decoded.protocol,
                          (unsigned long)s_decoded.value,
                          (unsigned)s_decoded.bits);
             } else {
                 d.setTextColor(T_DIM, T_BG);
-                d.setCursor(4, BODY_Y + 32);
+                d.setCursor(4, BODY_Y + 38);
                 d.print("RAW (no protocol match)");
             }
-            /* Mini waveform preview */
-            int mid_y = BODY_Y + 55;
-            d.drawFastHLine(4, mid_y, SCR_W - 8, T_DIM);
-            int x = 4;
-            for (int i = 0; i < s_raw_len && x < SCR_W - 4; ++i) {
-                int w = abs(s_raw[i]) / 50;
-                if (w < 1) w = 1;
-                if (w > 30) w = 30;
-                int y = s_raw[i] > 0 ? mid_y - 10 : mid_y + 1;
-                uint16_t c = s_raw[i] > 0 ? T_ACCENT : T_ACCENT2;
-                d.fillRect(x, y, w, 10, c);
-                x += w;
-            }
-            ui_draw_footer("S=save  R=retry  ESC=quit");
+            /* Full-width pulse waveform. */
+            ui_draw_pulse_wave(4, BODY_Y + 52, SCR_W - 8, 32,
+                               s_raw, s_raw_len, -1);
+            ui_draw_footer("S=save R=retry +-=freq ESC");
         } else {
+            /* Live scrolling RSSI scope — updated every frame. */
+            int rssi = cc1101_get_rssi();
+            ui_draw_rssi_scope(4, BODY_Y + 26, SCR_W - 8, 40, rssi);
+
             d.setTextColor(T_WARN, T_BG);
-            d.setCursor(4, BODY_Y + 30); d.print("press ENTER to record");
-            d.setCursor(4, BODY_Y + 42); d.print("press A to auto-scan all bands");
-            d.setTextColor(T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 54); d.print("RxBW=270 kHz (OOK270)  20s limit");
-            ui_draw_footer("ENTER=rec  A=autoscan  +-=freq  ESC=quit");
+            d.setCursor(4, BODY_Y + 72); d.print("ENTER record  A scan  +- tune");
+            ui_draw_footer("ENTER=rec A=autoscan +-=freq ESC");
         }
 
         uint16_t k = input_poll();

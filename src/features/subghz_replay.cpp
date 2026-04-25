@@ -7,6 +7,7 @@
 #include "../app.h"
 #include "../theme.h"
 #include "../ui.h"
+#include "../ui_subghz.h"
 #include "../input.h"
 #include "../radio.h"
 #include "../cc1101_hw.h"
@@ -135,30 +136,45 @@ void feat_subghz_replay(void)
     while (true) {
         ui_clear_body();
         ui_draw_status(radio_name(), "replay");
-        d.setTextColor(T_ACCENT2, T_BG);
-        d.setCursor(4, BODY_Y + 2); d.print("SUB-GHz REPLAY");
-        d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
-        d.setTextColor(T_FG, T_BG);
+
+        /* Band widget — same as record so user knows band at a glance. */
+        ui_draw_freq_band(4, BODY_Y + 2, SCR_W - 8, 10, sub.freq_mhz);
+
         const char *base = strrchr(path, '/');
-        d.setCursor(4, BODY_Y + 20); d.printf("file: %s", base ? base + 1 : path);
-        d.setCursor(4, BODY_Y + 32); d.printf("freq: %.3f MHz", sub.freq_mhz);
-        d.setCursor(4, BODY_Y + 44); d.printf("pulses: %d", sub.raw_len);
-        d.setTextColor(T_GOOD, T_BG);
-        d.setCursor(4, BODY_Y + 60); d.printf("plays: %lu", (unsigned long)plays);
-        ui_draw_footer("ENTER=transmit  ESC=stop");
+        d.setTextColor(T_FG, T_BG);
+        d.setCursor(4, BODY_Y + 26); d.printf("%.32s", base ? base + 1 : path);
+        d.setTextColor(T_DIM, T_BG);
+        d.setCursor(4, BODY_Y + 38); d.printf("%d pulses  plays %lu",
+                                              sub.raw_len, (unsigned long)plays);
+
+        /* Waveform preview — no playhead, static full-signal view. */
+        ui_draw_pulse_wave(4, BODY_Y + 52, SCR_W - 8, 32,
+                           sub.raw, sub.raw_len, -1);
+
+        ui_draw_footer("ENTER=tx ESC=stop");
 
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(20); continue; }
         if (k == PK_ESC) break;
         if (k == '?') { ui_show_current_help(); }
         if (k == PK_ENTER) {
-            d.setTextColor(T_BAD, T_BG);
-            d.setCursor(4, BODY_Y + 76); d.print("TX...");
+            /* Fire the radio first, then show the splash — ensures the
+             * RF actually hits air at t=0 and user sees visual feedback
+             * while CC1101 settles back to RX. */
             cc1101_set_tx();
             pinMode(CC1101_GDO0, OUTPUT);
             cc1101_rmt_tx(sub.raw, sub.raw_len);
             cc1101_set_rx();
             plays++;
+
+            /* Cinematic LIVE TX splash — concentric expanding rings,
+             * rotating spokes, freq + payload readout. ~900 ms. */
+            uint32_t payload = 0;
+            for (int i = 0; i < sub.raw_len && i < 32; ++i) {
+                payload = (payload << 1) | (sub.raw[i] > 0 ? 1 : 0);
+            }
+            ui_subghz_live_tx_splash(sub.freq_mhz, "RAW REPLAY",
+                                     payload, 900);
         }
     }
 

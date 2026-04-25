@@ -40,117 +40,155 @@ static uint16_t rssi_color(int rssi)
 
 static void run_bar_spectrum(const freq_range_t &range)
 {
+    /* Double-buffered render: build the frame in a sprite, blit once.
+     * Eliminates the tearing/flicker of the prior fillRect+redraw loop.
+     * Plus EMA smoothing on RSSI values so bars don't jitter between
+     * reads of the same signal (RSSI is noisy at ~1 dB precision). */
     auto &d = M5Cardputer.Display;
     const int GX = 24, GY = BODY_Y + 14, GW = SCR_W - 30, GH = BODY_H - 30;
     int bins = GW;
     float step = (range.end - range.start) / bins;
-    int8_t rssi[232] = {0};
-    int8_t peak[232] = {0};
-    memset(peak, -110, sizeof(peak));
+
+    float   smooth[232];
+    int8_t  peak[232];
+    for (int i = 0; i < bins; ++i) { smooth[i] = -110.0f; peak[i] = -110; }
+
+    M5Canvas canvas(&d);
+    canvas.setColorDepth(16);
+    bool have_canvas = canvas.createSprite(GW, GH);
 
     ui_clear_body();
+    /* Static chrome — drawn ONCE, not every frame. */
+    d.drawRect(GX - 1, GY - 1, GW + 2, GH + 2, 0x4208);
+    ui_text(4, BODY_Y + 2, T_ACCENT, "SPECTRUM %s MHz", range.name);
+    d.setTextColor(0x4208, T_BG);
+    d.setCursor(GX, GY + GH + 3);             d.printf("%.0f", range.start);
+    d.setCursor(GX + GW - 24, GY + GH + 3);   d.printf("%.0f", range.end);
+    ui_draw_footer("ESC=back  R=reset peaks");
 
     while (true) {
         for (int i = 0; i < bins; ++i) {
             cc1101_set_freq(range.start + i * step);
             delayMicroseconds(800);
-            rssi[i] = (int8_t)cc1101_get_rssi();
-            if (rssi[i] > peak[i]) peak[i] = rssi[i];
+            int raw = cc1101_get_rssi();
+            /* EMA: 30% new, 70% old. Fast enough to track bursts,
+             * smooth enough to not jitter between idle samples. */
+            smooth[i] = smooth[i] * 0.7f + raw * 0.3f;
+            int cur = (int)smooth[i];
+            if (cur > peak[i]) peak[i] = cur;
         }
+        /* Peak decay — slow fall-off after hit. */
         for (int i = 0; i < bins; ++i)
-            if (peak[i] > rssi[i] + 1) peak[i]--;
+            if (peak[i] > (int)smooth[i] + 1) peak[i]--;
 
-        /* Graph background. */
-        d.fillRect(GX, GY, GW, GH, 0x0000);
+        if (have_canvas) {
+            /* All rendering goes into the off-screen canvas. */
+            canvas.fillSprite(0x0000);
 
-        /* Grid lines + dBm labels. */
-        for (int db = -100; db <= -40; db += 20) {
-            int y = GY + GH - ((db + 110) * GH) / 80;
-            if (y >= GY && y <= GY + GH) {
+            /* Grid lines (relative to canvas origin 0,0). */
+            for (int db = -100; db <= -40; db += 20) {
+                int y = GH - ((db + 110) * GH) / 80;
+                if (y >= 0 && y < GH)
+                    for (int x = 0; x < GW; x += 4)
+                        canvas.drawPixel(x, y, 0x2104);
+            }
+            /* Bars. */
+            for (int i = 0; i < bins; ++i) {
+                int norm = (int)smooth[i] + 110;
+                if (norm < 0) norm = 0;
+                int h = (norm * GH) / 80;
+                if (h > 0) {
+                    for (int dy = 0; dy < h && dy < GH; ++dy) {
+                        int fake_rssi = -110 + ((h - dy) * 80) / GH;
+                        canvas.drawPixel(i, GH - 1 - dy, rssi_color(fake_rssi));
+                    }
+                }
+                int pn = peak[i] + 110;
+                if (pn > 0) {
+                    int py = GH - (pn * GH) / 80;
+                    if (py >= 0) canvas.drawPixel(i, py, 0xFFFF);
+                }
+            }
+            canvas.pushSprite(GX, GY);
+        } else {
+            /* Fallback path if sprite allocation failed — flickers but
+             * still works. Matches the old behaviour. */
+            d.fillRect(GX, GY, GW, GH, 0x0000);
+            for (int db = -100; db <= -40; db += 20) {
+                int y = GY + GH - ((db + 110) * GH) / 80;
                 for (int x = GX; x < GX + GW; x += 4)
                     d.drawPixel(x, y, 0x2104);
-                d.setTextColor(0x4208, T_BG);
-                d.setCursor(1, y - 3);
-                d.printf("%d", db);
             }
-        }
-
-        /* Bars with gradient fill. */
-        for (int i = 0; i < bins; ++i) {
-            int norm = rssi[i] + 110;
-            if (norm < 0) norm = 0;
-            int h = (norm * GH) / 80;
-            if (h > 0) {
-                for (int dy = 0; dy < h && dy < GH; ++dy) {
+            for (int i = 0; i < bins; ++i) {
+                int norm = (int)smooth[i] + 110; if (norm < 0) norm = 0;
+                int h = (norm * GH) / 80;
+                for (int dy = 0; dy < h; ++dy) {
                     int fake_rssi = -110 + ((h - dy) * 80) / GH;
                     d.drawPixel(GX + i, GY + GH - 1 - dy, rssi_color(fake_rssi));
                 }
             }
-            /* Peak marker — white dot with fade. */
-            int pn = peak[i] + 110;
-            if (pn > 0) {
-                int py = GY + GH - (pn * GH) / 80;
-                if (py >= GY) d.drawPixel(GX + i, py, 0xFFFF);
-            }
         }
 
-        /* Axis frame. */
-        d.drawRect(GX - 1, GY - 1, GW + 2, GH + 2, 0x4208);
-
-        /* Title + freq labels. */
-        ui_text(4, BODY_Y + 2, T_ACCENT, "SPECTRUM %s MHz", range.name);
-        d.setTextColor(0x4208, T_BG);
-        d.setCursor(GX, GY + GH + 3);
-        d.printf("%.0f", range.start);
-        d.setCursor(GX + GW - 24, GY + GH + 3);
-        d.printf("%.0f", range.end);
-
-        /* Peak freq indicator. */
-        int peak_i = 0, peak_v = -120;
-        for (int i = 0; i < bins; ++i) {
-            if (rssi[i] > peak_v) { peak_v = rssi[i]; peak_i = i; }
+        /* dB labels drawn outside the sprite (left gutter). */
+        for (int db = -100; db <= -40; db += 20) {
+            int y = GY + GH - ((db + 110) * GH) / 80;
+            d.setTextColor(0x4208, T_BG);
+            d.setCursor(1, y - 3); d.printf("%d", db);
         }
+
+        /* Peak freq + RSSI tag — update in place over fixed-width area
+         * to avoid flicker from changing text length. */
+        int peak_i = 0; float peak_v = -120.0f;
+        for (int i = 0; i < bins; ++i)
+            if (smooth[i] > peak_v) { peak_v = smooth[i]; peak_i = i; }
         float peak_f = range.start + peak_i * step;
+        d.fillRect(GX + GW / 2 - 40, GY + GH + 3, 82, 8, T_BG);
         d.setTextColor(T_FG, T_BG);
         d.setCursor(GX + GW / 2 - 36, GY + GH + 3);
-        d.printf("pk:%.1f %ddB", peak_f, peak_v);
-
-        ui_draw_footer("ESC=back  R=reset peaks");
+        d.printf("pk:%.1f %ddB", peak_f, (int)peak_v);
 
         uint16_t k = input_poll();
-        if (k == PK_ESC) return;
-        if (k == 'r' || k == 'R') memset(peak, -110, sizeof(peak));
+        if (k == PK_ESC) {
+            if (have_canvas) canvas.deleteSprite();
+            return;
+        }
+        if (k == 'r' || k == 'R')
+            for (int i = 0; i < bins; ++i) peak[i] = -110;
     }
 }
 
 /* ---- Waterfall / Spectrogram ---- */
 
-#define WF_MAX_ROWS 40
-#define WF_MAX_BINS 210
+/* Static BSS ring. 100×240 (48 KB) was too big — it ate enough boot
+ * heap that esp_wifi_init started failing with ESP_ERR_NO_MEM and
+ * WiFi Scan crashed the device. 60 rows × 240 × 2 B = 28.8 KB leaves
+ * enough heap for WiFi's default RX buffers. Still fills most of the
+ * body under the title strip. */
+#define WF_MAX_ROWS 60
+#define WF_MAX_BINS SCR_W
+static uint16_t s_wf_ring[WF_MAX_ROWS * WF_MAX_BINS];
 
 static void run_waterfall(const freq_range_t &range)
 {
+    /* Full-screen waterfall. Sweeps freq bins across the whole 240 px
+     * width; each completed sweep scrolls the history up one row and
+     * renders a new bottom row. No borders / labels eat pixels — the
+     * few overlays (range name, start/end freq, ESC hint) are drawn
+     * translucently on top of the waterfall. 240x135 x 2 B = 64 KB
+     * ring buffer; fine on our 327 KB internal RAM budget. */
     auto &d = M5Cardputer.Display;
-    const int GX = 24, GY = BODY_Y + 14, GW = WF_MAX_BINS, GH = WF_MAX_ROWS;
+    /* Center the 100-row waterfall vertically under a small title
+     * band. GY leaves ~15 px on top for title + range label. */
+    const int GX = 0, GY = 15, GW = WF_MAX_BINS, GH = WF_MAX_ROWS;
     float step = (range.end - range.start) / GW;
 
-    uint16_t *ring = (uint16_t *)malloc(GH * GW * sizeof(uint16_t));
-    if (!ring) { ui_toast("OOM", T_BAD, 1000); return; }
+    uint16_t *ring = s_wf_ring;
     int head = 0, count = 0;
 
-    ui_clear_body();
-    d.drawRect(GX - 1, GY - 1, GW + 2, GH + 2, 0x4208);
-
-    /* Color legend. */
-    for (int i = 0; i < 40; ++i) {
-        int r = -110 + (i * 80) / 40;
-        d.drawPixel(GX + GW + 3, GY + GH - 1 - i, rssi_color(r));
-    }
-    d.setTextColor(0x4208, T_BG);
-    d.setCursor(GX + GW + 2, GY - 2); d.print("H");
-    d.setCursor(GX + GW + 2, GY + GH - 6); d.print("L");
+    d.fillScreen(T_BG);
 
     while (true) {
+        /* Sweep one full row of freq bins. */
         uint16_t *row = &ring[head * GW];
         for (int i = 0; i < GW; ++i) {
             cc1101_set_freq(range.start + i * step);
@@ -160,20 +198,29 @@ static void run_waterfall(const freq_range_t &range)
         head = (head + 1) % GH;
         if (count < GH) count++;
 
-        /* Render from ring — newest at bottom. */
+        /* Render full-screen — newest row at bottom, oldest at top. */
         for (int r = 0; r < count; ++r) {
             int ri = (head - count + r + GH) % GH;
             d.pushImage(GX, GY + r, GW, 1, &ring[ri * GW]);
         }
 
-        ui_text(4, BODY_Y + 2, T_ACCENT2, "WATERFALL %s MHz", range.name);
-        d.setTextColor(0x4208, T_BG);
-        d.setCursor(GX, GY + GH + 3); d.printf("%.0f", range.start);
-        d.setCursor(GX + GW - 24, GY + GH + 3); d.printf("%.0f", range.end);
-        ui_draw_footer("ESC=back");
+        /* Top title strip + bottom range labels. Waterfall body spans
+         * y=15..115, title above and endpoints below. */
+        d.fillRect(0, 0, SCR_W, GY, T_BG);
+        d.setTextColor(T_ACCENT2, T_BG);
+        d.setCursor(4, 3); d.printf("WATERFALL %s", range.name);
+        d.setTextColor(T_BAD, T_BG);
+        d.setCursor(SCR_W - 22, 3); d.print("ESC");
+
+        d.fillRect(0, GY + GH, SCR_W, SCR_H - (GY + GH), T_BG);
+        d.setTextColor(T_DIM, T_BG);
+        d.setCursor(4, GY + GH + 4);
+        d.printf("%.0f", range.start);
+        d.setCursor(SCR_W - 28, GY + GH + 4);
+        d.printf("%.0f", range.end);
 
         uint16_t k = input_poll();
-        if (k == PK_ESC) { free(ring); return; }
+        if (k == PK_ESC) { return; }
     }
 }
 
@@ -181,72 +228,131 @@ static void run_waterfall(const freq_range_t &range)
 
 static void run_waveform(float freq)
 {
+    /* Digital-scope style: top half is RSSI trace (thin line, scrolling
+     * right-to-left like a real scope — no filled bars, to differentiate
+     * from the spectrum analyzer). Bottom half is a GDO0 pulse train —
+     * the actual demodulated data line from the CC1101. That's what
+     * shows activity when a car key transmits: a burst of square-wave
+     * pulses even though RSSI only nudges. */
     auto &d = M5Cardputer.Display;
     cc1101_set_freq(freq);
     cc1101_set_rx();
 
-    const int GX = 24, GY = BODY_Y + 18, GW = SCR_W - 30, GH = BODY_H - 34;
-    int mid = GY + GH / 2;
-    int8_t history[232];
-    memset(history, 0, sizeof(history));
+    const int GX = 24;
+    const int GW = SCR_W - 30;
+    const int RSSI_Y = BODY_Y + 14;
+    const int RSSI_H = 40;
+    const int GDO_Y  = RSSI_Y + RSSI_H + 8;
+    const int GDO_H  = 20;
+
+    int8_t  rssi_ring[232];
+    uint8_t gdo_ring[232];
+    memset(rssi_ring, -110, sizeof(rssi_ring));
+    memset(gdo_ring, 0, sizeof(gdo_ring));
+    int head = 0;
 
     ui_clear_body();
+    /* Static chrome drawn once — borders + labels outside the canvas. */
+    d.drawRect(GX - 1, RSSI_Y - 1, GW + 2, RSSI_H + 2, 0x2945);
+    d.drawRect(GX - 1, GDO_Y - 1,  GW + 2, GDO_H + 2,  0x2945);
+    d.setTextColor(0x4208, T_BG);
+    d.setCursor(1, RSSI_Y - 4);             d.print("-30");
+    d.setCursor(1, RSSI_Y + RSSI_H - 6);    d.print("-110");
+    d.setCursor(1, GDO_Y + GDO_H / 2 - 3);  d.print("GDO0");
+    ui_draw_footer("+-=freq  ESC=back");
+
+    /* Double-buffer both panels into one sprite. Panels are stacked
+     * vertically with a 6 px gap — sprite covers rssi_panel + gap + gdo_panel. */
+    const int CANVAS_H = RSSI_H + 8 + GDO_H;
+    M5Canvas canvas(&d);
+    canvas.setColorDepth(16);
+    bool have_canvas = canvas.createSprite(GW, CANVAS_H);
 
     while (true) {
-        /* Sample RSSI across the display width. */
-        for (int i = 0; i < GW; ++i) {
-            history[i] = (int8_t)cc1101_get_rssi();
-            delayMicroseconds(80);
+        /* One scroll tick: sample N fresh points, advance head. */
+        const int BATCH = 8;
+        for (int k = 0; k < BATCH; ++k) {
+            /* Read GDO0 a few times inside one pixel-column to catch
+             * fast pulses — store 1 if we saw any high in this window. */
+            uint8_t seen_high = 0;
+            for (int s = 0; s < 8; ++s) {
+                if (digitalRead(CC1101_GDO0)) seen_high = 1;
+                delayMicroseconds(12);
+            }
+            rssi_ring[head] = (int8_t)cc1101_get_rssi();
+            gdo_ring[head]  = seen_high;
+            head = (head + 1) % GW;
         }
 
-        /* Graph background + grid. */
-        d.fillRect(GX, GY, GW, GH, 0x0000);
-        d.drawRect(GX - 1, GY - 1, GW + 2, GH + 2, 0x4208);
+        if (have_canvas) {
+            canvas.fillSprite(0x0000);
 
-        /* Horizontal grid at -80, -60, -40 dBm. */
-        for (int db = -80; db <= -40; db += 20) {
-            int y = mid - ((db + 80) * (GH / 2)) / 40;
-            if (y >= GY && y <= GY + GH) {
-                for (int x = GX; x < GX + GW; x += 6)
-                    d.drawPixel(x, y, 0x2104);
-                d.setTextColor(0x4208, T_BG);
-                d.setCursor(1, y - 3); d.printf("%d", db);
+            /* RSSI panel occupies sprite rows 0..RSSI_H-1. */
+            int prev_y = RSSI_H - 1;
+            for (int i = 0; i < GW; ++i) {
+                int idx = (head + i) % GW;
+                int n = rssi_ring[idx] + 110; if (n < 0) n = 0; if (n > 80) n = 80;
+                int y = RSSI_H - 1 - (n * (RSSI_H - 1)) / 80;
+                if (i > 0) canvas.drawLine(i - 1, prev_y, i, y, 0x07E0);
+                prev_y = y;
+            }
+            /* GDO0 panel at sprite rows RSSI_H+8 .. RSSI_H+8+GDO_H-1. */
+            const int GDO_Y0 = RSSI_H + 8;
+            for (int i = 0; i < GW; ++i) {
+                int idx = (head + i) % GW;
+                if (gdo_ring[idx])
+                    canvas.drawFastVLine(i, GDO_Y0 + 2, GDO_H - 4, 0x07FF);
+            }
+            canvas.pushSprite(GX, RSSI_Y);
+        } else {
+            /* Fallback without canvas. */
+            d.fillRect(GX, RSSI_Y, GW, RSSI_H, 0x0000);
+            d.fillRect(GX, GDO_Y,  GW, GDO_H,  0x0000);
+            int prev_y = RSSI_Y + RSSI_H - 1;
+            for (int i = 0; i < GW; ++i) {
+                int idx = (head + i) % GW;
+                int n = rssi_ring[idx] + 110; if (n < 0) n = 0; if (n > 80) n = 80;
+                int y = RSSI_Y + RSSI_H - (n * RSSI_H) / 80;
+                if (i > 0) d.drawLine(GX + i - 1, prev_y, GX + i, y, 0x07E0);
+                prev_y = y;
+            }
+            for (int i = 0; i < GW; ++i) {
+                int idx = (head + i) % GW;
+                if (gdo_ring[idx])
+                    d.drawFastVLine(GX + i, GDO_Y + 2, GDO_H - 4, 0x07FF);
             }
         }
-        /* Center line. */
-        for (int x = GX; x < GX + GW; x += 3)
-            d.drawPixel(x, mid, 0x3186);
 
-        /* Filled waveform with gradient. */
-        for (int i = 1; i < GW; ++i) {
-            int n1 = history[i - 1] + 110, n2 = history[i] + 110;
-            if (n1 < 0) n1 = 0; if (n2 < 0) n2 = 0;
-            int y1 = GY + GH - (n1 * GH) / 80;
-            int y2 = GY + GH - (n2 * GH) / 80;
-            /* Line connecting samples. */
-            uint16_t c = rssi_color(history[i]);
-            d.drawLine(GX + i - 1, y1, GX + i, y2, c);
-            /* Filled area to bottom with dim version. */
-            int fill_y = (y2 < GY + GH) ? y2 : GY + GH;
-            if (fill_y < GY + GH)
-                d.drawFastVLine(GX + i, fill_y, GY + GH - fill_y, rssi_color(history[i] - 20));
-        }
+        /* Header text — draw in fixed-width regions on main display to
+         * avoid re-rendering in the sprite. */
+        int cur_rssi = rssi_ring[(head + GW - 1) % GW];
+        int pulse_count = 0;
+        for (int i = 0; i < GW; ++i) pulse_count += gdo_ring[i];
 
-        /* Title + current readings. */
-        ui_text(4, BODY_Y + 2, T_ACCENT, "SCOPE %.3f MHz", freq);
-        int cur = history[GW / 2];
-        d.setTextColor(cur > -60 ? T_GOOD : T_DIM, T_BG);
+        d.fillRect(4, BODY_Y + 2, 120, 8, T_BG);
+        d.setTextColor(T_ACCENT, T_BG);
+        d.setCursor(4, BODY_Y + 2); d.printf("SCOPE %.3f MHz", freq);
+        d.fillRect(SCR_W - 60, BODY_Y + 2, 58, 8, T_BG);
+        d.setTextColor(cur_rssi > -60 ? T_GOOD : T_DIM, T_BG);
         d.setCursor(SCR_W - 54, BODY_Y + 2);
-        d.printf("%d dBm", cur);
+        d.printf("%d dBm", cur_rssi);
 
-        ui_draw_footer("+-=freq  ESC=back");
+        /* Pulse counter — fade from dim to cyan based on activity. */
+        d.fillRect(4, SCR_H - 22, 120, 8, T_BG);
+        d.setTextColor(pulse_count > 4 ? 0x07FF : T_DIM, T_BG);
+        d.setCursor(4, SCR_H - 22);
+        d.printf("GDO0 pulses: %3d", pulse_count);
 
+        /* Poll input + cadence. */
         uint32_t t = millis();
-        while (millis() - t < 60) {
+        while (millis() - t < 20) {
             uint16_t k = input_poll();
-            if (k == PK_ESC) return;
+            if (k == PK_ESC) {
+                if (have_canvas) canvas.deleteSprite();
+                return;
+            }
             if (k == '+' || k == '=') { freq += 0.5f; cc1101_set_freq(freq); }
-            if (k == '-') { freq -= 0.5f; cc1101_set_freq(freq); }
+            if (k == '-')             { freq -= 0.5f; cc1101_set_freq(freq); }
         }
     }
 }
