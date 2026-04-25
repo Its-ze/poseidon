@@ -7,6 +7,7 @@
  */
 #include "menu.h"
 #include "ui.h"
+#include "ui_ambient.h"
 #include "input.h"
 #include "radio.h"
 #include "theme.h"
@@ -693,6 +694,11 @@ static int count_children(const menu_node_t *parent)
 static void draw_menu(const menu_node_t *parent, int cursor)
 {
     ui_force_clear_body();
+    /* Paint theme-aware ambient motion BEFORE menu chrome — rows draw
+     * over the top with their own opaque background so they remain
+     * readable. No-op when the user has disabled ambient via
+     * System -> Ambient. */
+    ui_ambient_tick(0, BODY_Y, SCR_W, BODY_H);
     auto &d = M5Cardputer.Display;
 
     /* Title with count + scroll indicator. */
