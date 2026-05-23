@@ -30,5 +30,11 @@ src/idf_component.yml
 # Staged release artifacts (binary + release-notes draft) — attach to GitHub release instead of committing
 _release/
 
+# EXCEPTION to the *.bin rule above: the web flasher under docs/ MUST
+# track its bins or GitHub Pages has nothing to serve. Keep these
+# specifically un-ignored.
+!docs/flash/bin/**/*.bin
+!docs/bin/**/*.bin
+
 # Superpowers brainstorm session output (HTML mockups, server state) — local only
 .superpowers/

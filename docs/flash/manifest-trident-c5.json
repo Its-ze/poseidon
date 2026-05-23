@@ -1,0 +1,17 @@
+{
+  "name": "POSEIDON TRIDENT - ESP32-C5 Satellite",
+  "version": "proto-v3-2026-05-22",
+  "home_assistant_domain": "",
+  "funding_url": "",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-C5",
+      "parts": [
+        { "path": "bin/trident-c5/bootloader.bin",       "offset": 8192   },
+        { "path": "bin/trident-c5/partition-table.bin",  "offset": 32768  },
+        { "path": "bin/trident-c5/poseidon_c5_node.bin", "offset": 65536  }
+      ]
+    }
+  ]
+}
