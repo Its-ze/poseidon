@@ -147,15 +147,65 @@ The complete touch list from the v0.5.0 → 0.6 audit:
 
 ### Manifests
 
-- [ ] **`docs/flash/manifest-trident-c5.json`** — bump version, ASCII-clean.
+- [ ] **`docs/flash/manifest-trident-c5.json`** — bump version,
+      ASCII-clean. Used by `flash/index.html` (the C5 install button).
 - [ ] **`docs/manifest-trident.json`** — install.html's release-URL
-      manifest. The path itself (`releases/latest/download/trident-factory.bin`)
-      doesn't need editing because `latest` auto-resolves, but bump
-      the `"version"` field for clarity.
-- [ ] **`docs/m5burner.json`** — if we publish via M5Burner. The
-      `install.html` text says "once we tag vX.Y.Z you'll see it
-      listed" — verify M5Burner is actually consuming this json
-      before relying on that line.
+      C5 manifest. The path itself
+      (`releases/latest/download/trident-factory.bin`) doesn't need
+      editing because `latest` auto-resolves, but bump the
+      `"version"` field for clarity.
+- [ ] **`docs/m5burner.json`** — **PREPEND a new entry to the
+      `firmware[]` array** for this version (do NOT replace the
+      existing entries; M5Burner shows them as a version history
+      dropdown). Required fields per entry:
+
+  ```json
+  {
+    "name":        "POSEIDON vX.Y.Z",
+    "version":     "X.Y.Z",
+    "chip":        "esp32s3",
+    "target":      "M5Cardputer-Adv",
+    "flash_size":  "8MB",
+    "psram":       true,
+    "url":         "https://github.com/GeneralDussDuss/poseidon/releases/download/vX.Y.Z/poseidon-factory.bin",
+    "offset":      "0x0",
+    "description": "<one-paragraph release headline>",
+    "date":        "YYYY-MM-DD",
+    "changelog":   "https://github.com/GeneralDussDuss/poseidon/blob/master/CHANGELOG.md",
+    "license":     "MIT"
+  }
+  ```
+
+  Also refresh the top-level `description` field if the feature
+  count or headline blurb has changed (currently says "90+ features"
+  — bump to match README).
+
+### Featured-feature labels in the website
+
+- [ ] **`docs/arsenal.html`** — feature cards carry `<div class="count">vX.Y HEADLINE</div>`
+      and `vX.Y FIXED` badges. Add ones for this version's
+      headline + fixed features, and demote prior-version tags to
+      historical (they can stay — they're useful "this landed in vN"
+      breadcrumbs for users).
+- [ ] **`docs/roadmap.html`** — move items from "in flight" to
+      "shipped" with the release tag; add new "in flight" items for
+      the next milestone.
+- [ ] **`docs/credits.html`** — if a specific contributor / upstream
+      project was load-bearing for this release (the way SaltyJack
+      credit headlined v0.4), add a "vX.Y headline credit" pin.
+
+### Featured-feature counts to keep in sync
+
+Any time you add a feature, FOUR places need to be updated together
+or the counts drift:
+
+- [ ] `README.md` — section counts (`### WiFi (17)`, `### BLE (16)`,
+      etc.) AND the top-level `95+` blurb AND the `## Feature
+      Matrix (95+)` heading.
+- [ ] `docs/index.html` — `<div class="hero-stats">` "Features"
+      counter (`data-count="100"`).
+- [ ] `docs/m5burner.json` — top-level `description` blurb.
+- [ ] `docs/arsenal.html` — the feature you added needs a card.
 
 ## 5. Commit + push order
 
@@ -252,7 +302,57 @@ gh release view vX.Y.Z --json assets --jq '.assets[].name'
   (GPIO 9), tap RESET, release BOOT. Some C5 dev boards lack the
   DTR/RTS auto-reset wiring.
 
-## 9. Things that auto-update (don't touch)
+## 9. Getting into the official M5Burner + Launcher catalogs
+
+### M5Burner (M5Stack's official desktop flasher)
+
+M5Burner has a built-in "custom firmware" tab where users paste a
+manifest URL and it adds the firmware to their personal catalog.
+Ours is at `https://generaldussduss.github.io/poseidon/m5burner.json`
+— shareable today without M5Stack's involvement.
+
+**To get on the *default* catalog** (shows up for every M5Burner
+user without them adding a URL):
+
+1. Open an issue at <https://github.com/m5stack/M5Burner> requesting
+   inclusion. Reference the manifest URL above and the homepage.
+2. The bar for inclusion: working public-release firmware with a
+   stable manifest schema. We meet both — manifest matches the same
+   schema Bruce/EvilCardputer/Marauder use, and we have tagged
+   releases.
+3. Bruce, ESP32Marauder, and Evil-M5Project all got in via the same
+   path. Look at their inclusion PRs for the exact metadata format
+   M5Stack wants in the issue body.
+4. Approval usually takes ~1-2 weeks; M5Stack rebuilds the bundled
+   catalog with new releases.
+
+### bmorcelli's Launcher (community alternative bootloader)
+
+The Launcher app at <https://github.com/bmorcelli/Launcher> reads a
+remote manifest of community firmwares. To get listed:
+
+1. Verify the `cardputer-launcher` PIO env still produces a
+   compatible image — partition table is `support_files/launcher_8Mb.csv`
+   linking to `app1/ota_0` slot at `0x170000`, capped 0x4F0000.
+2. Open a PR against the launcher manifest in bmorcelli's repo
+   adding a POSEIDON entry. Reference the launcher-variant release
+   asset (`poseidon-launcher.bin` in our `gh release create` step).
+3. The Launcher's "Install from SD" flow already works for users
+   who manually copy the launcher.bin to their SD — community
+   listing just makes discovery easier.
+
+### Cardputer-Adv firmware showcases (third-party)
+
+- **Evil-M5Project's awesome list** at
+  <https://github.com/7h30th3r0n3/Evil-Cardputer> often lists
+  related Cardputer firmwares. PR a one-liner pointing at our
+  homepage to land in the "Other Cardputer firmware projects"
+  section.
+- **r/Cardputer** + **r/M5Stack** subreddits — a one-time release
+  announcement with screenshot of the web flasher tends to drive
+  the most traffic. Pin it to user's profile after posting.
+
+## 10. Things that auto-update (don't touch)
 
 - `releases/latest/download/<asset>.bin` URLs — GitHub auto-resolves
   `latest` to whatever tag was published most recently. No manifest
@@ -263,7 +363,7 @@ gh release view vX.Y.Z --json assets --jq '.assets[].name'
 - The c5_node build's flash offsets (`build/flash_args`) are
   regenerated by IDF every build; don't hand-edit.
 
-## 10. Update memory after a release
+## 11. Update memory after a release
 
 Update `~/.claude/projects/.../memory/` so future-me knows where things landed:
 
