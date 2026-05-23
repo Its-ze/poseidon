@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Testers — POSEIDON</title>
-<meta name="description" content="v0.4 test priorities. Flash master, confirm deauth lands on-air, stress SaltyJack, TRIDENT, and the regression surface.">
+<title>Testers &mdash; POSEIDON</title>
+<meta name="description" content="POSEIDON v0.5.0 shipped, 0.6 in flight. Web flasher for the C5 is live. LoRa + Meshtastic, IR Samsung Smart Remote, WiFi beacon spam, and TRIDENT need real-hardware eyes before the next tag.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
@@ -17,7 +17,7 @@
   <div class="boot-lines"><div class="boot-line"><span class="dim">[LOAD]</span> testers.html <span class="ok">OK</span></div></div>
 </div>
 <div id="scrollProgress"></div>
-<div id="hud"><div class="hud-row"><span class="hud-dot"></span>TESTERS · v0.4 gate</div></div>
+<div id="hud"><div class="hud-row"><span class="hud-dot"></span>TESTERS &middot; v0.5.0 shipped &middot; 0.6 in flight</div></div>
 
 <nav id="mainNav">
   <a href="index.html" class="nav-logo"><span class="icon">P</span><span>POSEIDON</span></a>
@@ -35,96 +35,135 @@
 <header class="page-head">
   <div class="kicker">04 // FIELD TEAM</div>
   <h1>For testers</h1>
-  <p class="lede">v0.4 is on master and needs eyes before the tag cuts. One question gates the release: <b style="color:#f59e0b;">do deauth frames actually land on-air?</b> Everything else is regression. If you flash master and confirm it works, ping the repo. That's the signal. Full doc: <a href="https://github.com/GeneralDussDuss/poseidon/blob/master/TESTERS.md" target="_blank"><code>TESTERS.md</code></a>.</p>
+  <p class="lede">v0.5.0 is shipped and master is well past it &mdash; ~20 commits + a chunk of in-flight work toward 0.6. The TRIDENT (ESP32-C5) <a href="flash/">web flasher</a> just went live. Big stuff to verify on real hardware: the C5 web-flash flow, the full <b style="color:#34d399;">LoRa / Meshtastic stack</b>, the rewritten Samsung Smart Remote, and the WiFi beacon-spam recipe. Full doc: <a href="https://github.com/GeneralDussDuss/poseidon/blob/master/TESTERS.md" target="_blank"><code>TESTERS.md</code></a>.</p>
 </header>
 
 <div class="console-strip">
   <div class="console-bar">
     <span class="ck">[FIELD]</span>
-    <span>gate=<span class="hot">deauth on-air</span></span>
-    <span>verified=<span class="ck">ok=800 fail=0</span></span>
-    <span>regressions=<span class="nm">saltyjack / trident / sd / theme</span></span>
-    <span>flash=<span class="vk">pio run -t upload</span></span>
-    <span class="blink">▸</span>
+    <span>tagged=<span class="ck">v0.5.0</span></span>
+    <span>master=<span class="hot">unreleased</span></span>
+    <span>top-priorities=<span class="nm">C5 webflash / LoRa / Samsung / beacon-spam</span></span>
+    <span>flash=<span class="vk">flash/ &mdash; chrome/edge web flasher</span></span>
+    <span class="blink">&blacktriangleright;</span>
   </div>
 </div>
 
 <section id="testers" style="padding-top:1rem;">
   <div class="test-grid">
+
     <div class="test-card p1 reveal" style="border-color:rgba(245,158,11,.5);box-shadow:0 0 0 1px rgba(245,158,11,.1), 0 24px 60px -20px rgba(245,158,11,.25);">
-      <div class="test-prio" style="color:#f59e0b;">★ Priority 1 · RELEASE GATE</div>
-      <h3>Deauth frames on-air (platform-fork validation)</h3>
-      <p>The whole v0.4 migration exists to answer one question. Stock IDF 5.3 blob filtered MGMT subtypes <code>0xC</code> / <code>0xA</code> at the TX FIFO. Bruce's patched <code>libnet80211.a</code> lifts the filter. This test confirms that actually happened.</p>
+      <div class="test-prio" style="color:#f59e0b;">&starf; Priority 1 &middot; C5 WEB FLASHER (just deployed)</div>
+      <h3>End-to-end browser flash of a TRIDENT satellite</h3>
+      <p>The flasher at <a href="flash/"><code>/flash/</code></a> is the first time we&apos;ve had a one-click install path for the ESP32-C5 satellite. esp-web-tools 10.2.1 on jsdelivr (the unpkg edge cache was serving an old bundle with no C5 support &mdash; that&apos;s now fixed). We need real-board confirmation.</p>
       <ul class="test-steps">
-        <li>Flash master, boot, confirm splash reads v0.4</li>
-        <li>Pick a non-PMF WPA2 AP you own; associate a phone / laptop to it</li>
-        <li>POSEIDON → WiFi → Scan → select target → press <code>D</code></li>
-        <li><b>Watch the counters:</b> <code>sent:</code> climbs hundreds/sec, <code>drops:</code> stays near zero</li>
-        <li>Target client drops WiFi within 2-5 seconds</li>
+        <li>Open <a href="https://generaldussduss.github.io/poseidon/flash/" target="_blank">generaldussduss.github.io/poseidon/flash/</a> in Chrome / Edge / Opera</li>
+        <li>Plug the C5 module directly via USB-C (not through the Cardputer)</li>
+        <li>Click <b>Install TRIDENT</b> &middot; pick the C5&apos;s COM port (NOT the Cardputer-Adv&apos;s)</li>
+        <li>Confirm the flow: erase &rarr; bootloader (0x2000) &rarr; partition-table (0x8000) &rarr; app (0x10000) all green</li>
+        <li>Boot it &middot; pair it to a POSEIDON Cardputer &middot; <code>Radio &rarr; C5 &rarr; Status</code> should show <code>C5 x1</code> within a few seconds</li>
       </ul>
-      <div class="test-note" style="border-left-color:#f59e0b;"><b>Success signal:</b> reply "deauth verified v0.4" on GitHub Issues. That's the tag-trigger.</div>
+      <div class="test-note" style="border-left-color:#f59e0b;"><b>Known gotcha:</b> If "Failed to initialize" appears, hold the C5&apos;s BOOT (GPIO 9), tap RESET, release BOOT &mdash; then click Install. Some C5 dev boards lack auto-reset wiring.</div>
     </div>
 
-    <div class="test-card p2 reveal">
-      <div class="test-prio">Priority 2 · SaltyJack LAN arsenal</div>
-      <h3>RaspyJack port end-to-end</h3>
-      <p>Full homage port of <a href="https://github.com/7h30th3r0n3/Raspyjack" target="_blank" rel="noopener">@7h30th3r0n3</a>'s RaspyJack. Six new attack modules behind the <code>j</code> menu key. Run against networks you own.</p>
+    <div class="test-card p2 reveal" style="border-color:rgba(52,211,153,.45);box-shadow:0 0 0 1px rgba(52,211,153,.1), 0 24px 60px -20px rgba(52,211,153,.25);">
+      <div class="test-prio" style="color:#34d399;">&starf; Priority 2 &middot; LoRa + Meshtastic full sweep</div>
+      <h3>SX1262 stack on the CAP-LoRa1262 hat</h3>
+      <p>LoRa is the band with the most surface area and the most regression risk &mdash; nine features touching the SX1262 driver, antenna-switch GPIO sequencing, HSPI-shared-with-SD, GNSS UART, and Meshtastic protobuf encoding. Hit each leaf and confirm none reboot the device.</p>
       <ul class="test-steps">
-        <li><b>DHCP Starve:</b> join target WiFi → run → watch pool exhaust (NAK ≥ 20)</li>
-        <li><b>Rogue DHCP:</b> STA mode races real server; AP mode <em>is</em> the server</li>
-        <li><b>Responder:</b> poison LLMNR/NBT-NS, capture NTLMv2 hashes to SD</li>
-        <li><b>WPAD:</b> serve PAC + HTTP 407 challenge; confirm Windows clients auto-auth</li>
-        <li><b>NTLMv2 cracker:</b> feed captured hash + wordlist, verify it runs on-device</li>
-        <li>Report: which modules landed, any crashes, pcap/hash-file output paths</li>
+        <li><b>Attach the CAP-LoRa1262 hat</b> with sky view (GPS needs it). Verify <code>System &rarr; About</code> reports "Adv" board.</li>
+        <li><b>LoRa &rarr; Scan</b> &middot; switch bands with TAB (433 / 868 / 915 / US LongFast) &middot; each retune should be instant, no crash</li>
+        <li><b>LoRa &rarr; Beacon</b> &middot; press TX &middot; nearby SDR / Meshtastic device should see the packet</li>
+        <li><b>LoRa &rarr; Analyzer</b> &middot; cycle Bar / Waterfall / Oscilloscope renders &middot; "RX N" overlay should tick when real traffic is in range</li>
+        <li><b>LoRa &rarr; Mesh Nodes</b> &middot; leave running ~2 min near Meshtastic activity (check meshmap.net) &middot; roster should populate with real names, not garbage</li>
+        <li><b>LoRa &rarr; Mesh Chat</b> &middot; press T, type, ENTER &middot; message should appear on a phone Meshtastic app from POSEIDON&apos;s <code>!xxxxxxxx</code> ID</li>
+        <li><b>LoRa &rarr; Mesh Page</b> &middot; pick a node, send a DM &middot; destination should receive direct, not broadcast</li>
+        <li><b>LoRa &rarr; Mesh Pos</b> &middot; press T to toggle reporting &middot; wait for GPS fix &middot; you should appear as a pin on other apps</li>
+        <li><b>LoRa &rarr; GPS Fix</b> &middot; live NMEA, baud auto-detect, sat count + HDOP</li>
+        <li><b>Range test:</b> from your house outward in increments, note last RX confirmed (RSSI/SNR in Analyzer) by band. Report in feet or meters.</li>
       </ul>
-      <div class="test-note">Every file in <code>src/features/saltyjack/</code> is authorized-testing-only. Don't hunt strangers.</div>
+      <div class="test-note" style="border-left-color:#34d399;"><b>Report:</b> any feature that reboots, any band that doesn&apos;t retune, RX-works-TX-doesn&apos;t-or-vice-versa (encryption / header bug signal), nodes with garbage names (protobuf decode), position at wrong lat/lon (sfixed32 sign bug).</div>
+      <div class="test-note"><b>Known caveats:</b> Leaf-only Meshtastic (we don&apos;t forward other nodes&apos; packets). No CAD before TX (collides slightly more in dense mesh). NodeInfo broadcasts every 30 min regardless of Mesh Pos toggle.</div>
     </div>
 
     <div class="test-card p3 reveal">
-      <div class="test-prio">Priority 3 · TRIDENT (ESP32-C5 satellite)</div>
-      <h3>End-to-end ESP-NOW with the C5 node</h3>
-      <p>TRIDENT is the ESP32-C5 plug-in satellite that gives POSEIDON 5 GHz deauth, Zigbee sniff, and PMKID capture over ESP-NOW on channel 1. v0.5 is the first release where the whole path works — pairing, scan, attack, and return-to-channel-1 so POSEIDON keeps hearing HELLOs.</p>
+      <div class="test-prio">Priority 3 &middot; IR Samsung Smart Remote rebuild</div>
+      <h3>Active-LOW LED + bit-bang carrier + full ~40-button layout</h3>
+      <p>Every IR feature was silently no-op&apos;ing. Two stacked bugs: GPIO 44 is UART0 RX by default and <code>pinMode(OUTPUT)</code> doesn&apos;t fully detach the matrix in Arduino-ESP32 v3 (fix: <code>gpio_reset_pin</code>), AND the Cardputer-Adv&apos;s IR LED is active-LOW which LEDC&apos;s <code>output_invert</code> can&apos;t handle correctly at <code>duty=0</code> (fix: bit-bang the carrier in CPU). Plus the Samsung protocol byte order was NEC, not Samsung32. Plus TV-B-Gone was stealing the display backlight&apos;s LEDC channel.</p>
       <ul class="test-steps">
-        <li>Flash TRIDENT via the <a href="install.html">install page</a> web flasher (Chrome/Edge)</li>
-        <li>Power it on — <code>Radio → C5 → Status</code> should show "C5 x1" within a few seconds</li>
-        <li>Run <code>C5 → Scan</code> — expect both 2.4 + 5 GHz APs with auth type column; WPA3 rows show red</li>
-        <li>Run <code>C5 → Deauth → broadcast</code> on a channel you own — watch frames counter tick</li>
-        <li>File any issue where TRIDENT drops off after scan/deauth (should always return to ch 1)</li>
+        <li><b>IR &rarr; LED Test</b> &middot; point a phone camera at the LED &middot; step 2 (GPIO 44 inverted) should light it purple/white. Useful for verifying any board variant.</li>
+        <li><b>IR &rarr; Remote</b> against a Samsung TV &middot; press <code>p</code> for power, then <code>u</code>/<code>d</code> volume, <code>m</code> mute, <code>c</code>/<code>v</code> channels &middot; no modifier keys should be required for any binding</li>
+        <li>D-pad: press <code>;</code> (up), <code>.</code> (down), <code>,</code> (left), <code>/</code> (right) &middot; ENTER for OK &middot; should navigate Samsung menus</li>
+        <li>If power toggle (<code>p</code>) doesn&apos;t respond, try <code>o</code> (discrete on) or <code>q</code> (discrete off). Modern Smart TVs sometimes ignore IR power.</li>
+        <li><b>IR &rarr; TV-B-Gone</b> at a busy TV wall &middot; should cycle Sony / Samsung / LG / Panasonic / Philips / Vizio &middot; display backlight should stay on (was blanking before the channel-3/timer-3 fix)</li>
+        <li><b>IR &rarr; Clone</b> &middot; Samsung / LG / Sony preset profiles &middot; basic vol+mute should work for each</li>
       </ul>
+      <div class="test-note"><b>Report:</b> any button that doesn&apos;t fire IR (use the LED Test diag to confirm hardware first), any TV that responds to volume but not power (might be a model-specific Power code), and any other-brand TVs that the Samsung sender unexpectedly controls.</div>
     </div>
 
     <div class="test-card p4 reveal">
-      <div class="test-prio">Priority 4 · Regression sweep</div>
-      <h3>Everything v0.3 shipped — still works?</h3>
-      <p>v0.4 migrated the entire platform. Library versions stayed, code stayed — but some corners might've drifted. Touch every menu leaf at least once.</p>
+      <div class="test-prio">Priority 4 &middot; WiFi Beacon Spam new path</div>
+      <h3>Raw-IDF recipe replaces the Arduino path that crashed</h3>
+      <p>The Arduino <code>WiFi.softAP()</code> crashed in <code>ieee80211_hostap_attach</code> (LoadProhibited, +0x2c null deref) on Bruce&apos;s pinned <code>esp32-arduino-libs</code>. New path: <code>esp_bt_controller_mem_release</code> &rarr; manual <code>esp_netif</code> + <code>esp_wifi_init</code> with shrunk dynamic bufs (16/16) &rarr; STA mode + promiscuous + raw <code>esp_wifi_80211_tx</code> on <code>WIFI_IF_STA</code>. Sustained ~1200 frames/sec.</p>
       <ul class="test-steps">
-        <li><b>Radios:</b> WiFi scan, BLE scan, LoRa scan, CC1101 scan, nRF24 scan — all enumerate</li>
-        <li><b>Capture:</b> Sub-GHz record+replay, PMKID, 4-way handshake (.22000 format)</li>
-        <li><b>Meshtastic:</b> Chat, Nodes, Page, Pos — receive real traffic if within range</li>
-        <li><b>Peripherals:</b> SD browse, BadUSB, IR TV-B-Gone, GPS fix, theme + SFX toggle</li>
-        <li>File any regression with feature path, serial log, reproducibility count</li>
+        <li><b>WiFi &rarr; Beacon spam &rarr; Meme</b> &middot; open WiFi scan on a phone &middot; meme SSIDs (FREE WIFI - CLICK HERE, NSA Surveillance Van, etc.) should appear within a few seconds</li>
+        <li>The scanner UI should show a KITT-style sweep header, live big SSID, fading 5-line recent feed, fps counter, and a hex stream &middot; channel should rotate 1&rarr;11 once per full list pass</li>
+        <li>Leave running 30+ seconds &middot; uptime should keep ticking, no reboot</li>
+        <li>Press ESC &middot; should exit cleanly back to the menu with heap recovering to >50 KB</li>
+        <li><b>Side effect to verify:</b> after exiting Beacon Spam, BLE features won&apos;t work until reboot (BT memory was released to make room for WiFi). Confirm a fresh boot brings BLE back.</li>
+      </ul>
+      <div class="test-note"><b>Report:</b> phones that see &lt; 5 SSIDs (range / RF environment issue), any feature that&apos;s opened AFTER Beacon Spam and fails (state leak), and whether Rickroll + Custom lists also work.</div>
+    </div>
+
+    <div class="test-card p5 reveal">
+      <div class="test-prio">Priority 5 &middot; TRIDENT 5 GHz operations</div>
+      <h3>Once a C5 is flashed (P1), exercise the actual attacks</h3>
+      <p>TRIDENT&apos;s job is the RF territory the S3 physically can&apos;t touch &mdash; 5 GHz WiFi, 802.15.4 Zigbee. The whole point of the C5 satellite. Each command rides ESP-NOW back to the Cardputer over channel 1.</p>
+      <ul class="test-steps">
+        <li><b>C5 &rarr; Scan</b> &middot; full dual-band scan &middot; APs from both 2.4 + 5 GHz with auth column (WPA3 rows red)</li>
+        <li><b>C5 &rarr; Deauth &rarr; broadcast</b> on a 5 GHz channel you own &middot; frames counter ticks &middot; target reconnects</li>
+        <li><b>C5 &rarr; PMKID</b> &middot; M1 capture against a 5 GHz AP &middot; .22000 hashcat-format file on SD</li>
+        <li><b>C5 &rarr; Zigbee sniff</b> &middot; channels 11-26 &middot; pcap dump compatible with Wireshark</li>
+        <li>After every C5 attack: <code>C5 &rarr; Status</code> should still show the satellite present and pinned to channel 1 (so POSEIDON keeps hearing HELLOs)</li>
       </ul>
     </div>
+
+    <div class="test-card p6 reveal">
+      <div class="test-prio">Priority 6 &middot; Regression sweep (broad surface)</div>
+      <h3>Every menu leaf still enters without crashing</h3>
+      <p>100+ features. Hit each one once, even if just to enter and back out. Anything that crashes or reboots since v0.5.0 is a regression we want to know about now.</p>
+      <ul class="test-steps">
+        <li><b>WiFi (17):</b> Scan / Clients / Deauth / Deauth All / Detector / AP Clone / Evil Portal / Karma / Beacon Spam / Probe Sniff / PMKID / Spectrum / Wardrive / CIW / Connect</li>
+        <li><b>BLE (16):</b> Scan / Spam / Bad-KB / Tracker Detect / Tracker Finder / Sniffer / iBeacon / Clone / GATT / Flood / Karma / Sour Apple / Find My / Toys / Drone RID / WhisperPair</li>
+        <li><b>Defensive (3):</b> Surveillance Hunter, Defensive Monitor, SATCOM Tracker</li>
+        <li><b>Sub-GHz (9):</b> Scan / Spectrum / Brute / Jammer / Broadcast Library / Record / Replay / Finder / Jam Detect</li>
+        <li><b>nRF24 (6):</b> Sniffer / MouseJack / BLE spam / Spectrum / Jammer / Finder</li>
+        <li><b>Network Attacks (18):</b> Port Scan / Ping / DNS / Connect / Responder / SSDP / LAN Recon / UART Shell / Reverse TCP / Telnet HP / Dead Drop / Printer / SSDP Poison / DHCP Starve / Rogue DHCP / Hijack / WPAD / Autodiscover</li>
+        <li><b>IR (4):</b> TV-B-Gone / Remote / Clone / LED Test &mdash; covered separately in Priority 3</li>
+        <li><b>Tools + System:</b> Flashlight / Stopwatch / Dice / Morse / MAC Random / Calc / Screen Test / SD Format / Theme Picker / Ambient Preview / Carousel toggle / Screensaver settings</li>
+      </ul>
+    </div>
+
   </div>
 
   <div class="test-report reveal">
     <h4>Ideal bug report</h4>
     <ul>
-      <li><b>Build</b>: v0.4 / commit SHA (confirm in boot splash)</li>
-      <li><b>Hardware</b>: Cardputer-Adv + which hat attached</li>
-      <li><b>Feature path</b>: e.g. <code>WiFi → Deauth → specific target</code></li>
+      <li><b>Build</b>: v0.5.0 (tagged) or master + commit SHA (boot splash shows version)</li>
+      <li><b>Hardware</b>: Cardputer-Adv + which hat attached (CAP-LoRa1262 / Hydra RF / W5500 / none / C5 satellite paired)</li>
+      <li><b>Feature path</b>: e.g. <code>LoRa &rarr; Mesh Chat &rarr; T &rarr; type &rarr; ENTER</code></li>
       <li><b>What happened</b> vs <b>what you expected</b></li>
       <li><b>Reproducibility</b>: always / sometimes / once</li>
-      <li><b>Serial log</b> if possible (<code>pio device monitor --baud 115200</code>)</li>
+      <li><b>Serial log</b> if possible (<code>pio device monitor --baud 115200</code> on the Cardputer; <code>idf.py monitor</code> on the C5)</li>
     </ul>
     <p style="margin-top:1rem;font-size:.88rem;color:#cbd5e1">
-      File at <a href="https://github.com/GeneralDussDuss/poseidon/issues" target="_blank">github.com/GeneralDussDuss/poseidon/issues</a> with label <code>v0.4-tester</code>.
+      File at <a href="https://github.com/GeneralDussDuss/poseidon/issues" target="_blank">github.com/GeneralDussDuss/poseidon/issues</a> with label <code>v0.5-tester</code> or <code>v0.6-tester</code> depending on which build you flashed.
     </p>
   </div>
 </section>
 
 <footer>
-  <div class="foot-glyph">⟠</div>
+  <div class="foot-glyph">&#x27E0;</div>
   <div class="suite-label">PART OF THE SUITE</div>
   <div class="suite-links">
     <a href="https://generaldussduss.github.io/suite/">THE SUITE</a>
