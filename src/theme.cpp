@@ -1,9 +1,11 @@
 /*
- * theme.cpp — three curated palettes.
+ * theme.cpp — six curated palettes.
  *
  * Persists current id to NVS namespace "pui" key "theme". theme_preview
  * stays an in-RAM-only hot-swap so the picker can browse without
  * thrashing flash with ~300 writes/sec while the user holds an arrow.
+ *
+ * Order in THEMES[] must match the theme_id_t enum.
  */
 #include "theme.h"
 #include <M5Cardputer.h>
@@ -75,6 +77,74 @@ static const poseidon_theme_t THEMES[] = {
         0xC618,             /* status_bg2: light grey */
         0xDEFB,             /* footer_bg */
         0x8410,             /* rule */
+    },
+    /* ---- SYNTHWAVE / VAPORWAVE ----
+     * Hot magenta + pastel cyan on midnight-grape. Distinct from
+     * POSEIDON cyberpunk because the bg is purple, not black — that's
+     * the "smooth" 80s night-sky vibe. Pastel highlights, palm-tree-
+     * silhouette energy. The dim channel is muted lavender so footer
+     * hint text reads cleanly on the grape bg. */
+    {
+        "SYNTHWAVE",
+        0x1083,             /* bg: midnight grape — soft 80s night-sky purple */
+        0xFC9F,             /* fg: pastel cyan-pink blend (warm white) */
+        0xFB1F,             /* accent: hot magenta-pink — signature color */
+        0x07FF,             /* accent2: pure cyan — counter-balance to pink */
+        0xFFEF,             /* warn: pastel cream yellow */
+        0xF99F,             /* bad: pastel pink-red (still on theme) */
+        0x07F8,             /* good: mint cyan */
+        0x9C9C,             /* dim: muted lavender, readable on grape */
+        0x381F,             /* sel_bg: deep grape-magenta */
+        0xFB1F,             /* sel_border: hot magenta */
+        0x2826,             /* status_bg: dark grape */
+        0x180C,             /* status_bg2: deeper grape */
+        0x180C,             /* footer_bg */
+        0xC81F,             /* rule: bright magenta-pink */
+    },
+    /* ---- PHANTOM VIOLET ----
+     * Suite-cohesive: matches the user's phantom-launcher / phantom-rf /
+     * phantom-mobile aesthetic so POSEIDON reads as part of one branded
+     * toolchain. Vivid violet accents on deep indigo bg. Amber warn
+     * gives a warm contrast against the cool violet body. */
+    {
+        "PHANTOM",
+        0x0822,             /* bg: midnight indigo-violet */
+        0xDF7F,             /* fg: lavender-white */
+        0xB37F,             /* accent: vivid violet — suite signature */
+        0x801F,             /* accent2: deep purple */
+        0xFE60,             /* warn: amber — warm vs cool body */
+        0xC000,             /* bad: blood red */
+        0x07E4,             /* good: emerald — clean "ok" against violet */
+        0x630C,             /* dim: medium purple-grey */
+        0x300A,             /* sel_bg: dark violet */
+        0xB37F,             /* sel_border: bright violet */
+        0x2007,             /* status_bg: dark violet */
+        0x0820,             /* status_bg2: near-black purple */
+        0x0820,             /* footer_bg */
+        0x801F,             /* rule: deep purple */
+    },
+    /* ---- BLOOD / FSOCIETY ----
+     * Mr Robot tactical: blood red on pure black. Reads as "the device
+     * is actively attacking" — best paired with hostile features
+     * (deauth, jammer, beacon spam). Warm light grey fg instead of pure
+     * white so the screen doesn't burn at night. Good (green) is muted
+     * because green-on-red is visually noisy — kept dim for sparing use. */
+    {
+        "BLOOD",
+        0x0000,             /* bg: pure black */
+        0xCE59,             /* fg: warm light grey */
+        0xE000,             /* accent: blood red — signature */
+        0x8000,             /* accent2: crimson — deeper red */
+        0xFD00,             /* warn: amber */
+        0xF800,             /* bad: pure red — for hostile / panic */
+        0x05C0,             /* good: muted green (used sparingly) */
+        0x4208,             /* dim: dark grey */
+        0x4000,             /* sel_bg: dark red */
+        0xE000,             /* sel_border: blood red */
+        0x2000,             /* status_bg: dark red */
+        0x1000,             /* status_bg2: very dark red */
+        0x0800,             /* footer_bg */
+        0xE000,             /* rule: blood red */
     },
 };
 

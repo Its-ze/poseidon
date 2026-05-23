@@ -145,6 +145,9 @@ void ui_ambient_tick(int x, int y, int w, int h)
     case THEME_POSEIDON:  amb_poseidon(x, y, w, h); break;
     case THEME_MATRIX:    amb_matrix  (x, y, w, h); break;
     case THEME_EINK:      /* paper aesthetic — no ambient */    break;
+    case THEME_SYNTHWAVE: amb_poseidon(x, y, w, h); break;  /* cyberpunk lines repainted in vaporwave palette */
+    case THEME_PHANTOM:   amb_poseidon(x, y, w, h); break;  /* same motion, violet repaint */
+    case THEME_BLOOD:     /* fsociety tactical — no ambient, minimal */ break;
     default:              break;
     }
 }

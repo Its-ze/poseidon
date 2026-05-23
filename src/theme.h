@@ -1,5 +1,5 @@
 /*
- * theme.h — three curated palettes.
+ * theme.h — six curated palettes.
  *
  *   POSEIDON cyberpunk: cyan / magenta / purple on black with strategic
  *                       magenta splashes. The default. Designed for
@@ -8,10 +8,14 @@
  *                       cinematic rain in the ambient layer.
  *   E-INK paper:        black on white. Daytime / outdoor / minimal.
  *                       Ambient is a no-op so the page stays clean.
- *
- * The other earlier palettes (PHANTOM, AMBER, TRON-as-its-own-theme,
- * HI-CONTRAST) got scrapped — better to have three great ones than
- * seven mediocre ones.
+ *   SYNTHWAVE smooth:   vaporwave on midnight grape bg — hot magenta +
+ *                       cyan, pastel highlights. 80s night-sky vibe;
+ *                       distinct from POSEIDON because bg is purple,
+ *                       not black.
+ *   PHANTOM violet:     deep violet / lavender — visually cohesive with
+ *                       the user's phantom-* suite (launcher, rf, mobile).
+ *   BLOOD tactical:     Mr Robot fsociety red-on-black. Aggressive,
+ *                       urgent; reads as "device is actively attacking".
  */
 #pragma once
 
@@ -39,6 +43,9 @@ enum theme_id_t {
     THEME_POSEIDON = 0,   /* cyberpunk cyan/magenta/purple — default */
     THEME_MATRIX,         /* souped-up hacker green-on-black */
     THEME_EINK,           /* paper white, daytime / minimal */
+    THEME_SYNTHWAVE,      /* vaporwave magenta + cyan on midnight grape */
+    THEME_PHANTOM,        /* deep violet — matches phantom-* suite */
+    THEME_BLOOD,          /* fsociety red on pure black */
     THEME__COUNT
 };
 

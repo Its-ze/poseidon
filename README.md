@@ -34,7 +34,7 @@
 
 ## What is this?
 
-POSEIDON is a pentesting firmware for the M5Stack Cardputer-Adv (ESP32-S3). 95+ features across WiFi, BLE, sub-GHz, 2.4 GHz, LoRa, IR, network attacks, and more. In the same family as Flipper Zero, Bruce, Evil-M5Project, and ESP32Marauder — but built around a **real keyboard** with letter mnemonics, typed parameters, three swappable visual themes, and a procedural ambient layer painted behind every menu.
+POSEIDON is a pentesting firmware for the M5Stack Cardputer-Adv (ESP32-S3). 95+ features across WiFi, BLE, sub-GHz, 2.4 GHz, LoRa, IR, network attacks, and more. In the same family as Flipper Zero, Bruce, Evil-M5Project, and ESP32Marauder — but built around a **real keyboard** with letter mnemonics, typed parameters, six swappable visual themes (POSEIDON cyberpunk, MATRIX, E-INK, SYNTHWAVE vaporwave, PHANTOM violet, BLOOD fsociety), and a procedural ambient layer painted behind every menu.
 
 Supports four hardware hats (one at a time):
 - **M5Stack CAP-LoRa1262** — LoRa (SX1262) + GNSS (GPS)
@@ -102,14 +102,17 @@ PigSync ESP-NOW presence beacon — foundation for multi-device coordination.
 ### Tools (9)
 Flashlight · Stopwatch · Dice/Coin/8-Ball · Morse · MAC Randomizer · Calculator · Screen Test · SD Format · **Theme Picker** (6 palettes)
 
-### Themes
+### Themes (6)
 | Theme | Aesthetic |
 |---|---|
-| POSEIDON | Cyberpunk cyan / magenta / purple — default |
-| MATRIX | Souped-up hacker green-on-black + matrix rain |
-| E-INK | Paper white, daytime / minimal |
+| POSEIDON | Cyberpunk cyan / magenta / purple on black — default |
+| MATRIX | Souped-up hacker green-on-black + matrix rain ambient |
+| E-INK | Paper white, daytime / outdoor / minimal |
+| SYNTHWAVE | Vaporwave hot magenta + pastel cyan on midnight grape — 80s night-sky vibe |
+| PHANTOM | Deep violet / lavender — visually cohesive with the phantom-* tool suite |
+| BLOOD | fsociety tactical red on pure black — reads as "device is attacking" |
 
-Plus a procedural ambient motion layer (`ui_ambient_tick`) painted behind every menu draw, theme-aware. Live preview at `System → Ambient Preview`. Three theme-matched screensavers kick in at 2 min idle.
+Plus a procedural ambient motion layer (`ui_ambient_tick`) painted behind every menu draw, theme-aware. Live preview at `System → Ambient Preview`. Theme-matched screensavers kick in at 2 min idle.
 
 ## Hardware
 
