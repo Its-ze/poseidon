@@ -34,7 +34,7 @@
 
 ## What is this?
 
-POSEIDON is a pentesting firmware for the M5Stack Cardputer-Adv (ESP32-S3). 90+ features across WiFi, BLE, sub-GHz, 2.4 GHz, LoRa, IR, network attacks, and more. In the same family as Flipper Zero, Bruce, Evil-M5Project, and ESP32Marauder — but built around a **real keyboard** with letter mnemonics, typed parameters, and 6 swappable visual themes.
+POSEIDON is a pentesting firmware for the M5Stack Cardputer-Adv (ESP32-S3). 95+ features across WiFi, BLE, sub-GHz, 2.4 GHz, LoRa, IR, network attacks, and more. In the same family as Flipper Zero, Bruce, Evil-M5Project, and ESP32Marauder — but built around a **real keyboard** with letter mnemonics, typed parameters, three swappable visual themes, and a procedural ambient layer painted behind every menu.
 
 Supports four hardware hats (one at a time):
 - **M5Stack CAP-LoRa1262** — LoRa (SX1262) + GNSS (GPS)
@@ -44,23 +44,33 @@ Supports four hardware hats (one at a time):
 
 ## Quick Start
 
+**Easiest — web flasher** (Chrome / Edge / Opera, no toolchain):
+
+- TRIDENT (ESP32-C5 satellite): <https://generaldussduss.github.io/poseidon/flash/>
+- POSEIDON mothership: <https://generaldussduss.github.io/poseidon/install.html>
+
+**Build from source:**
+
 ```bash
-# Build from source
 git clone https://github.com/GeneralDussDuss/poseidon.git
 cd poseidon
 pio run -t upload
 
-# Or flash the pre-built binary
-esptool.py --chip esp32s3 write_flash 0x0 poseidon-v0.3.0-cardputer-adv.bin
+# Pre-built factory image (current release):
+esptool.py --chip esp32s3 write_flash 0x0 \
+  https://github.com/GeneralDussDuss/poseidon/releases/latest/download/poseidon-factory.bin
 ```
 
-## Feature Matrix (90+)
+## Feature Matrix (95+)
 
 ### WiFi (17)
 Scan · Clients (all-channel + per-AP) · Deauth · Deauth All · Deauth Detector · AP Clone · Evil Portal (4 templates) · Karma · Beacon Spam · Probe Sniff · PMKID + 4-Way Handshake Capture · 2.4 GHz Spectrum · GPS Wardrive (WiGLE CSV) · Connect · **CIW Zeroclick** (157 SSID payloads: cmd injection, Log4Shell, XSS, buffer overflow)
 
-### Bluetooth (14)
-Scan (OUI + Apple Continuity + Fast Pair DB) · Spam (4 brands) · Bad-KB HID · Tracker Detect (AirTag/SmartTag/Tile) · Tracker Finder (Geiger) · Sniffer (CSV) · iBeacon · Clone · GATT Explorer · Flood · Karma · Sour Apple (CVE-2023-42941) · Find My Emulator · The Salty Deep (toy controller)
+### Bluetooth (16)
+Scan (OUI + Apple Continuity + Fast Pair DB + GhostBLE sigdb_bt vendor lookup) · Spam (4 brands) · Bad-KB HID · Tracker Detect (AirTag/SmartTag/Tile) · Tracker Finder (Geiger) · Sniffer (CSV) · iBeacon · Clone · GATT Explorer · Flood · Karma · Sour Apple (CVE-2023-42941) · Find My Emulator · The Salty Deep (toy controller) · **Drone Remote ID** (ASTM F3411-22a UAS broadcasts) · WhisperPair (BLE probe injection)
+
+### Defensive (3 new)
+**Surveillance Hunter** (Flock/Raven ALPR + body-cam detector via Plume OUI tables) · **Defensive Monitor** (7-class WiFi+BLE anomaly: deauth-flood, broadcast-deauth, evil-twin, beacon-spam, WiFi-karma, BLE-spoof, BLE-flood) · **SATCOM Tracker** (baked TLE database, 14 favorited satellites — az/el/lat/lon/alt/range live, no internet)
 
 ### Sub-GHz — CC1101 (9)
 Scan/Copy (ISR capture + protocol decoder: Princeton, CAME, NICE, Linear) · Record RAW (Flipper .sub format) · Replay .sub Files · **Signal Broadcast Library** (3,190+ .sub files: cars, pranks, Tesla, home) · Spectrum Analyzer (bar + waterfall + oscilloscope) · Brute Force (Came/Nice/Linear/Chamberlain/Holtek/Ansonic) · Jammer · **Hot/Cold Signal Finder**
@@ -74,8 +84,8 @@ LoRa Scan (passive RX, multi-band) · Beacon TX · Meshtastic LongFast Listener 
 ### Network Attacks (18)
 Port Scan · Ping · DNS · Connect · **Responder** (LLMNR/NBT-NS → NTLM) · SSDP/UPnP Scanner · LAN Recon (ARP + port + banner + vendor) · **UART Shell** (serial terminal, auto-baud) · **Reverse TCP Tunnel** · **Telnet Honeypot** · **WiFi Dead Drop** (anonymous message board) · **Printer Detection + Raw Print** · **SSDP Poisoner** · **DHCP Starvation** · **Rogue DHCP** (STA + AP) · **Network Hijacking** (chained MitM) · **WPAD Abuse** (credential capture) · **Autodiscover Abuse** (Exchange NTLM hash capture)
 
-### IR (2)
-TV-B-Gone · Samsung Remote
+### IR (4)
+TV-B-Gone · Samsung Smart Remote (~40 buttons, full D-pad) · Multi-profile Clone (Samsung / LG / Sony) · **LED Test** (pin + polarity diagnostic, phone-camera verifiable)
 
 ### BadUSB (1)
 USB-HID payload runner with DuckyScript-lite
@@ -95,12 +105,11 @@ Flashlight · Stopwatch · Dice/Coin/8-Ball · Morse · MAC Randomizer · Calcul
 ### Themes
 | Theme | Aesthetic |
 |---|---|
-| POSEIDON | Cyan/magenta on black |
-| PHANTOM | Deep purple/violet |
-| MATRIX | Green phosphor on black |
-| AMBER | Warm retro terminal |
-| E-INK | Black on white (paper) |
-| TRON | Neon cyan + electric blue glow |
+| POSEIDON | Cyberpunk cyan / magenta / purple — default |
+| MATRIX | Souped-up hacker green-on-black + matrix rain |
+| E-INK | Paper white, daytime / minimal |
+
+Plus a procedural ambient motion layer (`ui_ambient_tick`) painted behind every menu draw, theme-aware. Live preview at `System → Ambient Preview`. Three theme-matched screensavers kick in at 2 min idle.
 
 ## Hardware
 

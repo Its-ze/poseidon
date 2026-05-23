@@ -4,6 +4,99 @@ All notable changes to POSEIDON are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Working toward 0.6.0. Highlights since the 0.5.0 tag:
+
+### Added
+
+- **WiFi Beacon Spam — raw-IDF recipe.** The Arduino path crashed in
+  `ieee80211_hostap_attach` (+0x2c null deref) on Bruce's pinned
+  `esp32-arduino-libs`. New path bypasses Arduino entirely:
+  `esp_bt_controller_mem_release(BTDM)` →
+  `esp_netif_init` + `esp_netif_create_default_wifi_sta` →
+  `esp_wifi_init` with shrunk dynamic TX/RX bufs (16/16) → STA mode +
+  promiscuous + raw 802.11 TX on `WIFI_IF_STA`. Sustained ~1200
+  frames/sec, channels 1-11 rotate once per full SSID-list pass.
+- **Beacon Spam scanner UI.** KITT-style sweeping header, live
+  "now broadcasting" SSID in 2x font, fading 5-line recent feed,
+  fps + total + live channel readout, hex stream at bottom.
+- **IR LED hardware diagnostic** at `IR → LED Test`. Walks
+  GPIO 44 / 9 / 41 × normal/inverted carrier polarities. Point a
+  phone camera at the LED, note which step lights it up — nails
+  down pin + polarity for any Cardputer board variant.
+- **Full Samsung Smart Remote keymap** under `IR → Remote`. ~40
+  buttons: power (toggle + discrete on/off), source, menu, tools,
+  info, guide, smart-hub, mute, volume `u/d`, channel `c/v`, full
+  D-pad on the `;./,//` cluster, OK on ENTER, four color buttons,
+  media transport, number pad. No modifier keys required.
+- **BLE scan vendor labelling** — wired in GhostBLE's curated 70-entry
+  manufacturer-ID + 30-entry service-UUID tables (`sigdb_bt.h`).
+  Devices that previously showed as generic "BLE" now resolve to
+  Sony / Garmin / Govee / DJI / Tile / Anker / Wyze / Roku / Fitbit
+  / Eddystone / Google Fast Pair / Drone Remote ID, etc.
+- **ESP32-C5 web flasher** at
+  `https://generaldussduss.github.io/poseidon/flash/`. Single-page
+  install button via `esp-web-tools@10.2.1` on the jsdelivr CDN.
+- **Carousel menu style** — big-card single-focus layout with
+  cyberpunk pictograph icons. Toggle at `System → Menu style`.
+- **Three theme-appropriate idle screensavers** — kick in at 2 min
+  idle, pulled from a pool keyed off the active theme.
+- **Theme system overhaul** — three themes, magenta splashes,
+  beefed-up matrix rain. Pick at `System → Theme`.
+- **`ui_ambient_tick`** — theme-aware procedural ambient motion
+  painted behind every menu draw. Live preview at
+  `System → Ambient Preview`.
+- **Deauth autotest harness** + WiFi scan refresh logic improvements.
+
+### Changed
+
+- **IR LED carrier — bit-banged in CPU instead of LEDC.** The
+  Cardputer-Adv's IR LED is active-LOW on GPIO 44 (anode to 3V3,
+  cathode through resistor to pin). LEDC's `output_invert` flag
+  inverts active PWM transitions but NOT the idle level — so
+  `duty=0` between marks let the pin idle LOW and the LED stayed
+  solidly on. Replaced LEDC with direct `digitalWrite` toggling at
+  13 µs half-period (≈38.5 kHz, within IR receiver tolerance).
+- **Samsung remote protocol corrected.** Was sending NEC byte
+  layout (`addr, ~addr, cmd, ~cmd`); Samsung32 actually wants
+  `addr, addr, cmd, ~cmd` with the same 4500/4500 µs header.
+- **CC1101 driver** swapped from `lsatan/SmartRC-CC1101-Driver-Lib`
+  to `bmorcelli/SmartRC-CC1101-Driver-Lib` fork — upstream
+  bit-bangs MISO in `Reset()` which hangs on Arduino-ESP32 v3.x.
+- **Sub-GHz spectrum + waveform features** refactored to share UI
+  widgets, tuned demodulator.
+
+### Fixed
+
+- **IR Remote, Clone, and TV-B-Gone all silently no-op'd.** GPIO 44
+  is UART0 RX by default and `pinMode(OUTPUT)` doesn't fully detach
+  peripheral inputs from the GPIO matrix in Arduino-ESP32 v3. Added
+  `gpio_reset_pin((gpio_num_t)44)` before LEDC/GPIO setup.
+- **TV-B-Gone backlight blank.** Was using LEDC channel 0 / timer 0
+  which is exactly what M5GFX uses for the display backlight —
+  reconfiguring the timer to 38 kHz blanked the screen. Moved to
+  channel 3 / timer 3.
+- **Carousel text strobing** on idle frames.
+- **WiFi/BLE deauth robustness** + BLE init lifecycle deferral
+  so the controller boot race is gone.
+- **Triton mid-session `sd_remount`** that deadlocked HSPI — removed.
+- **Web flasher 404.** `docs/flash/` was untracked locally so
+  `/flash/` returned 404 on Pages. Now committed with `!docs/flash/bin/**/*.bin`
+  + `!docs/bin/**/*.bin` negation rules in `.gitignore` so the
+  binaries actually ship.
+- **Web flasher CDN.** `docs/flash/index.html` was on `unpkg.com`
+  which served an edge-cached old 10.0-era bundle with no ESP32-C5
+  support. Same `jsdelivr@10.2.1` fix as `docs/install.html` in
+  commit 307f6b5 is now applied here too.
+
+### Documentation
+
+- ESP32-C5 web flasher live page deployed.
+- Visual + immersion overhaul design spec + implementation plan
+  under `docs/proposals/`.
+- Ambient motion + memory optimization implementation plans.
+
 ## [0.5.0] - 2026-04-21
 
 ### Added — TRIDENT (ESP32-C5 companion satellite over ESP-NOW)
