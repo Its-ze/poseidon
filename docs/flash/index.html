@@ -131,6 +131,23 @@
     <esp-web-install-button manifest="manifest-trident-c5.json">
       <button slot="activate">Install TRIDENT</button>
     </esp-web-install-button>
+    <div style="margin-top:12px;padding:10px;background:rgba(255,0,255,0.08);border:1px solid var(--accent2);border-radius:4px;font-size:11px;line-height:1.5;color:var(--fg);">
+      <b style="color:var(--accent2);">Known upstream bug:</b> esp-web-tools 10.2.1 bundles
+      <code>esptool-js 0.5.7</code> which has a documented ESP32-C5
+      <code>flashId()</code> failure — clicks return "Failed to initialize"
+      after the port picker. Fix is merged in <code>esptool-js 0.6.0</code> but
+      no esp-web-tools release has shipped with it yet
+      (<a href="https://github.com/esphome/esp-web-tools/issues/687" target="_blank" style="color:var(--accent2);">issue #687</a>).
+      <br><br>
+      <b>Workaround until upstream rebuilds:</b> use Python esptool directly. From the repo run
+      <code>c5_node\_flash.bat</code> (Windows) or:
+      <pre style="margin:6px 0 0 0;padding:6px;background:rgba(0,0,0,0.4);border-radius:3px;overflow-x:auto;">esptool.py --chip esp32c5 -p COM&lt;n&gt; --baud 460800 write_flash \
+  --flash_mode dio --flash_freq 80m --flash_size 4MB \
+  0x2000  bootloader.bin \
+  0x8000  partition-table.bin \
+  0x10000 poseidon_c5_node.bin</pre>
+      Bins are in <a href="bin/trident-c5/" style="color:var(--accent2);">bin/trident-c5/</a>.
+    </div>
   </div>
 
   <div class="card pending">
