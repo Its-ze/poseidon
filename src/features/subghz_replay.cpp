@@ -165,6 +165,11 @@ void feat_subghz_replay(void)
             pinMode(CC1101_GDO0, OUTPUT);
             cc1101_rmt_tx(sub.raw, sub.raw_len);
             cc1101_set_rx();
+            /* Restore GDO0 to INPUT so subsequent scans / digitalRead
+             * see fresh edge data instead of the stale OUTPUT level we
+             * left behind. Without this, the next Scan or Record reads
+             * a constant value and looks dead. */
+            pinMode(CC1101_GDO0, INPUT);
             plays++;
 
             /* Cinematic LIVE TX splash — concentric expanding rings,

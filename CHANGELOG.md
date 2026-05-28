@@ -6,9 +6,179 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Working toward 0.6.0. Highlights since the 0.5.0 tag:
+### Added
+
+(empty — new work since 0.6.0 lands here)
+
+## [0.6.0] - 2026-05-28
+
+The biggest single drop since 0.5.0. Triton gets a real character
+(96x96 Argus mood sprite), the WiFi stack moves to a Bruce-libs-safe
+STA-mode raw-TX path that actually lands deauths on-air, BLE features
+move from broken xTaskCreate to a cooperative tick pattern that
+actually fires, the WiFi Portal gets a working raw-IDF AP recipe, the
+IR LED gets its polarity corrected and the Samsung Smart Remote codes
+get fact-checked against canonical Flipper-IRDB tables. Plus a dozen
+new features and the C5 protocol bumps to v3 with a 5G-scan terminator
+fix so the UI knows when a scan ended.
 
 ### Added
+
+- **Argus mood sprite for Triton.** Twelve 96x96 RGB565 mood portraits
+  (WATCHING / INTERESTED / PLEASED / ANNOYED / RESIGNED / CALCULATING
+  / CYNICAL / OLD_FURY / SLEEPING / REFLECTIVE / CURIOUS / STERN)
+  generated from a Gemini-rendered sprite sheet. Mood-mapped to
+  Triton's hunting state — SLEEPING when idle, PLEASED on capture,
+  OLD_FURY during FERAL mode, ANNOYED while dry, RESIGNED in despair.
+  Sprite cached to internal SRAM (`heap_caps_malloc(MALLOC_CAP_INTERNAL)`)
+  to avoid MMU cache stalls when `esp_wifi_80211_tx` pauses the flash
+  bus mid-pushImage.
+- **WiFi raw-TX path moved to STA mode** with linker-override of
+  `ieee80211_raw_frame_sanity_check`. Bruce's pinned `libnet80211.a`
+  filters subtype 0xC/0xA (deauth/disassoc) regardless of TX path,
+  but a multi-def `-Wl,-zmuldefs` override returning 0 from our own
+  stub gets every subtype through. Replaces the softAP-mode TX path
+  that crashed in `ieee80211_hostap_attach +0x2c` null-deref on this
+  lib stack.
+- **BLE cooperative tick pattern** across Sour Apple, Spam, Karma,
+  Flood, FindMy, Finder. Replaces `xTaskCreate(task, 4096, ...)` that
+  silently failed `rc=-1` because NimBLE init eats heap down to
+  ~2.5 KB on Bruce libs — not enough for a 4 KB task stack. New
+  pattern: feature exposes `feature_tick(void)` called from its UI
+  loop every iteration. Sour Apple now fires, BLE Spam shows up on
+  every nearby phone, Find-My broadcasts pass iCloud relay.
+- **WiFi Portal raw-IDF AP recipe.** Stash of softAP-mode (which
+  crashes on Bruce libs), now uses
+  `esp_bt_controller_mem_release(BTDM)` →
+  `esp_netif_create_default_wifi_ap` → shrunk-buf `esp_wifi_init` →
+  `esp_wifi_set_config(WIFI_IF_AP)` → `esp_wifi_start` → post-start
+  `esp_wifi_set_channel`. Plus a pre-AP teardown so Portal works
+  after Triton already inited WiFi STA mode. Sixteen phishing
+  templates (Apple, Office365, LinkedIn, Amazon, Netflix, Instagram,
+  Hotel, Starbucks, Airport, Router Admin, Zoom, SSO + four others).
+- **IR LED active-HIGH polarity fixed.** Cardputer-Adv IR LED is wired
+  anode to 3V3, cathode through resistor to GPIO 44. GPIO HIGH = LED
+  ON. Earlier diagnostic mis-read picked "GPIO 44 inverted" which
+  was matching the wrong premise — GPIO 44 is U0TXD on ESP32-S3 and
+  floats HIGH at boot from boot-console pulses. Polarity now LOW =
+  OFF; every IR feature parks LOW on exit + a 50 ms background
+  watchdog forces LOW when no IR feature is active.
+- **Samsung Smart Remote codes verified** against Flipper-IRDB BN59
+  remotes + probonopd/irdb device 7,7. Fixed Power 0x40→0x02
+  (canonical toggle), removed bogus Smart Hub 0x9E, added Exit 0x2D.
+  All 38 remaining codes confirmed correct (volume, channel, D-pad,
+  OK, color buttons, media transport, full number pad).
+- **AP Signal Test** diagnostic — POSEIDON-SIGTEST AP on ch 1/6/11,
+  raw-IDF recipe, verifies the AP path is actually broadcasting from
+  the chip. The "is the AP path even working today" probe.
+- **Evil Twin** — 5s deauth burst → 25s portal/SSID-clone, time-sliced.
+- **BLE BlueDucky** — BLE HID keystroke injection (CVE-2023-45866)
+  with Android DuckyScript payloads. *Known limit:* hangs on
+  Cardputer-Adv without PSRAM — NimBLE eats too much heap for the
+  GATT server allocation. Documented hardware ceiling.
+- **SATCOM Tracker** — live satellite tracking (SGP4 + baked TLEs for
+  ISS, Tiangong, Hubble, NOAA APT birds, ham SO-50/AO-7, BlueWalker 3
+  etc.). Polar skyplot, 24h pass predictor, AOS chirp on next pass.
+- **Drone Remote ID** — ASTM F3411 decoder for all six message types
+  (Basic, Location, Auth, Self-ID, System, Operator). Decodes every
+  DJI / Skydio / Autel craft broadcasting in your sky.
+- **Surveillance Hunter** — Flock Safety ALPR + Raven/ShotSpotter
+  passive RF detector. Embedded signature DB (Tier-1/Tier-2 OUI
+  prefixes, SSID patterns including the CVE-2025-59409 dev SSID,
+  XUNTONG manufacturer ID 0x09C8). GPS-tagged hits, .pcap export.
+- **Defensive Monitor** — passive multi-class anomaly detector for
+  your local airspace.
+- **Screensaver Picker** — UI picker for the seven new screensavers
+  (sonar / port scan / hex cascade / terminal crack / neural arc /
+  glitch BSOD / tide waves), keyed off the active theme.
+- **nRF52 family** — four features riding an Adafruit Feather nRF52840
+  Bluefruit hat: scan, scout-strike, BLE MITM relay, WiFi+BLE combo.
+- **Carousel menu style** — big-card single-focus layout with
+  cyberpunk pictograph icons. Toggle at System -> Menu style.
+- **Three theme-appropriate idle screensavers** — kick in at 2 min
+  idle, pulled from a pool keyed off the active theme.
+- **Theme system overhaul.** Six themes now ship (POSEIDON, MATRIX,
+  E-INK, SYNTHWAVE, PHANTOM, BLOOD). Magenta splashes, beefed-up
+  matrix rain, ambient procedural motion under every menu draw.
+- **`ui_ambient_tick`** — theme-aware procedural ambient motion
+  painted behind every menu draw. Live preview at
+  System -> Ambient Preview.
+- **BLE scan vendor labelling** wired in GhostBLE's curated 70-entry
+  manufacturer-ID + 30-entry service-UUID tables. Generic "BLE"
+  entries now resolve to Sony / Garmin / Govee / DJI / Tile / Anker /
+  Wyze / Roku / Fitbit / Eddystone / Google Fast Pair / Drone Remote
+  ID.
+- **ESP32-C5 web flasher** at
+  `https://generaldussduss.github.io/poseidon/flash/`. Single-page
+  install via `esp-web-tools@10.2.1` on jsdelivr CDN. POSEIDON's S3
+  flasher still pending — POSEIDON ships via M5Burner today.
+- **C5 protocol v3 + 5G scan terminator.** Wire protocol bumped v2→v3
+  (flag day — TRIDENT C5 firmware must be rebuilt to match). Adds 9
+  new command opcodes (CLIENTS_HUNT, CLIENTS_AP, BEACON_SPAM,
+  PROBE_SNIFF, DEAUTH_DETECT, KARMA, APCLONE, SPECTRUM, CIW) and 4
+  new response opcodes. Critical fix: C5 now sends a zero-payload
+  terminator `RESP_AP` so POSEIDON's UI knows when a scan finished
+  instead of spinning forever waiting for results that already came.
+- **Deauth autotest harness** + WiFi scan refresh logic improvements.
+
+### Changed
+
+- **Triton hop_task is now a cooperative tick.** Was 4 KB FreeRTOS
+  task that silently `pdFAIL`'d on the internal-SRAM ceiling. New
+  path iterates from the main UI loop every iteration — Bruce,
+  Marauder, Evil-Cardputer, Porkchop all do this and POSEIDON was
+  the outlier. Inter-burst delay bumped 5 → 25 ms so the
+  dynamic-TX-buffer pool drains between calls.
+- **Linker flag** swapped from `--allow-multiple-definition` to
+  `-Wl,-zmuldefs`. The previous flag was order-dependent on .o file
+  scan order — adding any new feature could silently flip which
+  copy of `ieee80211_raw_frame_sanity_check` won the link. Bruce,
+  Marauder, Porkchop all use `-zmuldefs` for the same reason.
+- **`radio.cpp` simplified.** `radio_switch(RADIO_WIFI)` is now a
+  no-op state flag — features bring up WiFi themselves with the
+  per-mode recipe that fits their needs. NimBLE init centralized in
+  `radio_switch(RADIO_BLE)` so BLE features don't double-init.
+- **Full Samsung Smart Remote** keymap under `IR -> Remote` — ~40
+  buttons, no modifier keys, every code verified against Flipper-IRDB.
+- **WiFi Scan** raw-IDF path replaces Arduino's `WiFi.scanNetworks`
+  which OOM'd at default 32-buffer init on this device's fragmented
+  DMA RAM. New path finds 10+ APs reliably (was 1).
+
+### Fixed
+
+- **Triton exit crash.** `c5_begin()` called `WiFi.mode(WIFI_STA)`
+  based on Arduino's tracked state (which was OFF because Triton
+  inited WiFi via raw IDF). That double-created the default STA
+  netif and asserted. Now uses `esp_wifi_get_mode` for true state
+  check.
+- **IR LED stuck on at boot** — first-instruction park in `setup()`
+  plus background watchdog hammering pin LOW every 50 ms.
+- **WiFi scan finding only 1 AP** — Arduino's default-buf scan path
+  starved DMA RAM. Raw-IDF replacement reliably finds 13+.
+- **Sour Apple / BLE Spam silent failures** — root caused to
+  `xTaskCreate` rc=-1 (NimBLE heap exhaust). Fixed by cooperative
+  tick refactor (see Added).
+- **BLE static-random MAC byte** — was setting flag bits in `mac[0]`
+  (incorrect); now `mac[5] |= 0xC0`. Sour Apple, FindMy, Karma,
+  Flood, Spam all affected.
+- **PSRAM allocation paths removed** — Cardputer-Adv unit ships
+  with broken PSRAM (ID reads 0xffffff). NimBLE explicitly forced
+  to internal-RAM allocation; no code path assumes PSRAM exists.
+
+### Removed
+
+- **OTA Update flow.** Was buggy and rarely used; the M5Burner +
+  USB / web-flasher paths cover the same ground without the
+  partition complexity. Source files moved to `*.disabled` for a
+  future rebuild under a build flag with proper heap-budget gates.
+
+### Security notes
+
+POSEIDON is a pentesting tool. It is authorized for use on networks and
+devices you own or have written permission to test. See README "Legal"
+section.
+
+(history below…)
 
 - **WiFi Beacon Spam — raw-IDF recipe.** The Arduino path crashed in
   `ieee80211_hostap_attach` (+0x2c null deref) on Bruce's pinned

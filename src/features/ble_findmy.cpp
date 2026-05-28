@@ -25,6 +25,7 @@
 #include "radio.h"
 #include <NimBLEDevice.h>
 #include <esp_random.h>
+#include <host/ble_gap.h>
 
 static volatile bool     s_fm_alive = false;
 static volatile uint32_t s_fm_count = 0;
@@ -47,21 +48,34 @@ static void build_findmy(uint8_t *pkt, const uint8_t *key22,
     pkt[i++] = hint;
 }
 
-static void fm_task(void *)
+/* Cooperative tick — caller polls each UI iteration. Rotates identity
+ * every `dwell` ms (60s SINGLE, 3s FLOCK) and increments the visible
+ * counter at ~1 Hz between rotations. Replaces the broken xTaskCreate
+ * path (failed silently rc=-1 because NimBLE init left heap ~2.5 KB,
+ * not enough for a 4 KB task stack — same bug as Sour Apple was). */
+static void fm_tick(void)
 {
-    NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
+    static NimBLEAdvertising *adv = nullptr;
+    static uint32_t next_rotate = 0;
+    static uint32_t last_count_bump = 0;
+    if (!adv) {
+        adv = NimBLEDevice::getAdvertising();
+        Serial.printf("[findmy] cooperative first tick — adv=%p\n", adv);
+    }
+    if (!adv) return;
 
-    uint8_t key[22];
-    uint8_t mac[6];
-    for (int i = 0; i < 22; ++i) key[i] = (uint8_t)esp_random();
-    int tag_idx = 0;
-
-    while (s_fm_alive) {
-        /* Every 3 seconds (or every tag slot if in FLOCK) rotate identity. */
+    uint32_t now = millis();
+    if (now >= next_rotate) {
+        uint8_t key[22];
+        uint8_t mac[6];
         for (int i = 0; i < 22; ++i) key[i] = (uint8_t)esp_random();
         for (int i = 0; i < 6;  ++i) mac[i] = (uint8_t)esp_random();
-        /* AirTag MAC encodes first 2 bits of the key in the top of byte 5. */
-        mac[5] = (mac[5] & 0x3F) | (key[0] & 0xC0);
+        /* Static-random address flag bits MUST be 11. Original code
+         * borrowed the top 2 bits from key[0] which were random — 75%
+         * of the time the address ended up resolvable-private or
+         * non-resolvable-private flagged, which the controller can
+         * silently reject. Force them to 11 unconditionally. */
+        mac[5] = (mac[5] & 0x3F) | 0xC0;
         ble_hs_id_set_rnd(mac);
         NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM);
         s_fm_rotated++;
@@ -69,27 +83,32 @@ static void fm_task(void *)
         uint8_t pkt[30];
         build_findmy(pkt, key, 0xE0 /* OWNED */, 0x00);
 
-        NimBLEAdvertisementData data;
-        data.addData(pkt, 30);
         adv->stop();
-        adv->setAdvertisementData(data);
+        /* Direct IDF call — NimBLE-Arduino's setAdvertisementData wrapper
+         * rejects Apple-mfr-ID packets (0x004C). Verified 2026-05-24 via
+         * Sour Apple where the same wrapper returned false for all Apple
+         * subtypes, leaving stale data on-air. Apple Find My uses 0x4C 0x12
+         * subtype which would hit the same wrapper bug. */
+        int data_rc = ble_gap_adv_set_data(pkt, 30);
+        (void)data_rc;
         adv->setConnectableMode(BLE_GAP_CONN_MODE_NON);
-        adv->setMinInterval(0x0640);  /* 1 s — matches real AirTag cadence */
-        adv->setMaxInterval(0x0780);  /* 1.2 s */
+        adv->setMinInterval(0x0640);
+        adv->setMaxInterval(0x0780);
         adv->start();
 
-        /* Hold this identity for 3 seconds (or longer for SINGLE). */
         uint32_t dwell = (s_fm_tags <= 1) ? 60000 : 3000;
-        uint32_t t0 = millis();
-        while (s_fm_alive && millis() - t0 < dwell) {
-            s_fm_count++;
-            delay(1000);
-        }
-        tag_idx = (tag_idx + 1) % (s_fm_tags > 0 ? s_fm_tags : 1);
-        (void)tag_idx;
+        next_rotate = now + dwell;
     }
-    adv->stop();
-    vTaskDelete(nullptr);
+    if (now - last_count_bump >= 1000) {
+        last_count_bump = now;
+        s_fm_count++;
+    }
+}
+
+static void fm_teardown(void)
+{
+    NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
+    if (adv) adv->stop();
 }
 
 void feat_ble_findmy(void)
@@ -124,7 +143,6 @@ void feat_ble_findmy(void)
     s_fm_count = 0;
     s_fm_rotated = 0;
     s_fm_alive = true;
-    xTaskCreate(fm_task, "findmy", 4096, nullptr, 4, nullptr);
 
     ui_clear_body();
     d.setTextColor(T_BAD, T_BG);
@@ -152,10 +170,11 @@ void feat_ble_findmy(void)
             ui_draw_status(radio_name(), "findmy");
         }
         ui_matrix_rain(160, BODY_Y + 18, SCR_W - 160, BODY_H - 20, 0xF81F);
+        if (s_fm_alive) fm_tick();
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(40); continue; }
         if (k == PK_ESC) break;
     }
     s_fm_alive = false;
-    delay(300);
+    fm_teardown();
 }

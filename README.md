@@ -18,13 +18,13 @@
 ![target](https://img.shields.io/badge/target-Cardputer--Adv-red?style=flat-square)
 ![platform](https://img.shields.io/badge/framework-Arduino%2FPlatformIO-blue?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![features](https://img.shields.io/badge/features-90+-magenta?style=flat-square)
+![features](https://img.shields.io/badge/features-150+-magenta?style=flat-square)
 ![release](https://img.shields.io/github/v/release/GeneralDussDuss/poseidon?style=flat-square)
-![version](https://img.shields.io/badge/version-0.5.0-cyan?style=flat-square)
+![version](https://img.shields.io/badge/version-0.6.0-cyan?style=flat-square)
 
 [**Download Latest .bin**](https://github.com/GeneralDussDuss/poseidon/releases/latest) — flash with M5Burner, the browser (Chrome/Edge), or esptool at offset 0x0
 
-**v0.5.0 shipped — TRIDENT.** The ESP32-C5 companion satellite is now a proper peripheral over ESP-NOW. POSEIDON's Cardputer-Adv is 2.4 GHz-only; TRIDENT adds **5 GHz deauth** (bypasses `ieee80211_raw_frame_sanity_check` via a direct binary patch to `libnet80211.a`), **802.15.4 Zigbee sniffing**, and **5 GHz PMKID capture** — features the S3 physically can't do. LoRa is now fully working end-to-end on the CAP-LoRa1262 hat (canonical SX1262 init, shared HSPI with SD, proper BUSY pin). Every scan / live screen is flicker-free: `ui_draw_status`, wifi_scan, ble_scan, wifi_clients, wifi_spectrum, and the c5 dashboards all cache state and only repaint on actual change. bmorcelli Launcher support ships as a second PIO env (`cardputer-launcher`) that links into the `ota_0` slot at 0x170000. Full breakdown in [CHANGELOG](CHANGELOG.md).
+**v0.6.0 shipped — Argus & the visual overhaul.** The biggest single drop since 0.5. Triton finally has a real character — a 96x96 **Argus mood sprite** with twelve mood portraits (Watching, Pleased, Annoyed, Resigned, Calculating, Old Fury, Sleeping…) that maps live to hunt state. **Six themes** (POSEIDON, MATRIX, E-INK, SYNTHWAVE, PHANTOM, BLOOD), **seven idle screensavers** keyed off the active theme, **carousel menu style** with cyberpunk pictographs, **ambient procedural motion** painted behind every menu draw. WiFi raw-TX moves to a **STA-mode path** with `-Wl,-zmuldefs` linker override of `ieee80211_raw_frame_sanity_check` — Bruce-libs-safe. **Portal** gets a raw-IDF AP recipe that actually broadcasts. **BLE features** (Sour Apple, Spam, Karma, Flood, FindMy) refactored from broken `xTaskCreate` to cooperative ticks that actually fire. **IR LED polarity** finally corrected and the **full Samsung Smart Remote keymap** verified against Flipper-IRDB. New features: AP Signal Test, Evil Twin, BLE BlueDucky, SATCOM Tracker, Drone Remote ID, Surveillance Hunter, Defensive Monitor, four nRF52 hat features. **C5 protocol bumped to v3** with a critical 5G scan terminator fix. Full breakdown in [CHANGELOG](CHANGELOG.md).
 
 **TRIDENT web flasher** — ESP32-C5 isn't in M5Burner's chip list, so we put a one-click WebSerial flasher straight in the docs. Plug the C5 in, hit a button, done. Manual `esptool` + full ESP-IDF build-from-source instructions also live there.
 
@@ -34,7 +34,7 @@
 
 ## What is this?
 
-POSEIDON is a pentesting firmware for the M5Stack Cardputer-Adv (ESP32-S3). 95+ features across WiFi, BLE, sub-GHz, 2.4 GHz, LoRa, IR, network attacks, and more. In the same family as Flipper Zero, Bruce, Evil-M5Project, and ESP32Marauder — but built around a **real keyboard** with letter mnemonics, typed parameters, six swappable visual themes (POSEIDON cyberpunk, MATRIX, E-INK, SYNTHWAVE vaporwave, PHANTOM violet, BLOOD fsociety), and a procedural ambient layer painted behind every menu.
+POSEIDON is a pentesting firmware for the M5Stack Cardputer-Adv (ESP32-S3). 150+ features across WiFi, BLE, sub-GHz, 2.4 GHz, LoRa, IR, network attacks, and more. In the same family as Flipper Zero, Bruce, Evil-M5Project, and ESP32Marauder — but built around a **real keyboard** with letter mnemonics, typed parameters, six swappable visual themes (POSEIDON cyberpunk, MATRIX, E-INK, SYNTHWAVE vaporwave, PHANTOM violet, BLOOD fsociety), a procedural ambient layer painted behind every menu, and Triton's 96x96 Argus mood sprite watching every handshake.
 
 Supports four hardware hats (one at a time):
 - **M5Stack CAP-LoRa1262** — LoRa (SX1262) + GNSS (GPS)
@@ -61,7 +61,7 @@ esptool.py --chip esp32s3 write_flash 0x0 \
   https://github.com/GeneralDussDuss/poseidon/releases/latest/download/poseidon-factory.bin
 ```
 
-## Feature Matrix (95+)
+## Feature Matrix (150+)
 
 ### WiFi (17)
 Scan · Clients (all-channel + per-AP) · Deauth · Deauth All · Deauth Detector · AP Clone · Evil Portal (4 templates) · Karma · Beacon Spam · Probe Sniff · PMKID + 4-Way Handshake Capture · 2.4 GHz Spectrum · GPS Wardrive (WiGLE CSV) · Connect · **CIW Zeroclick** (157 SSID payloads: cmd injection, Log4Shell, XSS, buffer overflow)
@@ -166,7 +166,7 @@ Plus a procedural ambient motion layer (`ui_ambient_tick`) painted behind every 
 |  | POSEIDON | Flipper Zero | Evil-M5 | Marauder | Bruce |
 |---|---|---|---|---|---|
 | Keyboard | native QWERTY | D-pad | native QWERTY | none | varies |
-| Features | 90+ | 50+ | 87 | 30+ | 40+ |
+| Features | 150+ | 50+ | 87 | 30+ | 40+ |
 | Sub-GHz | CC1101 | CC1101 | CC1101 | none | CC1101 |
 | 2.4 GHz RF | nRF24 | none | none | none | nRF24 |
 | LoRa | SX1262 | none | none | none | SX1262 |
@@ -202,10 +202,13 @@ Plus a procedural ambient motion layer (`ui_ambient_tick`) painted behind every 
 
 ## Roadmap
 
-Full release history in [CHANGELOG.md](CHANGELOG.md). Current shipped version is **v0.5.0** (TRIDENT + LoRa + flicker fixes + M5 Launcher support). What's next:
+Full release history in [CHANGELOG.md](CHANGELOG.md). Current shipped version is **v0.6.0** (Argus mood sprite + visual overhaul + raw-IDF AP path + BLE cooperative tick + C5 protocol v3). What's next:
 
-### v0.6 — nRF52840 Integration (planned)
-The nRF52840 is the real BLE chip — full BLE 5.0 with long range, coded PHY, and direction finding. Adding it as a USB-connected sniffer module.
+### v0.6.1 — Hydra RF Hat regression sweep (tomorrow)
+The Hydra RF hat lands on the bench tomorrow. Any sub-GHz bugs surfaced during v0.6.0 testing get fixed the moment the hardware is here.
+
+### v0.7 — nRF52840 BLE 5.0 dongle (planned)
+The nRF52840 is the real BLE chip — full BLE 5.0 with long range, coded PHY, and direction finding. The four nRF52 features that landed in v0.6.0 ride an Adafruit Feather as proof-of-concept; v0.7 hardens the path with a dedicated dongle.
 
 - [ ] nRF52840 dongle as BLE sniffer (USB-CDC bridge from Cardputer)
 - [ ] Full BLE advertisement capture + decode (not just nRF24 fake-BLE)

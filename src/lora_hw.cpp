@@ -30,14 +30,20 @@ static bool    s_up    = false;
 
 lora_config_t lora_preset(lora_band_t b)
 {
-    lora_config_t c = { 915.0f, 125.0f, 9, 7, 0x12, 10 };
+    /* TX power per band — was 10 dBm everywhere; that left 12+ dB on
+     * the table relative to regulatory ceilings and SX1262 max.
+     *   433 MHz: 10 dBm (off-band relative to our PA, antenna unmatched)
+     *   868 MHz: 14 dBm (EU regulatory ceiling for the SX1262)
+     *   915 MHz: 22 dBm (SX1262 max output power, well under US 30 dBm)
+     * Meshtastic in the US runs at 22 dBm by default; matching here. */
+    lora_config_t c = { 915.0f, 125.0f, 9, 7, 0x12, 22 };
     switch (b) {
-    case LORA_BAND_433: c.freq_mhz = 433.0f; break;
-    case LORA_BAND_868: c.freq_mhz = 868.0f; break;
-    case LORA_BAND_915: c.freq_mhz = 915.0f; break;
+    case LORA_BAND_433: c.freq_mhz = 433.0f; c.power = 10; break;
+    case LORA_BAND_868: c.freq_mhz = 868.0f; c.power = 14; break;
+    case LORA_BAND_915: c.freq_mhz = 915.0f; c.power = 22; break;
     case LORA_BAND_MESHTASTIC_US:
         c.freq_mhz = 906.875f; c.bw_khz = 250.0f;
-        c.sf = 11; c.cr = 5; c.sync = 0x2B; c.power = 17;
+        c.sf = 11; c.cr = 5; c.sync = 0x2B; c.power = 22;
         break;
     default: break;
     }
@@ -109,9 +115,13 @@ int lora_begin(const lora_config_t &cfg)
      * what RadioLib needs to talk to the SX1262. */
     sd_mount();
 
-    /* Park other CS lines. */
-    pinMode(12, OUTPUT); digitalWrite(12, HIGH);  /* SD */
-    pinMode(13, OUTPUT); digitalWrite(13, HIGH);  /* CC1101 if present */
+    /* Park SD CS. GPIO 13 used to be parked HIGH here for the CC1101's
+     * CS line — but GPIO 13 is ALSO the GPS UART TX pin (see gps.h:18-19).
+     * Forcing it OUTPUT/HIGH after gps_begin() left the UART driver
+     * fighting our output mode, causing intermittent NMEA loss. CC1101
+     * never coexists with LoRa (radio_switch handles mutual exclusion)
+     * so we don't need to park its CS here. */
+    pinMode(12, OUTPUT); digitalWrite(12, HIGH);  /* SD CS */
 
     /* Release from reset. */
     pinMode(LORA_NSS, OUTPUT); digitalWrite(LORA_NSS, HIGH);
@@ -136,7 +146,21 @@ int lora_begin(const lora_config_t &cfg)
     s_mod   = new Module(LORA_NSS, LORA_DIO1, LORA_RST, LORA_BUSY, sd_get_spi());
     s_radio = new SX1262(s_mod);
 
-    int st = s_radio->begin(cfg.freq_mhz);
+    /* Long-form begin() — passes TCXO voltage (1.8V matches the CAP-
+     * LoRa1262's TCXO) and useRegulatorLDO=false to engage the SX1262's
+     * DC-DC regulator (more efficient + better RF performance). Prior
+     * single-arg form left TCXO at default 1.6V and the regulator at
+     * LDO, which gives 10-30 ppm worse frequency drift and ~3 dB worse
+     * RX. Meshtastic + Bruce both use the long form for this exact hat. */
+    int st = s_radio->begin(cfg.freq_mhz,
+                            cfg.bw_khz,
+                            cfg.sf,
+                            cfg.cr,
+                            cfg.sync,
+                            cfg.power,
+                            /*preambleLength*/ 8,
+                            /*tcxoVoltage*/ 1.8f,
+                            /*useRegulatorLDO*/ false);
     if (st != RADIOLIB_ERR_NONE) {
         Serial.printf("[lora] begin(%.3f) err %d\n", cfg.freq_mhz, st);
         delete s_radio; s_radio = nullptr;
@@ -144,6 +168,15 @@ int lora_begin(const lora_config_t &cfg)
         lora_rf_switch(false);
         return st;
     }
+    /* SX1262 errata 0x8B5: enable the "RX sensitivity improvement"
+     * register write. Worth ~3 dBm at the antenna. Meshtastic does this
+     * in SX126xInterface.cpp:113. RadioLib doesn't expose a helper so
+     * we go through the Module's SPI register-write directly. */
+    s_mod->SPIsetRegValue(0x8B5, 0x01, 0, 0);
+    /* Boosted RX gain — SX1262 default is power-saving (low gain).
+     * Boosted costs a few mA but adds ~3 dB sensitivity. POSEIDON is
+     * not a battery-leaf node; we always want the better hearing. */
+    s_radio->setRxBoostedGainMode(true);
 
     /* RadioLib's SX1262 setBandwidth takes kHz directly. cfg.bw_khz is already
      * in kHz (125.0, 250.0, 500.0), so pass it unchanged. Previously it was

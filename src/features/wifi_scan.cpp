@@ -22,6 +22,8 @@
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <esp_heap_caps.h>
+#include <esp_netif.h>
+#include <esp_event.h>
 #include <SD.h>
 
 #define MAX_APS 64
@@ -80,15 +82,52 @@ static void scan_task(void *)
                   n, (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
     s_ap_count = 0;
     if (n > 0) {
-        for (int i = 0; i < n && s_ap_count < MAX_APS; ++i) {
-            ap_t &a = s_aps[s_ap_count++];
-            strncpy(a.ssid, WiFi.SSID(i).c_str(), sizeof(a.ssid) - 1);
-            a.ssid[sizeof(a.ssid) - 1] = '\0';
-            memcpy(a.bssid, WiFi.BSSID(i), 6);
-            a.rssi    = WiFi.RSSI(i);
-            a.channel = WiFi.channel(i);
-            a.auth    = (uint8_t)WiFi.encryptionType(i);
-            a.is_5g   = false;
+        /* Pull the raw wifi_ap_record_t array directly — we need the WPS
+         * bit which Arduino's WiFi class doesn't expose. esp_wifi_scan_get_
+         * ap_records reads from the same internal buffer Arduino already
+         * populated; Arduino's WiFi.SSID(i) etc. cache from this same array
+         * so calling it doesn't disturb subsequent Arduino-side reads. */
+        uint16_t want = (uint16_t)((n < MAX_APS) ? n : MAX_APS);
+        wifi_ap_record_t *recs = (wifi_ap_record_t *)heap_caps_malloc(
+            want * sizeof(wifi_ap_record_t), MALLOC_CAP_8BIT);
+        bool got_records = false;
+        if (recs) {
+            uint16_t got = want;
+            if (esp_wifi_scan_get_ap_records(&got, recs) == ESP_OK && got > 0) {
+                got_records = true;
+                for (int i = 0; i < (int)got && s_ap_count < MAX_APS; ++i) {
+                    ap_t &a = s_aps[s_ap_count++];
+                    strncpy(a.ssid, (const char *)recs[i].ssid, sizeof(a.ssid) - 1);
+                    a.ssid[sizeof(a.ssid) - 1] = '\0';
+                    memcpy(a.bssid, recs[i].bssid, 6);
+                    a.rssi    = recs[i].rssi;
+                    a.channel = recs[i].primary;
+                    a.auth    = (uint8_t)recs[i].authmode;
+                    a.is_5g   = false;
+                    a.wps     = recs[i].wps ? true : false;
+                    if (a.wps) {
+                        Serial.printf("[wifi_scan] WPS ap '%s' ch%u %ddBm\n",
+                                      a.ssid, a.channel, a.rssi);
+                    }
+                }
+            }
+            free(recs);
+        }
+        /* Fallback path — if heap_caps_malloc failed or the records call
+         * came back empty, fall back to Arduino's getters. We just lose
+         * the WPS flag on this scan; everything else still works. */
+        if (!got_records) {
+            for (int i = 0; i < n && s_ap_count < MAX_APS; ++i) {
+                ap_t &a = s_aps[s_ap_count++];
+                strncpy(a.ssid, WiFi.SSID(i).c_str(), sizeof(a.ssid) - 1);
+                a.ssid[sizeof(a.ssid) - 1] = '\0';
+                memcpy(a.bssid, WiFi.BSSID(i), 6);
+                a.rssi    = WiFi.RSSI(i);
+                a.channel = WiFi.channel(i);
+                a.auth    = (uint8_t)WiFi.encryptionType(i);
+                a.is_5g   = false;
+                a.wps     = false;
+            }
         }
     }
     WiFi.scanDelete();
@@ -127,6 +166,7 @@ static void scan_task(void *)
             a.channel = c5aps[i].channel;
             a.auth    = c5aps[i].auth;
             a.is_5g   = true;
+            a.wps     = false;   /* C5 satellite doesn't surface WPS IE yet */
         }
         Serial.printf("[wifi_scan] merged %d 5G APs from C5\n", c5n);
     }
@@ -206,6 +246,14 @@ static void draw_list(int cursor)
         d.setTextColor(a.auth == WIFI_AUTH_OPEN ? T_BAD : T_GOOD, bg);
         d.setCursor(58, y);
         d.printf("%-5s", auth_str(a.auth));
+        /* WPS marker — "W" in warn color tells operator the AP exposes
+         * WPS IE in its beacon and is a PIN-attack candidate (Pixie Dust
+         * / Reaver). Slot it between auth and SSID at col 88. */
+        if (a.wps) {
+            d.setTextColor(T_WARN, bg);
+            d.setCursor(88, y);
+            d.print("W");
+        }
         d.setTextColor(fg, bg);
         d.setCursor(94, y);
         d.print(a.ssid);
@@ -222,7 +270,9 @@ extern void feat_wifi_clients(void);
 
 /* Returns a ui_state hint — but we just call the feature directly and
  * return once it finishes. */
-static void show_details(const ap_t &a)
+/* Exposed (non-static) so feat_c5_scan_5g can reuse the same detail
+ * screen — same hotkeys, same C5/local dispatch, no duplicate code. */
+void wifi_show_ap_details(const ap_t &a)
 {
     ui_clear_body();
     auto &d = M5Cardputer.Display;
@@ -239,13 +289,14 @@ static void show_details(const ap_t &a)
         a.bssid[0], a.bssid[1], a.bssid[2], a.bssid[3], a.bssid[4], a.bssid[5]);
     d.setCursor(4, BODY_Y + 42); d.printf("CH   : %u", a.channel);
     d.setCursor(4, BODY_Y + 54); d.printf("RSSI : %d dBm", a.rssi);
-    d.setCursor(4, BODY_Y + 66); d.printf("AUTH : %s", auth_str(a.auth));
+    d.setCursor(4, BODY_Y + 66); d.printf("AUTH : %s%s", auth_str(a.auth),
+                                                          a.wps ? "  WPS!" : "");
     /* Actions that require a local softAP (clone/portal) or local
      * promiscuous RX (clients) can't reach a 5 GHz target — the S3
      * just can't tune there. Show a compact footer hint so the user
      * knows what actually works for this AP. */
     if (a.is_5g)
-        ui_draw_footer("D=deauth (via C5)  `=back  (2.4 actions unavailable)");
+        ui_draw_footer("D=deauth X=bcast (via C5)  `=back");
     else
         ui_draw_footer("D=dth X=bcast L=clnt C=clone P=portal `=back");
 
@@ -257,19 +308,22 @@ static void show_details(const ap_t &a)
         switch ((char)tolower((int)k)) {
         case 'd':
             if (a.is_5g) {
-                /* Route to the C5 satellite — S3 can't TX on the 5 GHz
-                 * channel this AP lives on. Targeted burst, 4 s. */
-                if (!c5_any_online()) {
-                    ui_toast("no C5 paired", T_BAD, 1200);
-                    break;
-                }
-                c5_cmd_deauth(a.bssid, a.channel, 0, 4000);
-                ui_toast("5G deauth sent to C5", T_GOOD, 1000);
+                if (!c5_any_online()) { ui_toast("no C5 paired", T_BAD, 1200); break; }
+                /* Same dashboard UX as 2.4 GHz deauth, just routed via
+                 * the C5 satellite. ESC stops, SPACE pauses. */
+                c5_deauth_dashboard(a, false);
             } else {
                 feat_wifi_deauth();
             }
             return;
-        case 'x': feat_wifi_deauth_broadcast(); return;
+        case 'x':
+            if (a.is_5g) {
+                if (!c5_any_online()) { ui_toast("no C5 paired", T_BAD, 1200); break; }
+                c5_deauth_dashboard(a, true);   /* broadcast on the AP's ch */
+            } else {
+                feat_wifi_deauth_broadcast();
+            }
+            return;
         case 'l':
             if (a.is_5g) { ui_toast("clients: 2.4G only", T_WARN, 1000); break; }
             feat_wifi_clients(); return;
@@ -309,22 +363,117 @@ void feat_wifi_scan(void)
              * for a follow-up 5 GHz C5 merge. Switching toggles WiFi
              * init which fragments heap. */
         }
-        WiFi.mode(WIFI_STA);
-        int n = WiFi.scanNetworks(false, false);   /* sync, no hidden */
-        Serial.printf("[wifi_scan] inline -> %d\n", n);
+        Serial.printf("[wifi_scan] pre-scan heap=%u dma=%u\n",
+                      (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                      (unsigned)heap_caps_get_free_size(MALLOC_CAP_DMA));
+        wifi_lean_sta_init();
+        /* Raw IDF scan — Arduino's WiFi.scanNetworks needs WiFi inited
+         * via Arduino's wifiLowLevelInit path, which uses default
+         * buffer counts and fails NO_MEM on Cardputer-Adv. We inited
+         * via raw IDF above with shrunk buffers; that bypassed
+         * Arduino's init so Arduino's event handlers aren't registered
+         * and WiFi.scanNetworks blocks forever waiting for SCAN_DONE.
+         * Solution: use raw esp_wifi_scan_start(blocking=true) which
+         * doesn't depend on Arduino event dispatch. */
+        wifi_scan_config_t scfg = {};
+        scfg.show_hidden       = true;
+        scfg.scan_type         = WIFI_SCAN_TYPE_ACTIVE;
+        scfg.scan_time.active.min = 80;
+        scfg.scan_time.active.max = 250;
+        esp_err_t scan_rc = esp_wifi_scan_start(&scfg, true);
+        uint16_t n_u = 0;
+        esp_wifi_scan_get_ap_num(&n_u);
+        int n = (scan_rc == ESP_OK) ? (int)n_u : -2;
+        Serial.printf("[wifi_scan] raw pass1 rc=%d count=%d\n", (int)scan_rc, n);
         if (n > 0) {
-            for (int i = 0; i < n && s_ap_count < MAX_APS; ++i) {
-                ap_t &a = s_aps[s_ap_count++];
-                strncpy(a.ssid, WiFi.SSID(i).c_str(), sizeof(a.ssid) - 1);
-                a.ssid[sizeof(a.ssid) - 1] = '\0';
-                memcpy(a.bssid, WiFi.BSSID(i), 6);
-                a.rssi    = WiFi.RSSI(i);
-                a.channel = WiFi.channel(i);
-                a.auth    = (uint8_t)WiFi.encryptionType(i);
-                a.is_5g   = false;
+            /* Pull raw wifi_ap_record_t for the WPS bit — Arduino's
+             * WiFi.* helpers don't expose it. Same trick as the async
+             * scan path above. */
+            uint16_t want = (uint16_t)((n < MAX_APS) ? n : MAX_APS);
+            wifi_ap_record_t *recs = (wifi_ap_record_t *)heap_caps_malloc(
+                want * sizeof(wifi_ap_record_t), MALLOC_CAP_8BIT);
+            bool got_records = false;
+            if (recs) {
+                uint16_t got = want;
+                if (esp_wifi_scan_get_ap_records(&got, recs) == ESP_OK && got > 0) {
+                    got_records = true;
+                    for (int i = 0; i < (int)got && s_ap_count < MAX_APS; ++i) {
+                        ap_t &a = s_aps[s_ap_count++];
+                        strncpy(a.ssid, (const char *)recs[i].ssid, sizeof(a.ssid) - 1);
+                        a.ssid[sizeof(a.ssid) - 1] = '\0';
+                        memcpy(a.bssid, recs[i].bssid, 6);
+                        a.rssi    = recs[i].rssi;
+                        a.channel = recs[i].primary;
+                        a.auth    = (uint8_t)recs[i].authmode;
+                        a.is_5g   = false;
+                        a.wps     = recs[i].wps ? true : false;
+                        if (a.wps) {
+                            Serial.printf("[wifi_scan] WPS ap '%s' ch%u %ddBm\n",
+                                          a.ssid, a.channel, a.rssi);
+                        }
+                    }
+                }
+                free(recs);
+            }
+            if (!got_records) {
+                for (int i = 0; i < n && s_ap_count < MAX_APS; ++i) {
+                    ap_t &a = s_aps[s_ap_count++];
+                    strncpy(a.ssid, WiFi.SSID(i).c_str(), sizeof(a.ssid) - 1);
+                    a.ssid[sizeof(a.ssid) - 1] = '\0';
+                    memcpy(a.bssid, WiFi.BSSID(i), 6);
+                    a.rssi    = WiFi.RSSI(i);
+                    a.channel = WiFi.channel(i);
+                    a.auth    = (uint8_t)WiFi.encryptionType(i);
+                    a.is_5g   = false;
+                    a.wps     = false;
+                }
             }
         }
-        WiFi.scanDelete();
+        /* No WiFi.scanDelete needed — raw IDF auto-frees. */
+
+        /* Second pass via raw IDF too. */
+        esp_err_t scan_rc2 = esp_wifi_scan_start(&scfg, true);
+        uint16_t n2_u = 0;
+        esp_wifi_scan_get_ap_num(&n2_u);
+        int n2 = (scan_rc2 == ESP_OK) ? (int)n2_u : -2;
+        Serial.printf("[wifi_scan] raw pass2 rc=%d count=%d\n", (int)scan_rc2, n2);
+        if (n2 > 0) {
+            uint16_t want2 = (uint16_t)((n2 < MAX_APS) ? n2 : MAX_APS);
+            wifi_ap_record_t *recs2 = (wifi_ap_record_t *)heap_caps_malloc(
+                want2 * sizeof(wifi_ap_record_t), MALLOC_CAP_8BIT);
+            if (recs2) {
+                uint16_t got2 = want2;
+                if (esp_wifi_scan_get_ap_records(&got2, recs2) == ESP_OK) {
+                    for (int i = 0; i < (int)got2 && s_ap_count < MAX_APS; ++i) {
+                        /* Skip if BSSID already in list. */
+                        bool dup = false;
+                        for (int j = 0; j < s_ap_count; ++j) {
+                            if (memcmp(s_aps[j].bssid, recs2[i].bssid, 6) == 0) {
+                                /* Refresh RSSI to the stronger reading. */
+                                if (recs2[i].rssi > s_aps[j].rssi)
+                                    s_aps[j].rssi = recs2[i].rssi;
+                                dup = true;
+                                break;
+                            }
+                        }
+                        if (dup) continue;
+                        ap_t &a = s_aps[s_ap_count++];
+                        strncpy(a.ssid, (const char *)recs2[i].ssid, sizeof(a.ssid) - 1);
+                        a.ssid[sizeof(a.ssid) - 1] = '\0';
+                        memcpy(a.bssid, recs2[i].bssid, 6);
+                        a.rssi    = recs2[i].rssi;
+                        a.channel = recs2[i].primary;
+                        a.auth    = (uint8_t)recs2[i].authmode;
+                        a.is_5g   = false;
+                        a.wps     = recs2[i].wps ? true : false;
+                    }
+                }
+                free(recs2);
+            }
+            WiFi.scanDelete();
+        }
+        Serial.printf("[wifi_scan] inline merged total=%d\n", s_ap_count);
+
         s_scan_running = false;
         s_scan_done = true;
     }
@@ -430,7 +579,7 @@ void feat_wifi_scan(void)
             if (n > 0 && cursor < n) {
                 g_last_selected_ap    = s_aps[idx[cursor]];
                 g_last_selected_valid = true;
-                show_details(g_last_selected_ap);
+                wifi_show_ap_details(g_last_selected_ap);
                 draw_list(cursor);
                 ui_draw_footer("/=flt O=open S=save R=rescan ENTER=info `=back");
             }

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Roadmap — POSEIDON</title>
-<meta name="description" content="POSEIDON release history and what's coming. v0.1 foundations through v0.5 TRIDENT, with v0.6 nRF52 BLE + OTA queued next.">
+<meta name="description" content="POSEIDON release history and what's coming. v0.1 foundations through v0.6 Argus + visual overhaul + raw-IDF AP path, with v0.7 nRF52840 BLE 5.0 queued next.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
@@ -17,7 +17,7 @@
   <div class="boot-lines"><div class="boot-line"><span class="dim">[LOAD]</span> roadmap.html <span class="ok">OK</span></div></div>
 </div>
 <div id="scrollProgress"></div>
-<div id="hud"><div class="hud-row"><span class="hud-dot"></span>ROADMAP · v0.4 current</div></div>
+<div id="hud"><div class="hud-row"><span class="hud-dot"></span>ROADMAP · v0.6.0 current</div></div>
 
 <nav id="mainNav">
   <a href="index.html" class="nav-logo"><span class="icon">P</span><span>POSEIDON</span></a>
@@ -41,10 +41,10 @@
 <div class="console-strip">
   <div class="console-bar">
     <span class="ck">[TIMELINE]</span>
-    <span>shipped=<span class="nm">v0.1 → v0.5.0</span></span>
-    <span>current=<span class="ck">v0.5.0</span></span>
-    <span>next=<span class="vk">v0.6 nRF52 BLE sniffer / OTA</span></span>
-    <span>after=<span class="vk">v0.7 on-device WPA2 crack</span></span>
+    <span>shipped=<span class="nm">v0.1 → v0.6.0</span></span>
+    <span>current=<span class="ck">v0.6.0</span></span>
+    <span>next=<span class="vk">v0.7 nRF52840 BLE 5.0 dongle</span></span>
+    <span>after=<span class="vk">v0.8 on-device WPA2 crack</span></span>
     <span class="blink">▸</span>
   </div>
 </div>
@@ -114,9 +114,23 @@
     <div class="rm-item shipped current reveal-left">
       <div class="rm-card">
         <div class="rm-head">
+          <span class="rm-ver">v0.6.0</span>
+          <span class="rm-date">Shipped 2026-05-28</span>
+          <span class="rm-tag shipped">Live</span>
+        </div>
+        <div class="rm-title">Argus mood sprite · six themes · ambient motion · raw-IDF AP path · BLE cooperative tick · C5 protocol v3</div>
+        <div class="rm-body">
+          The biggest single drop since 0.5.0. Triton finally has a real character — a 96x96 <b>Argus mood sprite</b> with twelve mood portraits (Watching, Pleased, Annoyed, Resigned, Calculating, Old Fury, Sleeping…) that maps live to hunt state. Six themes ship (POSEIDON / MATRIX / E-INK / SYNTHWAVE / PHANTOM / BLOOD), seven idle screensavers keyed off the active theme, carousel menu style with cyberpunk pictographs, ambient procedural motion painted under every menu draw. WiFi raw-TX moves to STA mode with a <code>-Wl,-zmuldefs</code> linker override of <code>ieee80211_raw_frame_sanity_check</code> (Bruce-libs-safe). Portal gets a real raw-IDF AP recipe that actually broadcasts. BLE features (Sour Apple, Spam, Karma, Flood, FindMy) move from broken <code>xTaskCreate</code> to a cooperative tick pattern that actually fires. IR LED polarity finally corrected (active-HIGH, not active-LOW), full Samsung Smart Remote keymap (~40 buttons) verified against Flipper-IRDB. <b>New features:</b> AP Signal Test, Evil Twin, BLE BlueDucky, SATCOM Tracker (SGP4 + baked TLEs), Drone Remote ID (ASTM F3411), Surveillance Hunter (Flock + Raven detection), Defensive Monitor, four nRF52 hat features. <b>C5:</b> protocol v3 with 5G scan terminator fix. <b>Removed:</b> OTA Update (M5Burner / web flasher cover the same ground without partition complexity).
+        </div>
+      </div>
+    </div>
+
+    <div class="rm-item shipped reveal-left">
+      <div class="rm-card">
+        <div class="rm-head">
           <span class="rm-ver">v0.5.0</span>
           <span class="rm-date">Shipped 2026-04-21</span>
-          <span class="rm-tag shipped">Live</span>
+          <span class="rm-tag shipped">Shipped</span>
         </div>
         <div class="rm-title">TRIDENT (C5 satellite) · 5 GHz deauth · LoRa end-to-end · flicker killed · M5 Launcher</div>
         <div class="rm-body">
@@ -165,19 +179,32 @@
     <div class="rm-item planned reveal-left">
       <div class="rm-card">
         <div class="rm-head">
-          <span class="rm-ver">v0.6.0</span>
+          <span class="rm-ver">v0.6.1</span>
+          <span class="rm-date">tomorrow</span>
+          <span class="rm-tag planned">Hardware</span>
+        </div>
+        <div class="rm-title">Hydra RF hat — sub-GHz regression sweep</div>
+        <div class="rm-body">
+          The Hydra RF hat arrives tomorrow. Any sub-GHz bugs surfaced during the v0.6.0 testing window (CC1101 RF, nRF24 mousejack, sub-GHz replay, Pocket SDR receive) get verified on real hardware + patched the same day. Listed as v0.6.1 because the fixes ride existing code paths, not new features.
+        </div>
+      </div>
+    </div>
+
+    <div class="rm-item planned reveal-left">
+      <div class="rm-card">
+        <div class="rm-head">
+          <span class="rm-ver">v0.7.0</span>
           <span class="rm-date">TBD</span>
           <span class="rm-tag planned">Planned</span>
         </div>
-        <div class="rm-title">nRF52840 BLE sniffer + OTA</div>
+        <div class="rm-title">nRF52840 BLE 5.0 dongle</div>
         <div class="rm-body">
-          Real BLE 5.0 via an nRF52840 dongle over USB-CDC (full advertisement decode, Coded PHY long-range, direction finding). OTA updates for POSEIDON so firmware drops don't need a re-flash. TRIDENT OTA piggybacks on the same path over ESP-NOW.
+          Real BLE 5.0 via a dedicated nRF52840 dongle over USB-CDC (full advertisement decode, Coded PHY long-range, direction finding, LE Secure Connection MITM). The four nRF52 features that landed in v0.6.0 ride an Adafruit Feather hat as proof-of-concept; v0.7 hardens the path with a dedicated dongle that doesn't compete with the Feather's I/O.
           <ul>
             <li>nRF52840 dongle as USB-CDC BLE sniffer</li>
             <li>BLE connection hijacking via nRF52 + NimBLE coordination</li>
             <li>Coded PHY S=8 long-range attacks</li>
-            <li>POSEIDON OTA from SD / WebUI</li>
-            <li>TRIDENT OTA over ESP-NOW from the Cardputer</li>
+            <li>Thread / Matter enumeration via TRIDENT C5</li>
           </ul>
         </div>
       </div>

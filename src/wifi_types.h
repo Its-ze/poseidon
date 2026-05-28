@@ -14,6 +14,11 @@ struct ap_t {
     uint8_t  channel;
     uint8_t  auth;
     bool     is_5g;   /* source: local S3 scan = false, C5 satellite = true */
+    bool     wps;     /* WPS IE present in beacon — router is PIN-attackable
+                         (Pixie Dust / Reaver). Populated from
+                         wifi_ap_record_t.wps for local scans; always false
+                         for C5 satellite results since those go through a
+                         different IE-parse path. */
 };
 
 /* The last AP the user highlighted in the scan screen. */

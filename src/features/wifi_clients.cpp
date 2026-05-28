@@ -98,7 +98,8 @@ static void deauth_client(const uint8_t *client)
 void feat_wifi_clients(void)
 {
     radio_switch(RADIO_WIFI);
-    WiFi.mode(WIFI_STA);
+    /* Lean STA init — fits in fragmented DMA RAM. Idempotent. */
+    wifi_lean_sta_init();
 
     if (!g_last_selected_valid) {
         ui_toast("scan + select AP first", T_WARN, 1500);
@@ -115,9 +116,18 @@ void feat_wifi_clients(void)
         s_saved_cursor = 0;
         memcpy(s_saved_for, s_target, 6);
     }
+    /* Explicit MASK_ALL filter — passing nullptr to the filter setter
+     * on IDF 5.5 silently disables capture (we hit this in Triton). */
+    static const wifi_promiscuous_filter_t s_all_filter = {
+        .filter_mask = WIFI_PROMIS_FILTER_MASK_ALL
+    };
+    esp_wifi_set_promiscuous_filter(&s_all_filter);
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_promiscuous_rx_cb(client_cb);
     esp_wifi_set_channel(s_target_ch, WIFI_SECOND_CHAN_NONE);
+    Serial.printf("[clients] entry ch=%u target=%02X:%02X:%02X:%02X:%02X:%02X\n",
+                  s_target_ch, s_target[0], s_target[1], s_target[2],
+                  s_target[3], s_target[4], s_target[5]);
 
     int cursor = s_saved_cursor;
     ui_draw_footer(";/.=move  D=deauth one  `=back");

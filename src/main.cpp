@@ -12,6 +12,7 @@
 #include "theme.h"
 #include "c5_cmd.h"
 #include "version.h"
+#include "serial_test.h"
 #include "utility/Keyboard/KeyboardReader/TCA8418.h"
 
 /* Strong override: tell Arduino-ESP32 core that BT is in use. Without
@@ -36,8 +37,49 @@ static void gps_task(void *_)
     }
 }
 
+/* IR LED watchdog. Periodically forces GPIO 44 HIGH to keep the
+ * active-LOW IR LED OFF — defends against any code path that leaves
+ * pin LOW or in disabled/pulled state. SKIPS when an IR feature is
+ * currently active (uses menu.cpp's g_current_feature_item label).
+ * 50 ms rate keeps stuck-on duty cycle below 5% so phone cameras see
+ * it as off, while still being slow enough not to interfere with
+ * IR TX (frames are <50 ms total). */
+static bool ir_feature_active(void)
+{
+    extern const menu_node_t *g_current_feature_item;
+    const menu_node_t *it = g_current_feature_item;
+    if (!it || !it->label) return false;
+    const char *L = it->label;
+    if ((L[0] == 'I' && L[1] == 'R') ||
+        (L[0] == 'i' && L[1] == 'r') ||
+        strstr(L, "Samsung") || strstr(L, "TV-B-Gone") ||
+        strstr(L, "Remote") || strstr(L, "Clone") || strstr(L, "Prank")) {
+        return true;
+    }
+    return false;
+}
+static void ir_watchdog_task(void *_)
+{
+    pinMode(44, OUTPUT);
+    digitalWrite(44, LOW);
+    while (1) {
+        if (!ir_feature_active()) {
+            digitalWrite(44, LOW);
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+}
+
 void setup()
 {
+    /* FIRST THING: park IR LED OFF. Cardputer-Adv IR LED is ACTIVE-LOW
+     * on GPIO 44 (U0RXD by default). At boot the pin floats / has
+     * pulldown and the LED visible-glows on phone camera. Hard-park
+     * HIGH before anything else (M5GFX board autodetect, libraries,
+     * etc.) so the pin is firmly OFF from the very first instruction. */
+    pinMode(44, OUTPUT);
+    digitalWrite(44, LOW);
+
     /* Cardputer-Adv hat compatibility: the CAP-LoRa1262 wires SX1262
      * NSS=G5, BUSY=G6, DIO1=G4, RST=G3. At power-on the SX1262 drives
      * BUSY HIGH until its ready, which breaks M5GFX's board autodetect
@@ -67,6 +109,8 @@ void setup()
     delay(100);
     Serial.printf("\n[POSEIDON] %s (%s) boot\n",
                   poseidon_version(), poseidon_build_date());
+    /* bcn_spam_dump_crashtrace removed — only existed in stash's
+     * wifi_beacon_spam.cpp which we reverted to HEAD. */
     /* Confirm board detection — Adv uses TCA8418 I2C keyboard (G3-G7 free
      * for hats); original K126 uses GPIO matrix keyboard (G3-G7 claimed). */
     auto board = M5.getBoard();
@@ -89,10 +133,23 @@ void setup()
     Serial.printf("[POSEIDON] boot heap free=%u KB\n",
                   (unsigned)(ESP.getFreeHeap() / 1024));
 
+    /* Re-park IR LED HIGH after all the library inits in case any of
+     * them poked GPIO 44. */
+    pinMode(44, OUTPUT);
+    digitalWrite(44, LOW);
+
     /* Bring up the GNSS UART + background NMEA poller so GPS-consuming
      * features (Wardrive, R4 GPS fix) always have a recent snapshot. */
     gps_begin();
     xTaskCreate(gps_task, "gps", 3072, nullptr, 2, nullptr);
+
+    /* IR LED watchdog — keeps GPIO 44 forced HIGH whenever no IR feature
+     * is active. Catches stuck-on bugs from any code path. */
+    xTaskCreate(ir_watchdog_task, "ir_park", 1536, nullptr, 1, nullptr);
+
+    /* Test harness — accepts K<hex>/S/R/? over USB serial to drive
+     * scripts/test_all_features.py. No-op for normal users. */
+    serial_test_init();
 
     ui_init();
 

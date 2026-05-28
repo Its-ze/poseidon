@@ -1,5 +1,5 @@
 /*
- * c5_cmd.cpp — dispatcher for the POSEI v2 ESP-NOW protocol.
+ * c5_cmd.cpp — dispatcher for the POSEI v3 ESP-NOW protocol.
  *
  * Owns the ESP-NOW recv callback. Dispatches:
  *   - HELLO → peer table (our own; mesh.cpp keeps its old table too)
@@ -242,8 +242,15 @@ static void on_recv(const uint8_t *mac, const uint8_t *data, int len)
 
 bool c5_begin(void)
 {
-    /* ESP-NOW requires WiFi up in STA mode. */
-    if (WiFi.getMode() == WIFI_OFF) WiFi.mode(WIFI_STA);
+    /* ESP-NOW requires WiFi up. Check via raw IDF — WiFi.getMode()
+     * reads Arduino's tracked state, which is OFF when WiFi was inited
+     * via raw esp_wifi_init (e.g. Triton's wifi_lean_sta_init). Calling
+     * WiFi.mode(WIFI_STA) in that case double-creates the default STA
+     * netif and asserts in esp_netif_create_default_wifi_sta. */
+    wifi_mode_t cur = WIFI_MODE_NULL;
+    if (esp_wifi_get_mode(&cur) != ESP_OK) {
+        WiFi.mode(WIFI_STA);
+    }
 
     /* Pin to channel 1 so ESP-NOW RX matches the C5's broadcast channel.
      * A prior WiFi scan / attack can leave the driver on any channel 1-13;
@@ -361,10 +368,21 @@ static uint16_t send_simple_cmd(uint8_t type, const uint8_t *extra, int extra_le
     for (int i = 0; i < count; ++i) memcpy(macs[i], s_peers[i].mac, 6);
     portEXIT_CRITICAL(&s_mux);
 
+    /* Get current WiFi state for diag. */
+    wifi_mode_t mode_now = WIFI_MODE_NULL;
+    esp_wifi_get_mode(&mode_now);
+    uint8_t prim_ch = 0; wifi_second_chan_t sec;
+    esp_wifi_get_channel(&prim_ch, &sec);
+    Serial.printf("[c5-tx] type=%u seq=%u peers=%d started=%d mode=%d ch=%u\n",
+                  (unsigned)type, (unsigned)seq, count, (int)s_started,
+                  (int)mode_now, (unsigned)prim_ch);
+
     for (int i = 0; i < count; ++i) {
-        esp_now_send(macs[i], (const uint8_t *)&m, sizeof(m));
+        esp_err_t r = esp_now_send(macs[i], (const uint8_t *)&m, sizeof(m));
+        Serial.printf("[c5-tx] unicast peer%d rc=%d (%s)\n", i, (int)r, esp_err_to_name(r));
     }
-    esp_now_send(BROADCAST_MAC, (const uint8_t *)&m, sizeof(m));
+    esp_err_t r = esp_now_send(BROADCAST_MAC, (const uint8_t *)&m, sizeof(m));
+    Serial.printf("[c5-tx] broadcast rc=%d (%s)\n", (int)r, esp_err_to_name(r));
     return seq;
 }
 
@@ -412,6 +430,99 @@ uint16_t c5_cmd_hs(const uint8_t bssid[6], uint8_t channel, uint16_t duration_ms
 
 uint32_t c5_status_frames(void)  { return s_last_status_frames; }
 uint8_t  c5_status_channel(void) { return s_last_status_channel; }
+
+/* ---- v3 command senders ----
+ * These build + send the request frame. The C5-side dispatcher in
+ * c5_node/main/main.c does NOT yet handle these CMD types — frames
+ * will be silently dropped by the satellite until each feature's
+ * handler is implemented. Senders exist so POSEIDON-side menus can
+ * link cleanly while the C5 firmware catches up. */
+
+uint16_t c5_cmd_clients_hunt(uint16_t duration_ms)
+{
+    c5_clients_req_t r = {};
+    r.channel     = 0;
+    r.duration_ms = duration_ms;
+    r.hop_all     = 1;
+    return send_simple_cmd(C5_TYPE_CMD_CLIENTS_HUNT, (uint8_t *)&r, sizeof(r));
+}
+
+uint16_t c5_cmd_clients_ap(const uint8_t bssid[6], uint8_t channel, uint16_t duration_ms)
+{
+    c5_clients_req_t r = {};
+    memcpy(r.target_bssid, bssid, 6);
+    r.channel     = channel;
+    r.duration_ms = duration_ms;
+    r.hop_all     = 0;
+    return send_simple_cmd(C5_TYPE_CMD_CLIENTS_AP, (uint8_t *)&r, sizeof(r));
+}
+
+uint16_t c5_cmd_beacon_spam(uint8_t channel, uint16_t duration_ms,
+                            uint8_t mode, uint8_t ssid_n, const char ssids[][33])
+{
+    c5_beacon_spam_req_t r = {};
+    r.channel     = channel;
+    r.duration_ms = duration_ms;
+    r.mode        = mode;
+    r.ssid_n      = ssid_n > 5 ? 5 : ssid_n;
+    if (ssids) {
+        for (uint8_t i = 0; i < r.ssid_n; i++) {
+            strncpy(r.ssids[i], ssids[i], 32);
+            r.ssids[i][32] = '\0';
+        }
+    }
+    return send_simple_cmd(C5_TYPE_CMD_BEACON_SPAM, (uint8_t *)&r, sizeof(r));
+}
+
+uint16_t c5_cmd_probe_sniff(uint8_t channel, uint16_t duration_ms)
+{
+    c5_probe_sniff_req_t r = { channel, duration_ms };
+    return send_simple_cmd(C5_TYPE_CMD_PROBE_SNIFF, (uint8_t *)&r, sizeof(r));
+}
+
+uint16_t c5_cmd_deauth_detect(uint8_t channel, uint16_t duration_ms)
+{
+    c5_deauth_detect_req_t r = { channel, duration_ms };
+    return send_simple_cmd(C5_TYPE_CMD_DEAUTH_DETECT, (uint8_t *)&r, sizeof(r));
+}
+
+uint16_t c5_cmd_karma(uint8_t channel, uint16_t duration_ms)
+{
+    c5_karma_req_t r = { channel, duration_ms };
+    return send_simple_cmd(C5_TYPE_CMD_KARMA, (uint8_t *)&r, sizeof(r));
+}
+
+uint16_t c5_cmd_apclone(uint8_t channel, const char *ssid, bool open, const char *pass)
+{
+    c5_apclone_req_t r = {};
+    r.channel = channel;
+    r.open    = open ? 1 : 0;
+    if (ssid) { strncpy(r.ssid, ssid, 32); r.ssid[32] = '\0'; }
+    if (pass) { strncpy(r.pass, pass, 32); r.pass[32] = '\0'; }
+    return send_simple_cmd(C5_TYPE_CMD_APCLONE, (uint8_t *)&r, sizeof(r));
+}
+
+uint16_t c5_cmd_spectrum(uint16_t duration_ms)
+{
+    c5_spectrum_req_t r = { duration_ms };
+    return send_simple_cmd(C5_TYPE_CMD_SPECTRUM, (uint8_t *)&r, sizeof(r));
+}
+
+uint16_t c5_cmd_ciw(uint8_t channel, uint16_t duration_ms,
+                    uint8_t category, uint16_t interval_ms)
+{
+    c5_ciw_req_t r = { channel, duration_ms, category, interval_ms };
+    return send_simple_cmd(C5_TYPE_CMD_CIW, (uint8_t *)&r, sizeof(r));
+}
+
+/* ---- v3 result accessors (no storage yet — return 0/empty until
+ * the C5 firmware sends RESP_STA/PROBE/DEAUTH_HIT/SPECTRUM and the
+ * S3-side handler + buffers are implemented). */
+
+int c5_stas(c5_sta_t *out, int max)              { (void)out; (void)max; return 0; }
+int c5_probes(c5_probe_t *out, int max)          { (void)out; (void)max; return 0; }
+int c5_deauth_hits(c5_deauth_hit_t *out, int max){ (void)out; (void)max; return 0; }
+bool c5_spectrum_get(c5_spectrum_t *out)         { (void)out; return false; }
 
 int c5_aps(c5_ap_t *out, int max)
 {

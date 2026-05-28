@@ -17,4 +17,3 @@ void  nrf24_end(void);
 bool  nrf24_is_up(void);
 RF24 &nrf24_radio(void);
 
-void nrf24_park_others(void);

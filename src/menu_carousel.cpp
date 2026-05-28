@@ -369,9 +369,13 @@ void carousel_run_submenu(const menu_node_t *parent)
         if (k == PK_ENTER) {
             const menu_node_t *sel = &parent->children[cursor];
             if (sel->action) {
+                Serial.printf("[FEAT_ENTER] %s\n", sel->label);
                 g_current_feature_item = sel;
                 sel->action();
                 g_current_feature_item = nullptr;
+                /* Defensive IR park — see menu.cpp comment. */
+                pinMode(44, OUTPUT); digitalWrite(44, LOW);
+                Serial.printf("[FEAT_EXIT] %s\n", sel->label);
                 ui_draw_status(radio_name(), "");
                 ui_draw_footer(CAROUSEL_FOOTER);
                 draw_card_full(parent, cursor, 0);
@@ -393,9 +397,11 @@ void carousel_run_submenu(const menu_node_t *parent)
                 draw_card_full(parent, cursor, 0);
                 const menu_node_t *sel = &parent->children[cursor];
                 if (sel->action) {
+                    Serial.printf("[FEAT_ENTER] %s\n", sel->label);
                     g_current_feature_item = sel;
                     sel->action();
                     g_current_feature_item = nullptr;
+                    Serial.printf("[FEAT_EXIT] %s\n", sel->label);
                     ui_draw_status(radio_name(), "");
                     ui_draw_footer(CAROUSEL_FOOTER);
                     draw_card_full(parent, cursor, 0);

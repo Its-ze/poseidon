@@ -139,10 +139,15 @@ static void on_nbtns(AsyncUDPPacket p)
 /* SMB listener stub: captures the NEGOTIATE packet, sends a canned
  * server challenge, waits for SESSION_SETUP which contains the NTLM
  * response. Dumps the hash fields for offline cracking. */
+static volatile bool s_smb_alive = false;
 static void smb_task(void *)
 {
-    while (s_smb) {
-        WiFiClient c = s_smb->available();
+    s_smb_alive = true;
+    /* Snapshot the pointer at entry — UI task may null s_smb out from
+     * under us at exit. Use the local copy throughout. */
+    WiFiServer *srv = s_smb;
+    while (s_smb && srv) {
+        WiFiClient c = srv->available();
         if (!c) { delay(50); continue; }
         /* Read up to 512 bytes of NEGOTIATE. */
         uint8_t buf[512];
@@ -164,6 +169,7 @@ static void smb_task(void *)
         }
         c.stop();
     }
+    s_smb_alive = false;   /* signal main that the task has exited */
     vTaskDelete(nullptr);
 }
 
@@ -226,6 +232,15 @@ void feat_net_responder(void)
     s_llmnr.close();
     s_nbtns.close();
     s_mdns.close();
-    delete s_smb; s_smb = nullptr;
+    /* Signal smb_task to stop and wait for it before deleting the
+     * WiFiServer it's still dereferencing. Without this, deleting
+     * s_smb here while the task may still be inside srv->available()
+     * was a guaranteed use-after-free. */
+    {
+        WiFiServer *srv = s_smb;
+        s_smb = nullptr;
+        for (int i = 0; i < 100 && s_smb_alive; ++i) delay(10);  /* up to 1 s */
+        if (srv) delete srv;
+    }
     if (s_log) { s_log.flush(); s_log.close(); }
 }

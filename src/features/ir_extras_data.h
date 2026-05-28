@@ -810,18 +810,18 @@ static const ir_extra_blast_t IR_EXTRA_POWER_TABLE[] = {
  */
 extern void blast_raw(uint16_t carrier_khz, const uint16_t *pairs);
 
+extern void delay(uint32_t);  /* Arduino — forward decl for header. */
 static inline void prank_power_bomb(void)
 {
     for (size_t i = 0; i < IR_EXTRA_POWER_N; ++i) {
         blast_raw(IR_EXTRA_POWER_TABLE[i].carrier_khz,
                   IR_EXTRA_POWER_TABLE[i].pairs);
-        /* Inter-brand idle. The Samsung receiver needs ~40ms to re-arm
-         * after a frame; 150ms gives reliable detection across brands. */
-        for (volatile int j = 0; j < 150; ++j) {
-            /* delay 1 ms via 1000 us loop — caller's micros() works. */
-            extern void delay(uint32_t);  /* Arduino */
-            delay(1); break;
-        }
+        /* Inter-brand idle — 150 ms lets the previous receiver fully
+         * re-arm before we hit the next brand. The original code had
+         * `for(j=0;j<150;j++){ delay(1); break; }` which the `break`
+         * exited after a single 1 ms tick → most brands missed because
+         * they hadn't re-armed yet. Verified 2026-05-25 by static audit. */
+        delay(150);
     }
 }
 

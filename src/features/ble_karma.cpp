@@ -44,7 +44,11 @@ static void random_mac(void)
 {
     uint8_t mac[6];
     for (int i = 0; i < 6; ++i) mac[i] = (uint8_t)esp_random();
-    mac[0] |= 0xC0;
+    /* Static-random flag bits go on the MSB (index 5), NOT index 0.
+     * Setting them on byte 0 produced an invalid address that the
+     * controller silently rejected — karma identities never rotated
+     * on-air even though our state thought they did. */
+    mac[5] |= 0xC0;
     ble_hs_id_set_rnd(mac);
 }
 
@@ -97,6 +101,11 @@ void feat_ble_karma(void)
             s_karma_current[sizeof(s_karma_current) - 1] = '\0';
 
             adv->stop();
+            delay(5);   /* Let the controller's stop event drain
+                         * before re-arming new data — without this
+                         * setAdvertisementData silently returns false
+                         * and the radio keeps the previous packet on
+                         * air. Same fix Sour Apple needed. */
             random_mac();
             NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM);
 

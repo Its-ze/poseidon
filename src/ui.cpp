@@ -716,6 +716,29 @@ void ui_action_overlay(const char *headline, const char *subtitle,
                        action_anim_t bg, uint16_t color, uint32_t duration_ms)
 {
     auto &d = M5Cardputer.Display;
+    /* Full-screen canvas — drawing into RAM eliminates the per-frame
+     * fillScreen flash that the panel previously made visible. ~64 KB
+     * transient alloc; freed at exit. */
+    M5Canvas canvas(&d);
+    if (!canvas.createSprite(SCR_W, SCR_H)) {
+        /* Alloc failed — fall back to direct draw on display (legacy
+         * behavior, will flash but at least renders). */
+        d.fillScreen(0x0000);
+        d.setTextSize(3);
+        int hw = d.textWidth(headline) * 3;
+        d.setCursor((SCR_W - hw) / 2, SCR_H / 2 - 16);
+        d.setTextColor(color, 0);
+        d.print(headline);
+        d.setTextSize(1);
+        if (subtitle && *subtitle) {
+            int sw = d.textWidth(subtitle);
+            d.setCursor((SCR_W - sw) / 2, SCR_H / 2 + 16);
+            d.print(subtitle);
+        }
+        delay(duration_ms);
+        return;
+    }
+
     uint32_t start = millis();
     uint32_t last = 0;
     while (millis() - start < duration_ms) {
@@ -728,65 +751,109 @@ void ui_action_overlay(const char *headline, const char *subtitle,
 
         if (millis() - last > 50) {
             last = millis();
-            d.fillScreen(0x0000);
-            /* Background animation. */
+            canvas.fillScreen(0x0000);
+
+            /* Inlined canvas-friendly bg effects — simpler than the
+             * standalone ui_radar/ui_waves/etc. helpers which draw to
+             * the panel directly, but visually equivalent for the
+             * action-overlay's brief moment. */
             switch (bg) {
-            case ACT_BG_RADAR:
-                ui_radar(SCR_W / 2, SCR_H / 2, 50, color);
-                break;
-            case ACT_BG_WAVES:
-                ui_waves(SCR_W / 2, SCR_H / 2, 60, color);
-                break;
-            case ACT_BG_MATRIX:
-                ui_matrix_rain(0, 0, SCR_W, SCR_H, color);
-                break;
-            case ACT_BG_GLITCH:
-                ui_glitch(0, 0, SCR_W, SCR_H);
-                /* Diagonal scan lines for extra chaos. */
-                for (int y = 0; y < SCR_H; y += 4) {
-                    d.drawFastHLine(0, y, SCR_W, 0x0020);
+            case ACT_BG_RADAR: {
+                int cx = SCR_W / 2, cy = SCR_H / 2, R = 50;
+                canvas.drawCircle(cx, cy, R, 0x0420);
+                canvas.drawCircle(cx, cy, (R * 2) / 3, 0x0320);
+                canvas.drawCircle(cx, cy, R / 3, 0x0220);
+                canvas.drawFastHLine(cx - R, cy, 2 * R, 0x0420);
+                canvas.drawFastVLine(cx, cy - R, 2 * R, 0x0420);
+                float sa = elapsed * 0.008f;
+                for (int i = 0; i < 12; ++i) {
+                    float a = sa - i * 0.05f;
+                    uint8_t br = 255 - i * 21;
+                    uint16_t c = blend565(0x0000, color, br);
+                    int x = cx + (int)(cosf(a) * R);
+                    int y = cy + (int)(sinf(a) * R);
+                    canvas.drawLine(cx, cy, x, y, c);
                 }
                 break;
             }
+            case ACT_BG_WAVES: {
+                int cx = SCR_W / 2, cy = SCR_H / 2;
+                for (int i = 0; i < 3; ++i) {
+                    float k = ((elapsed * 0.0015f) + i * 0.33f);
+                    k -= (int)k;
+                    int r = (int)(k * 60);
+                    if (r > 0) canvas.drawCircle(cx, cy, r, blend565(0x0000, color, 255 - (uint8_t)(k * 200)));
+                }
+                canvas.fillCircle(cx, cy, 4, 0xFFFF);
+                break;
+            }
+            case ACT_BG_MATRIX: {
+                /* Quick rain — vertical streaks at random x. */
+                for (int i = 0; i < 12; ++i) {
+                    int x = (i * 23 + (int)(elapsed / 30)) % SCR_W;
+                    int y = ((int)(elapsed / 8) + i * 17) % (SCR_H + 30) - 30;
+                    for (int k = 0; k < 6; ++k) {
+                        if (y + k < 0 || y + k >= SCR_H) continue;
+                        canvas.drawPixel(x, y + k, blend565(0x0000, color, 255 - k * 35));
+                    }
+                }
+                break;
+            }
+            case ACT_BG_GLITCH:
+                /* Stripes + diagonal scan lines. */
+                for (int i = 0; i < 5; ++i) {
+                    int y = (esp_random() % SCR_H);
+                    int h = 2 + (esp_random() % 4);
+                    canvas.fillRect(0, y, SCR_W, h, blend565(0x0000, color, 80));
+                }
+                for (int y = 0; y < SCR_H; y += 4) {
+                    canvas.drawFastHLine(0, y, SCR_W, 0x0020);
+                }
+                break;
+            }
+
             /* Headline: big, centered, magenta-glow outlined. */
-            d.setTextSize(3);
-            int hw = d.textWidth(headline) * 3;
+            canvas.setTextSize(3);
+            int hw = canvas.textWidth(headline) * 3;
             int hx = (SCR_W - hw) / 2;
             int hy = SCR_H / 2 - 16;
             uint16_t halo = blend565(0x0000, 0xF81F, alpha);
             uint16_t hot  = blend565(0x0000, color == 0xF81F ? 0xFFFF : color, alpha);
-            /* 4-direction halo. */
-            d.setTextColor(halo, 0);
-            d.setCursor(hx - 2, hy); d.print(headline);
-            d.setCursor(hx + 2, hy); d.print(headline);
-            d.setCursor(hx, hy - 2); d.print(headline);
-            d.setCursor(hx, hy + 2); d.print(headline);
-            /* Hot core. */
-            d.setTextColor(hot, 0);
-            d.setCursor(hx, hy); d.print(headline);
-            d.setTextSize(1);
+            canvas.setTextColor(halo, 0);
+            canvas.setCursor(hx - 2, hy); canvas.print(headline);
+            canvas.setCursor(hx + 2, hy); canvas.print(headline);
+            canvas.setCursor(hx, hy - 2); canvas.print(headline);
+            canvas.setCursor(hx, hy + 2); canvas.print(headline);
+            canvas.setTextColor(hot, 0);
+            canvas.setCursor(hx, hy); canvas.print(headline);
+            canvas.setTextSize(1);
 
-            /* Subtitle below. */
+            /* Subtitle. */
             if (subtitle && *subtitle) {
-                d.setTextColor(blend565(0x0000, 0xFFFF, alpha), 0);
-                int sw = d.textWidth(subtitle);
-                d.setCursor((SCR_W - sw) / 2, SCR_H / 2 + 16);
-                d.print(subtitle);
+                canvas.setTextColor(blend565(0x0000, 0xFFFF, alpha), 0);
+                int sw = canvas.textWidth(subtitle);
+                canvas.setCursor((SCR_W - sw) / 2, SCR_H / 2 + 16);
+                canvas.print(subtitle);
             }
 
             /* Side brackets. */
             int bl = 10 + (int)(sinf(elapsed * 0.01f) * 4);
-            d.drawFastHLine(4, SCR_H / 2 - 18, bl, color);
-            d.drawFastVLine(4, SCR_H / 2 - 18, 4, color);
-            d.drawFastHLine(4, SCR_H / 2 + 20, bl, color);
-            d.drawFastVLine(4, SCR_H / 2 + 17, 4, color);
-            d.drawFastHLine(SCR_W - 4 - bl, SCR_H / 2 - 18, bl, color);
-            d.drawFastVLine(SCR_W - 5, SCR_H / 2 - 18, 4, color);
-            d.drawFastHLine(SCR_W - 4 - bl, SCR_H / 2 + 20, bl, color);
-            d.drawFastVLine(SCR_W - 5, SCR_H / 2 + 17, 4, color);
+            canvas.drawFastHLine(4, SCR_H / 2 - 18, bl, color);
+            canvas.drawFastVLine(4, SCR_H / 2 - 18, 4, color);
+            canvas.drawFastHLine(4, SCR_H / 2 + 20, bl, color);
+            canvas.drawFastVLine(4, SCR_H / 2 + 17, 4, color);
+            canvas.drawFastHLine(SCR_W - 4 - bl, SCR_H / 2 - 18, bl, color);
+            canvas.drawFastVLine(SCR_W - 5, SCR_H / 2 - 18, 4, color);
+            canvas.drawFastHLine(SCR_W - 4 - bl, SCR_H / 2 + 20, bl, color);
+            canvas.drawFastVLine(SCR_W - 5, SCR_H / 2 + 17, 4, color);
+
+            /* Atomic push — one DMA transfer, no visible mid-frame. */
+            canvas.pushSprite(0, 0);
         }
         delay(20);
     }
+
+    canvas.deleteSprite();
 }
 
 /* ---- matrix rain ----

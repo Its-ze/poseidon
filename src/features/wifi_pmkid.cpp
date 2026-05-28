@@ -139,6 +139,15 @@ static void emit_pmkid(const uint8_t *pmkid, const uint8_t *bssid, const uint8_t
     s_notify_start = millis();
 }
 
+/* File-scope buffer — was a 1.5 KB stack local inside emit_handshake,
+ * which on the WiFi RX task's ~3.5 KB stack risked overflow once
+ * combined with the M2 EAPOL blob being built into it. 600 bytes is
+ * enough: header (7) + MIC hex (33) + BSSID hex (13) + STA hex (13)
+ * + ESSID hex (≤66) + ANONCE hex (65) + EAPOL hex (≤260) + tail (~20)
+ * ≈ 480 bytes max. 600 gives margin. Larger sizes ate DMA-capable BSS
+ * and pushed WiFi.scanNetworks below its 4-RX-buffer init threshold. */
+static char s_emit_handshake_line[600];
+
 /* Emit WPA*02* (full 4-way handshake). Requires M1 ANonce and M2 EAPOL blob. */
 static void emit_handshake(const uint8_t *bssid, const uint8_t *sta,
                            const uint8_t *mic, const uint8_t *anonce,
@@ -148,7 +157,8 @@ static void emit_handshake(const uint8_t *bssid, const uint8_t *sta,
     const char *ssid = ssid_for(bssid);
     /* hashcat 22000 format:
        WPA*02*MIC*MAC_AP*MAC_STA*ESSID_HEX*ANONCE*EAPOL_FRAME_HEX*MSG_PAIR */
-    char line[1536] = "WPA*02*";
+    char *line = s_emit_handshake_line;
+    strcpy(line, "WPA*02*");
     hex_append(line, mic, 16);
     strcat(line, "*");
     hex_append(line, bssid, 6);
@@ -311,7 +321,11 @@ static void promisc_cb(void *buf, wifi_promiscuous_pkt_type_t type)
     const wifi_promiscuous_pkt_t *pkt = (const wifi_promiscuous_pkt_t *)buf;
     int len = pkt->rx_ctrl.sig_len;
     if (len < 24) return;
-    portENTER_CRITICAL_ISR(&s_pmkid_mux);
+    /* No portENTER_CRITICAL — the WiFi RX task is single-threaded and
+     * s_m1[] / s_beacon_cache are only touched here. Previously the
+     * critical section wrapped emit_handshake() / emit_pmkid() which
+     * do blocking SD writes; running SD I/O with interrupts disabled
+     * triggered interrupt-watchdog panic at the first capture. */
     if (type == WIFI_PKT_MGMT) {
         uint8_t st = (pkt->payload[0] >> 4) & 0xF;
         if (st == 0x8 || st == 0x5)
@@ -319,7 +333,6 @@ static void promisc_cb(void *buf, wifi_promiscuous_pkt_type_t type)
     } else if (type == WIFI_PKT_DATA) {
         handle_eapol(pkt->payload, len);
     }
-    portEXIT_CRITICAL_ISR(&s_pmkid_mux);
 }
 
 static void hop_task(void *)
@@ -351,12 +364,17 @@ static void hunt_task(void *)
             for (int i = 0; i < s_cache_n && s_running && s_hunt; ++i) {
                 memcpy(s_hunt_frame + 10, s_cache[i].bssid, 6);
                 memcpy(s_hunt_frame + 16, s_cache[i].bssid, 6);
-                /* Fire a burst of 3 frames on the current channel. */
+                /* Fire a burst of 3 frames on the current channel.
+                 * 2 ms vTaskDelay between frames lets the DMA pool
+                 * drain between TXs — without this back-to-back TXs
+                 * starve the dynamic_tx_buf pool and return rc=257
+                 * (ENOMEM). Same pattern as wifi_deauth_frame.h. */
                 for (int j = 0; j < 3; ++j) {
                     esp_wifi_80211_tx(WIFI_IF_STA, s_hunt_frame,
                                       sizeof(s_hunt_frame), false);
-                    delay(10);
+                    vTaskDelay(pdMS_TO_TICKS(2));
                 }
+                delay(10);  /* per-BSSID gap */
             }
         }
         delay(2000);
@@ -439,10 +457,17 @@ static void draw_notification(void)
 
 void feat_wifi_pmkid(void)
 {
-    radio_switch(RADIO_WIFI);
-    WiFi.mode(WIFI_STA);
-
+    /* SD must be mounted BEFORE radio_switch(RADIO_WIFI). The WiFi driver
+     * grabs ~30 KB of heap on init which fragments + leaves no room for
+     * FATFS's sector buffer + handle pool allocations — sd_mount then
+     * fails with "SD needed" toast even though the card is physically
+     * fine. Mount-first means SD has clean heap to allocate into; WiFi
+     * inits afterward into the remaining (still plenty) space. */
     if (!sd_mount()) { ui_toast("SD needed", T_BAD, 1500); return; }
+
+    radio_switch(RADIO_WIFI);
+    wifi_lean_sta_init();
+
     SD.mkdir("/poseidon");
     s_out = SD.open("/poseidon/hashcat.22000", FILE_APPEND);
     if (!s_out) { ui_toast("cant open file", T_BAD, 1500); return; }
@@ -471,6 +496,13 @@ void feat_wifi_pmkid(void)
     s_hunt = false;
     s_notify = NTF_NONE;
 
+    /* Explicit MASK_ALL — capture is silently disabled without this
+     * on IDF 5.5 (same bug Triton hit). EAPOLs are DATA frames so we
+     * specifically need data + mgmt frames flowing. */
+    static const wifi_promiscuous_filter_t s_all_filter = {
+        .filter_mask = WIFI_PROMIS_FILTER_MASK_ALL
+    };
+    esp_wifi_set_promiscuous_filter(&s_all_filter);
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_promiscuous_rx_cb(promisc_cb);
     esp_wifi_set_channel(s_current_ch, WIFI_SECOND_CHAN_NONE);

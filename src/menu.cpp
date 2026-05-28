@@ -56,6 +56,7 @@ extern void feat_wifi_clients(void);
 extern void feat_wifi_clients_all(void);
 extern void feat_wifi_portal(void);
 extern void feat_wifi_apclone(void);
+extern void feat_evil_twin(void);
 extern void feat_wifi_beacon_spam(void);
 extern void feat_wifi_wardrive(void);
 extern void feat_wifi_probe(void);
@@ -63,6 +64,7 @@ extern void feat_wifi_karma(void);
 extern void feat_wifi_pmkid(void);
 extern void feat_wifi_spectrum(void);
 extern void feat_wifi_connect(void);
+extern void feat_ap_signal_test(void);
 extern void feat_ble_scan(void);
 extern void feat_ble_spam(void);
 extern void feat_ble_hid(void);
@@ -78,8 +80,19 @@ extern void feat_ble_sourapple(void);
 extern void feat_ble_findmy(void);
 extern void feat_ble_toys(void);
 extern void feat_ble_whisperpair(void);
+extern void feat_ble_blueducky(void);
 extern void feat_ir_tvbgone(void);
 extern void feat_ir_remote(void);
+extern void feat_ir_prank_power_bomb(void);
+extern void feat_ir_prank_channel_scramble(void);
+extern void feat_ir_prank_volume_bomb(void);
+extern void feat_ir_prank_source_roulette(void);
+extern void feat_ir_prank_mute_torture(void);
+extern void feat_ir_prank_permanent_power(void);
+extern void feat_ir_prank_cable_is_out(void);
+extern void feat_ir_prank_caption_chaos(void);
+extern void feat_ir_prank_sleep_timer(void);
+extern void feat_ir_prank_ac_chaos(void);
 extern void feat_mesh(void);
 extern void feat_triton(void);
 extern void feat_c5_status(void);
@@ -100,6 +113,12 @@ extern void feat_file_browser(void);
 extern void feat_settings(void);
 extern void feat_about(void);
 extern void feat_badusb(void);
+extern void feat_badusb_win(void);
+extern void feat_badusb_mac(void);
+extern void feat_badusb_linux(void);
+extern void feat_badusb_android(void);
+extern void feat_badusb_chrome(void);
+extern void feat_badusb_pranks(void);
 extern void feat_net_portscan(void);
 extern void feat_net_ping(void);
 extern void feat_net_dns(void);
@@ -132,12 +151,28 @@ extern void feat_nrf24_scanner(void);
 extern void feat_nrf24_jammer(void);
 extern void feat_nrf24_finder(void);
 extern void feat_subghz_finder(void);
+extern void feat_surveillance_hunter(void);
+extern void feat_satcom(void);
+extern void feat_defensive_monitor(void);
+extern void feat_ir_clone(void);
+extern void feat_drone_remoteid(void);
+extern void feat_nrf52_scan(void);
+extern void feat_nrf52_sniff(void);
+extern void feat_nrf52_longrange(void);
+extern void feat_nrf52_zigbee(void);
+extern void feat_nrf52_mitm(void);
+extern void feat_nrf52_ble_mitm_relay(void);
+extern void feat_nrf52_scout_strike(void);
+extern void feat_nrf52_wifi_ble_combo(void);
 extern void feat_mimir(void);
 extern void feat_theme_picker(void);
 extern void feat_sfx_settings(void);
 extern void feat_ambient_preview(void);
 extern void feat_menu_style_toggle(void);
 extern void feat_screensaver_toggle(void);
+extern void feat_screensaver_picker(void);
+/* extern void feat_ota_update(void); — REMOVED 2026-05-27 */
+/* feat_phone_bridge disabled — see platformio.ini comment + phone_bridge.cpp.disabled */
 
 /* SaltyJack — LAN attack suite, homage to @7h30th3r0n3's Evil-M5Project.
  * See src/features/saltyjack/ for credits + implementation. */
@@ -191,9 +226,34 @@ static const menu_node_t MENU_WIFI[] = {
     { 'c', "AP Clone", "Mirror scanned AP, lure clients", nullptr, feat_wifi_apclone,
       "Spins up a SoftAP using the last-scanned target's SSID. Devices that "
       "saved the real network may auto-roam to us. Pair with Portal for creds." },
-    { 'p', "Portal", "Evil captive portal (4 templates)", nullptr, feat_wifi_portal,
-      "Captive portal with DNS hijack. Templates: Google, Facebook, Microsoft, "
-      "Free WiFi. Logs creds to /poseidon/creds.log on SD." },
+    { 'p', "Portal", "Evil captive portal (16 templates)", nullptr, feat_wifi_portal,
+      "Captive portal with DNS hijack. 16 templates: Google, Facebook, "
+      "Microsoft, Free WiFi, Apple ID, Office 365, LinkedIn, Amazon, Netflix, "
+      "Instagram, Hotel, Starbucks, Airport, Router Admin, Zoom, Company SSO. "
+      "Logs creds to /poseidon/creds.log on SD. NOTE: brings up the AP via "
+      "raw IDF (Bruce libs crash WiFi.softAP), which releases the BTDM heap "
+      "one-way -- BLE features will be dead until reboot." },
+    { 'i', "Evil Twin", "Clone AP + portal + auto-deauth chain", nullptr, feat_evil_twin,
+      "One-button chained attack against the last-scanned AP. Time-slices "
+      "the radio: 5s DEAUTH burst (raw STA mode, broadcast deauth at the "
+      "target BSSID on its channel) then 25s PORTAL (raw AP mode beaconing "
+      "the target SSID + DNS hijack + Free WiFi captive page) repeating "
+      "until ESC. Kicked clients re-associate to the rogue, hit the portal, "
+      "leak creds to /poseidon/creds.log. Concurrent APSTA is fragile on "
+      "Bruce libs -- time-slicing is the only stable path. PMF/WPA3 targets "
+      "won't be kicked (deauth dropped) but the portal still works for any "
+      "client that joins. 5G targets unsupported (S3 is 2.4 GHz only). "
+      "Releases BTDM heap one-way -- BLE features dead until reboot." },
+    { 't', "AP Signal Test", "Diagnostic: is the AP actually broadcasting?", nullptr, feat_ap_signal_test,
+      "Permanent diagnostic for the SoftAP path. Brings up SSID "
+      "'POSEIDON-SIGTEST' (open, no password) on channel 1/6/11 (;/. "
+      "cycles) using the raw-IDF recipe (Bruce libs crash WiFi.softAP). "
+      "Live readout: BSSID, channel, uptime, connected STAs, TX power. "
+      "If the SSID does NOT appear when you scan from your phone or run "
+      "`netsh wlan show networks mode=bssid` from Windows, the AP path "
+      "itself is broken -- not the higher-level feature. ESC tears down "
+      "cleanly. NOTE: like Portal, this releases the BTDM heap one-way; "
+      "BLE features dead until reboot." },
     { 'k', "Karma", "Auto-respond to probe requests", nullptr, feat_wifi_karma,
       "Sniffs probe requests, then spins up a SoftAP named with whatever SSID "
       "the target was asking for. Phones may auto-connect to saved networks." },
@@ -216,6 +276,19 @@ static const menu_node_t MENU_WIFI[] = {
     { 'n', "Connect", "Join saved WiFi network", nullptr, feat_wifi_connect,
       "Saves an SSID+password to Preferences and connects STA. Required for "
       "Network tools (port scan, ping, DNS) to work." },
+    { 'y', "DefMon", "Defensive WiFi+BLE anomaly monitor", nullptr, feat_defensive_monitor,
+      "Passive multi-class detector: deauth flood (rate-debounced), broadcast-zero "
+      "deauth (Spacehuhn/deauther.cc signature), evil twin (dup SSID/diff BSSID), "
+      "beacon spam, WiFi Karma (probe-resp w/o beacon), BLE spoof (dup name/diff "
+      "MAC), BLE flood. Time-slices WiFi promisc + NimBLE scan. Alerts → "
+      "/poseidon/defmon-<ts>.jsonl with GPS coords. Audio cue on each new class." },
+    { 'v', "Surveil", "Flock/Raven surveillance detector", nullptr, feat_surveillance_hunter,
+      "Passive 2.4 GHz channel-hop scan that fingerprints Flock Safety "
+      "ALPR cameras and ShotSpotter Raven gunshot sensors by OUI + SSID "
+      "patterns + wildcard-probe behavior. GPS-tagged hits stream to "
+      "/poseidon/surv-<ts>.csv (WiGLE format) and .jsonl (Plume-compatible). "
+      "5s dedup per BSSID. Source signatures: colonelpanichacks/flock-you, "
+      "zmattmanz/Plume, DeFlockJoplin research." },
     { 'z', "CIW Zeroclick", "SSID injection payload broadcast", nullptr, feat_wifi_ciw,
       "Broadcasts beacon frames with SSID payloads targeting WiFi driver "
       "vulnerabilities: command injection, buffer overflow, format strings, "
@@ -293,6 +366,11 @@ static const menu_node_t MENU_BLE[] = {
       "Pick a tracker from the list, then HUNT mode turns the screen into a "
       "big proximity meter. Beep rate speeds up as you get closer, like a "
       "metal detector. Use to physically locate a tracker following you." },
+    { 'd', "Drone RID", "Detect FAA Remote ID broadcasts", nullptr, feat_drone_remoteid,
+      "Passive ASTM F3411-22a Drone Remote ID listener (BT Service UUID "
+      "0xFFFA). Decodes UAS ID + drone lat/lon/alt + operator location for "
+      "any Part-89-compliant drone in range. Live target list + JSONL log "
+      "with GPS-tagged observations. Source: GhostBLE (SmonSE)." },
     { 'n', "Sniffer", "Log all BLE adv -> SD CSV", nullptr, feat_ble_sniff,
       "Dumps every BLE advertisement to /poseidon/blesniff-ts.csv with "
       "timestamp, MAC, RSSI, name, and raw adv hex. Useful for passive "
@@ -317,10 +395,18 @@ static const menu_node_t MENU_BLE[] = {
       "Cycles through 16 popular device names every 2s, each advertised as a "
       "connectable SoftAP with a fresh random MAC. Phones scanning for a known "
       "device may auto-pair with us." },
-    { 'a', "SourApple", "iOS 17 notification DoS", nullptr, feat_ble_sourapple,
-      "CVE-2023-42941. Spams Apple Continuity Nearby Action frames with "
-      "cycling action bytes. Crashes iOS 17 pre-17.2. On 17.2+ you get "
-      "persistent unclosable popup dialogs. Credit ECTO-1A + RapierXbox." },
+    { 'a', "SourApple", "Multi-vendor BLE spam: iOS/Android/Win/Pixel", nullptr, feat_ble_sourapple,
+      "Rotating BLE advertisement spam across seven packet types: Apple "
+      "AirPods/Beats ProximityPair popup (iOS 18), Apple Nearby Action "
+      "modal (iOS 17/18), Apple AirTag detected notification, Samsung "
+      "Galaxy Buds EasySetup, Samsung Galaxy Watch EasySetup, Microsoft "
+      "Swift Pair (Win 10/11), Google Fast Pair (Pixel Buds / Sony / Bose / "
+      "JBL — pops 'Pair NAME?' on EVERY Android with Play Services). "
+      "Mix randomizes per packet so every nearby phone/laptop gets hit "
+      "from multiple angles. Live per-mode counters on screen. Original "
+      "iOS 17.0-17.1 crash variant patched in 17.2 — current build pops "
+      "modals instead. Credits: ECTO-1A, RapierXbox, ckcr4lyf, Spooks4576, "
+      "simondankelmann, Flipper ble-spam." },
     { 'y', "Find My", "Fake AirTag broadcaster", nullptr, feat_ble_findmy,
       "Broadcasts fake Apple Find My / AirTag advertisements with random "
       "rotating keys. Passing iPhones with Find My enabled relay your 'tags' "
@@ -338,6 +424,18 @@ static const menu_node_t MENU_BLE[] = {
       "Verdicts logged to /poseidon/whisperpair.csv. Probe only — the "
       "ESP32-S3 has no BR/EDR radio so we never complete the bond. "
       "Credit: COSIC KU Leuven." },
+    { 'q', "BlueDucky", "BLE HID inject (CVE-2023-45866, Android)", nullptr, feat_ble_blueducky,
+      "BLE HID keystroke injection against unpatched Android (CVE-2023-45866, "
+      "fixed in Dec 2023 security patch). Advertises as a BLE keyboard with "
+      "a phone-friendly disguise; on a vulnerable target, the BLE HID stack "
+      "accepts input reports WITHOUT confirming the pair dialog. Pick a "
+      "DuckyScript payload from BADUSB / ANDROID (or the prank slice), wait "
+      "for the target to attach (~30s window), and the script executes into "
+      "whatever app has focus. Typing capped at ~45 keys/sec so Android's "
+      "input queue doesn't drop keys. Screen must be ON and Bluetooth ON on "
+      "the target; range is normal BLE (~5-10m). Credit: BlueDucky "
+      "(pentestfunctions), Marc Newlin / SkySafe (CVE disclosure). "
+      "Personal-use only." },
     { 0, nullptr, nullptr, nullptr, nullptr, nullptr },
 };
 
@@ -433,6 +531,64 @@ static const menu_node_t MENU_NET[] = {
     { 0, nullptr, nullptr, nullptr, nullptr, nullptr },
 };
 
+extern void feat_ir_test(void);
+
+/* IR Pranks — 10 one-shot drivers from ir_extras_data.h. Each fires
+ * for 3-30 sec depending on the prank; UI blocks until done or ESC. */
+static const menu_node_t MENU_IR_PRANKS[] = {
+    { 'b', "Power Bomb", "All 27 brands' power codes in a burst",
+      nullptr, feat_ir_prank_power_bomb,
+      "Fires every brand's power-off code back-to-back (~6-8 sec). Combined "
+      "with TV-B-Gone covers ~95% of TVs / projectors / soundbars in a "
+      "typical room. Most displays in line of sight blink off within 5 sec." },
+    { 'c', "Ch Scramble", "Spam Ch+ on Samsung+LG",
+      nullptr, feat_ir_prank_channel_scramble,
+      "Hammers Ch+ rapidly for ~5 sec, alternating Samsung and LG. ~50 "
+      "channel changes before the user can navigate back. On QAM-only cable "
+      "boxes you'll hit dozens of channels." },
+    { 'v', "Volume Bomb", "Vol+ x30 on Samsung+LG",
+      nullptr, feat_ir_prank_volume_bomb,
+      "Slams Samsung and LG Vol+ thirty times in under 3 sec. TVs cap at "
+      "~100; receivers and soundbars go to max. Pairs nicely with a loud "
+      "commercial. Use responsibly." },
+    { 'r', "Source Roulette", "Cycle TV inputs 12x",
+      nullptr, feat_ir_prank_source_roulette,
+      "Presses Source 12 times with variable delays mimicking a confused "
+      "human. Cycles HDMI1/2/3, USB, AV, ATV, DTV. User sees 'No Signal' "
+      "+ black screens, takes 30+ sec to get back to HDMI1." },
+    { 'm', "Mute Torture", "Toggle mute every 800ms for 30s",
+      nullptr, feat_ir_prank_mute_torture,
+      "Toggles mute every 800ms for 30 sec on Samsung + LG. Audio "
+      "stutters on a frustratingly predictable cadence. User usually "
+      "gives up after 5-10 mutes." },
+    { 'p', "Permanent Off", "Power-bomb every 3s for 5 min",
+      nullptr, feat_ir_prank_permanent_power,
+      "Fires the full power-bomb (all 27 brands) every 3 sec for 5 min. "
+      "Whoever's TV is in the room cannot stay on for more than ~3s. "
+      "Classic 'the cable is out' simulation." },
+    { 'o', "Cable Flakes", "3 input-loss cycles, 45s apart",
+      nullptr, feat_ir_prank_cable_is_out,
+      "Three input-loss simulations spaced ~45 sec apart. Switches AWAY "
+      "from the cable box twice, then cycles back through 5 inputs. Looks "
+      "like the cable box keeps losing signal every minute." },
+    { 'a', "Caption Chaos", "Toggle CC every 600ms",
+      nullptr, feat_ir_prank_caption_chaos,
+      "Toggles closed-captioning rapidly (Samsung 0x39, LG 0x39). CC text "
+      "appears/disappears every 600ms. On some Samsung models language "
+      "swaps between English/Spanish/Off mid-prank." },
+    { 's', "Sleep 180", "Set Samsung sleep timer to 180 min",
+      nullptr, feat_ir_prank_sleep_timer,
+      "Cycles Samsung sleep-timer 5x rapidly to land on 180-min auto-off. "
+      "TV powers off 3h later with no apparent trigger. Repeat for several "
+      "nights before the target figures it out." },
+    { 'k', "AC Chaos", "Daikin/Mitsubishi/LG AC power toggle",
+      nullptr, feat_ir_prank_ac_chaos,
+      "Captured-state replays for Daikin / Mitsubishi / LG AC units. "
+      "~50% hit rate per brand (depends on the AC's stored state matching "
+      "the capture); usually one lands. Office HVAC roulette." },
+    { 0, nullptr, nullptr, nullptr, nullptr, nullptr },
+};
+
 static const menu_node_t MENU_IR[] = {
     { 't', "TV-B-Gone", "Kill nearby TVs", nullptr, feat_ir_tvbgone,
       "Cycles power-off IR codes for Sony, Samsung, LG, Panasonic, Philips, "
@@ -440,6 +596,76 @@ static const menu_node_t MENU_IR[] = {
     { 'r', "Remote", "Virtual Samsung remote", nullptr, feat_ir_remote,
       "Virtual Samsung TV remote. P=power, M=mute, +/-=volume, ;/.=channel, "
       "1-9=digits, I=source, H=home, B=back." },
+    { 'c', "Clone", "Multi-profile IR remote (Samsung/LG/Sony)", nullptr, feat_ir_clone,
+      "Pre-installed Samsung TV / LG TV / Sony TV remote profiles. Pick a "
+      "profile, hit the labeled keys to fire IR codes via the TX LED on GPIO 44. "
+      "v2 will add capture-from-real-remote + Flipper-compatible .ir files." },
+    { 'p', "Pranks", "10 one-shot IR pranks (power/vol/mute/cable/AC)",
+      MENU_IR_PRANKS, nullptr,
+      "Curated one-shot IR pranks layered on top of TV-B-Gone. Power-bomb "
+      "extends coverage to 27 brands + projectors + soundbars; channel/mute/ "
+      "source/sleep/caption pranks target Samsung+LG live TVs; AC chaos "
+      "replays Daikin/Mitsu/LG climate-control state." },
+    { 'x', "LED Test", "Verify IR LED pin + polarity", nullptr, feat_ir_test,
+      "Hardware diagnostic — drives candidate pins / polarities for 4 sec each. "
+      "Point a phone camera at the IR LED and report which step lights it up "
+      "purple/white. Tells us if GPIO 44 is right, if the LED is active-LOW, "
+      "or if it's on a different pin entirely." },
+    { 0, nullptr, nullptr, nullptr, nullptr, nullptr },
+};
+
+/* BadUSB sub-arsenal. Original 5 built-in payloads stay behind
+ * "Built-in"; the per-OS submenus pull from badusb_extras.h (106
+ * UberGuidoZ-derived); the Pranks entry opens the vibe-organized
+ * highlight reel (badusb_pranks_data.h, 59 entries × 7 categories). */
+static const menu_node_t MENU_BADUSB[] = {
+    { 'b', "Built-in", "5 starter payloads (Hello/Notepad/Rickroll/Lock/Terminal)",
+      nullptr, feat_badusb,
+      "The original POSEIDON BadUSB shortlist. Hello (types a greeting), "
+      "Notepad (opens Notepad and types a pwned message), Rickroll (opens "
+      "the YouTube link via Win+R), Lock (Win+L instant lockscreen), "
+      "Terminal (Ctrl+Alt+T then writes a file). Pick a number 1-5 to fire, "
+      "or T to type freeform. Best for quick demos." },
+    { 'p', "Pranks", "Vibe-organized chaos: Gaslight / Chaos / Lockers / Doom / Hack / Loud / Classic",
+      nullptr, feat_badusb_pranks,
+      "The showpiece. 59 prank payloads across 7 vibe categories — "
+      "GASLIGHT (subtle slow-burn like auto-correct sabotage + cursor jiggle), "
+      "VISIBLE CHAOS (notepad spam, explorer bomb), LOCKERS (instant lock + "
+      "delayed-fuse), BROWSER DOOM (rickrolls, tab floods, hampter), "
+      "FAKE HACK (BSOD drops, matrix rain, ransom sim), LOUD (TTS + siren), "
+      "CLASSIC (the all-time greats). Each prank tagged with target OS — "
+      "pick one that matches the target's machine." },
+    { 'w', "Windows", "44 payloads — info-gathering, opens, vandalism",
+      nullptr, feat_badusb_win,
+      "44 Windows-specific payloads from the UberGuidoZ library. Run-dialog "
+      "openers, WiFi-profile dumpers (local file only — no exfil), browser "
+      "opens, theme/wallpaper changes, system-info printouts to Desktop. "
+      "All payloads are self-contained: no URLs to attacker-hosted servers, "
+      "no edit-the-script placeholders, no credential exfil." },
+    { 'm', "macOS", "24 payloads — Spotlight openers, Terminal scripts",
+      nullptr, feat_badusb_mac,
+      "24 macOS payloads — Spotlight Cmd-Space openers, Terminal scripts that "
+      "run local-only commands, AppleScript snippets, system-info to "
+      "~/Desktop. Same filtering as Windows: self-contained, no exfil, no "
+      "edit-required placeholders." },
+    { 'l', "Linux", "19 payloads — terminal openers, info commands",
+      nullptr, feat_badusb_linux,
+      "19 Linux payloads — Ctrl+Alt+T terminal openers, harmless info-print "
+      "commands (uname / ip a / dmesg | tail), local-only file ops, and a "
+      "few package-manager-curious one-liners. Assumes a desktop distro "
+      "with a graphical terminal." },
+    { 'a', "Android", "11 payloads — App search openers, Settings shortcuts",
+      nullptr, feat_badusb_android,
+      "11 Android payloads — requires a USB-OTG cable AND target has USB "
+      "debugging or HID-class accepted. App-drawer search openers, "
+      "Settings deep-links, screenshot triggers. Works with stock Android "
+      "11+ when the phone accepts the Cardputer as a HID keyboard." },
+    { 'c', "ChromeOS", "8 payloads — Chrome shortcuts + crosh openers",
+      nullptr, feat_badusb_chrome,
+      "8 ChromeOS payloads — Chrome browser shortcuts, crosh terminal "
+      "opener (Ctrl+Alt+T), Settings deep-links, screenshot triggers. "
+      "Useful for school-issued Chromebooks where you can plug in a "
+      "USB-C HID device." },
     { 0, nullptr, nullptr, nullptr, nullptr, nullptr },
 };
 
@@ -608,6 +834,12 @@ static const menu_node_t MENU_RADIO[] = {
     { 'g', "GPS fix", "Live GNSS position page", nullptr, feat_gps_fix,
       "Shows current fix from the ATGM336H: lat, lon, alt, sats, HDOP, "
       "speed, UTC. Background NMEA poller runs from boot." },
+    { 't', "SATCOM", "Satellite tracker (TLE + SGP4)", nullptr, feat_satcom,
+      "Live satellite tracking with TLE auto-fetch from Celestrak. Pick "
+      "ISS / Tiangong / NOAA / ham birds from a favorites list, see live "
+      "polar skyplot + az/el/lat/lon/alt, predict next 24h passes >10°. "
+      "Observer from GPS, time from NTP or GPS. Source patterned after "
+      "adammelancon/cardputer-satellite-tracker." },
     { 0, nullptr, nullptr, nullptr, nullptr, nullptr },
 };
 
@@ -638,17 +870,24 @@ static const menu_node_t MENU_SYS[] = {
       "still work in Carousel mode. Persists to NVS." },
     { 'v', "Screensaver", "Toggle 2-min idle takeover", nullptr, feat_screensaver_toggle,
       "Flip the screensaver on/off. After 2 minutes of no input, takes "
-      "over the screen with a theme-appropriate animation: POSEIDON gets "
-      "WARDRIVE.cinema (fake AP scroll, channel hop, capture flashes, "
-      "magenta packet streaks), MATRIX gets full-screen phosphor rain at "
-      "max brightness, E-INK gets a Breathing wordmark fade-in/out that "
-      "drifts position to prevent burn-in. Any key wakes it." },
+      "over the screen with a painter from the pool. Any key wakes it." },
+    { 'p', "Saver Pick", "Choose specific screensaver / shuffle", nullptr, feat_screensaver_picker,
+      "Pool of 10 theme-tinting screensavers: WARDRIVE cinema, MATRIX rain, "
+      "BREATHING wordmark, DEEP SCAN sonar, PORT SCAN visualizer, HEX CASCADE "
+      "with decoded reveals, TERMINAL CRACK fake hashcat, NEURAL ARC pulsing "
+      "mesh, GLITCH BSOD chromatic flashes, TIDE WAVES drift. SHUFFLE = random "
+      "rotation excluding the last-shown one. P key in the picker previews the "
+      "currently-highlighted painter; ENTER commits to NVS." },
     { 'n', "Sound", "Speaker volume + mute + SFX test", nullptr, feat_sfx_settings,
       "Adjust SFX volume 0-10, toggle global mute. Every menu click, "
       "deauth, handshake capture, and splash boot sequence has a tone. "
       "Settings persist to NVS." },
+    /* Phone Bridge menu entry disabled — feature pulled out for heap-
+     * budget reasons (broke Triton). Restore alongside the lib_deps in
+     * platformio.ini when re-enabling. */
     { 'a', "About", "Build info", nullptr, feat_about,
       "Version, tagline, repo URL." },
+    /* OTA Update removed 2026-05-27 — flow was buggy. */
     { 0, nullptr, nullptr, nullptr, nullptr, nullptr },
 };
 
@@ -656,6 +895,42 @@ static const menu_node_t MENU_SYS[] = {
  * src/features/saltyjack/saltyjack_menu.cpp. The root 'j' entry below
  * dispatches directly to feat_saltyjack_root() instead of using a
  * POSEIDON menu_node_t tree. */
+
+static const menu_node_t MENU_NRF52[] = {
+    { 's', "Scan", "BLE 5 full scan (all PHYs)", nullptr, feat_nrf52_scan,
+      "Adafruit Bluefruit Feather nRF52840 over UART1 (G3 TX / G4 RX). "
+      "Active scan on 1M + 2M + Coded PHYs. Lists MAC, RSSI, name, PHY. "
+      "Captures BLE 5 LR beacons the ESP32-S3 NimBLE stack can't see." },
+    { 'l', "Long Range", "BLE 5 Coded PHY S=8 (4x range)", nullptr, feat_nrf52_longrange,
+      "Coded PHY S=8 scan — picks up advertisers up to ~4x typical BLE "
+      "range. Useful for finding distant LR-mode trackers, industrial "
+      "sensors, and LE Audio devices broadcasting on Coded." },
+    { 'n', "Sniffer", "All BLE adv + decode + pcap", nullptr, feat_nrf52_sniff,
+      "Passive sniff every BLE advertisement on every channel. Streams "
+      "decoded packets to the screen and dumps a pcap to SD for offline "
+      "Wireshark." },
+    { 'z', "Zigbee", "802.15.4 sniffer (Zigbee/Thread)", nullptr, feat_nrf52_zigbee,
+      "IEEE 802.15.4 sniffer. Picks up Zigbee, Thread, OpenThread, "
+      "Matter-over-Thread mesh traffic. Alternative to C5 if you don't "
+      "have the C5 node nearby." },
+    { 'm', "MITM", "BLE 5 connection follow + hijack", nullptr, feat_nrf52_mitm,
+      "Selectively follow a BLE connection, jam the slave on its hop "
+      "channel and hijack the link. BTLEJack-style, but with full BLE 5 "
+      "PHY support. Requires nRF52 FW v2." },
+    { 'r', "MITM Relay", "Active BLE GATT proxy", nullptr, feat_nrf52_ble_mitm_relay,
+      "Connect outbound to a real BLE peripheral while advertising a "
+      "clone of it to the victim. Relays every GATT op between them, "
+      "logs to SD." },
+    { 'k', "Scout+Strike", "Recon → pick → kill workflow", nullptr, feat_nrf52_scout_strike,
+      "Two-phase attack pipeline: scout (passive scan + classify), "
+      "operator picks target, strike (jam / disconnect / deauth via "
+      "ESP32 fallback)." },
+    { 'c', "WiFi+BLE Combo", "Deauth → BLE pairing capture", nullptr, feat_nrf52_wifi_ble_combo,
+      "ESP32-S3 deauths a target smart-home device off WiFi; nRF52 is "
+      "already listening to capture the BLE provisioning handshake when "
+      "the device falls back to BLE setup mode. Unique to POSEIDON." },
+    { 0, nullptr, nullptr, nullptr, nullptr, nullptr },
+};
 
 const menu_node_t MENU_ROOT_CHILDREN[] = {
     { 'w', "WiFi", "WiFi recon + attacks + wardrive", MENU_WIFI, nullptr,
@@ -674,10 +949,18 @@ const menu_node_t MENU_ROOT_CHILDREN[] = {
       "deauths seen APs to force reconnects, captures PMKIDs and full 4-ways. "
       "Has a personality + mood face. Includes a simple RL layer that learns "
       "which channels produce the most captures in your environment." },
-    { 'u', "BadUSB", "USB-HID payload runner", nullptr, feat_badusb,
-      "Emulates a USB HID keyboard when plugged into a computer. Runs "
-      "DuckyScript-lite payloads from the built-in library (Hello, Notepad, "
-      "Rickroll, Lock, Terminal) or type freeform to send as keystrokes." },
+    { 'f', "Feather", "nRF52840 BLE5 / Zigbee / MITM", MENU_NRF52, nullptr,
+      "Adafruit Bluefruit Feather nRF52840 via UART hat (G3 TX / G4 RX). "
+      "Unlocks BLE 5 raw PHY sniffing (incl. Coded PHY long-range), "
+      "802.15.4 / Zigbee / Thread sniff+inject, and BLE connection MITM — "
+      "capabilities the ESP32-S3 NimBLE stack can't reach. Mutually "
+      "exclusive with LoRa / Hydra hats." },
+    { 'u', "BadUSB", "USB-HID payload runner + 165+ payloads", MENU_BADUSB, nullptr,
+      "USB HID keyboard emulator. Plug into a target computer and it appears "
+      "as a real keyboard — types DuckyScript-lite payloads from the built-in "
+      "library, the OS-organized UberGuidoZ subset, or the curated PRANK reel. "
+      "Pick the OS the target is running for highest-success scripts; pick "
+      "Pranks for the showpiece vibe-organized chaos library." },
     { 'n', "Network", "Port scan / ping / DNS / connect", MENU_NET, nullptr,
       "LAN tools that require joining a WiFi network first. TCP port scanner, "
       "live ping, DNS lookup." },
@@ -731,6 +1014,68 @@ static int count_children(const menu_node_t *parent)
     int n = 0;
     for (const menu_node_t *c = parent->children; c && c->hotkey; ++c) ++n;
     return n;
+}
+
+/* Lightweight idle-path companion to draw_menu. Repaints ONLY the gutter
+ * strips that don't overlap row text — the strip between the magenta
+ * underline and the first row, and the strip(s) below the last visible
+ * row. ui_ambient_tick is called against the FULL body bounds inside a
+ * setClipRect window so motes / grid / packet positions stay coherent
+ * across frames instead of looping in a strip-sized box. Scroll arrows
+ * are re-stamped because their bounding boxes overlap the strips. */
+static void draw_menu_anim(const menu_node_t *parent, int cursor)
+{
+    if (!ui_ambient_enabled()) return;
+    auto &d = M5Cardputer.Display;
+    int n = count_children(parent);
+    if (n <= 0) return;
+
+    const int rows    = 7;
+    const int row_h   = 13;
+    const int first_y = BODY_Y + 18;
+    const int visible = (n < rows) ? n : rows;
+    const int last_row_bottom = first_y + visible * row_h;
+
+    bool hint_drawn = false;
+    int  hint_y     = last_row_bottom + 2;
+    if (cursor >= 0 && cursor < n) {
+        const menu_node_t *sel = &parent->children[cursor];
+        if (sel->hint && hint_y < FOOTER_Y - 10) hint_drawn = true;
+    }
+    const int hint_bottom = hint_y + 8;
+
+    auto paint_strip = [&](int y, int h) {
+        if (h <= 0) return;
+        d.fillRect(0, y, SCR_W, h, T_BG);
+        d.setClipRect(0, y, SCR_W, h);
+        ui_ambient_tick(0, BODY_Y, SCR_W, BODY_H);
+    };
+
+    /* Strip 1: between magenta underline (BODY_Y+13) and first row. */
+    paint_strip(BODY_Y + 14, first_y - (BODY_Y + 14));
+    /* Strip 2: below last visible row to either hint top or footer. */
+    int s2_end = hint_drawn ? hint_y : (FOOTER_Y - 1);
+    paint_strip(last_row_bottom, s2_end - last_row_bottom);
+    /* Strip 3: below hint to footer. */
+    if (hint_drawn) paint_strip(hint_bottom, (FOOTER_Y - 1) - hint_bottom);
+
+    d.clearClipRect();
+
+    /* Re-stamp scroll arrows — their triangles overlap the strip zones. */
+    int first = cursor - rows / 2;
+    if (first < 0) first = 0;
+    if (first + rows > n) first = max(0, n - rows);
+    if (first > 0) {
+        d.fillTriangle(SCR_W - 7, first_y - 3,
+                       SCR_W - 3, first_y - 3,
+                       SCR_W - 5, first_y - 6, T_ACCENT2);
+    }
+    if (first + rows < n) {
+        int ay = first_y + rows * row_h - 2;
+        d.fillTriangle(SCR_W - 7, ay,
+                       SCR_W - 3, ay,
+                       SCR_W - 5, ay + 3, T_ACCENT2);
+    }
 }
 
 static void draw_menu(const menu_node_t *parent, int cursor)
@@ -944,10 +1289,20 @@ static void run_submenu(const menu_node_t *parent)
                 ui_draw_footer(FOOTER_HINTS);
                 draw_menu(parent, cursor);
             }
+            /* Idle ambient tick — only repaints gutter strips between rows
+             * so text never strobes. ~33 ms cadence matches carousel. */
+            static uint32_t last_anim = 0;
+            uint32_t now = millis();
+            if (now - last_anim > 33) {
+                last_anim = now;
+                draw_menu_anim(parent, cursor);
+            }
             delay(10);
             continue;
         }
 
+        Serial.printf("[MK] k=0x%04X p=\"%s\" c=%d\n", k,
+                      parent && parent->label ? parent->label : "?", cursor);
         if (k == PK_ESC) return;
         if (k == '=' || k == '?') {
             show_info(&parent->children[cursor]);
@@ -958,9 +1313,15 @@ static void run_submenu(const menu_node_t *parent)
         if (k == PK_ENTER) {
             const menu_node_t *sel = &parent->children[cursor];
             if (sel->action) {
+                Serial.printf("[FEAT_ENTER] %s\n", sel->label);
                 g_current_feature_item = sel;
                 sel->action();
                 g_current_feature_item = nullptr;
+                /* Defensive IR park — IR features should self-park HIGH
+                 * but if any path skips that, the LED stays glowing.
+                 * Hard-set OFF here after every feature returns. */
+                pinMode(44, OUTPUT); digitalWrite(44, LOW);
+                Serial.printf("[FEAT_EXIT] %s\n", sel->label);
                 ui_draw_status(radio_name(), "");
                 ui_draw_footer(FOOTER_HINTS);
                 draw_menu(parent, cursor);
@@ -988,9 +1349,13 @@ static void run_submenu(const menu_node_t *parent)
                     cursor = i;
                     draw_menu(parent, cursor);
                     if (ch->action) {
+                        Serial.printf("[FEAT_ENTER] %s\n", ch->label);
                         g_current_feature_item = ch;
                         ch->action();
                         g_current_feature_item = nullptr;
+                        /* Defensive IR park — same as above. */
+                        pinMode(44, OUTPUT); digitalWrite(44, LOW);
+                        Serial.printf("[FEAT_EXIT] %s\n", ch->label);
                         ui_draw_status(radio_name(), "");
                         ui_draw_footer(FOOTER_HINTS);
                         draw_menu(parent, cursor);

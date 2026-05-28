@@ -63,7 +63,11 @@ static bool try_mount(int hz, bool fmt_if_fail, const char *tag)
     delay(10);
 
     sd_spi.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
-    bool ok = SD.begin(SD_CS, sd_spi, hz, "/sd", 5, fmt_if_fail);
+    /* max_files=2 (was 5). Each handle reserves ~600 B of FATFS state +
+     * a sector buffer slot. Our features only ever hold 1-2 files open
+     * simultaneously (CSV log + transient read), so 5 was wasted heap.
+     * Reclaiming ~2 KB matters when WiFi has already eaten the rest. */
+    bool ok = SD.begin(SD_CS, sd_spi, hz, "/sd", 2, fmt_if_fail);
     Serial.printf("[sd] %-12s @ %d Hz fmt=%d -> %s\n", tag, hz, fmt_if_fail, ok ? "OK" : "FAIL");
     return ok;
 }
@@ -72,29 +76,16 @@ bool sd_mount(void)
 {
     if (s_mounted) return true;
 
-    /* Tier 1: HSPI fast (most reliable on the Cardputer). */
-    if (try_mount(SD_FREQ,    false, "HSPI fast"))   { s_mounted = true; return true; }
-    if (try_mount(10000000,   false, "HSPI half"))   { s_mounted = true; return true; }
-    if (try_mount( 4000000,   false, "HSPI slow"))   { s_mounted = true; return true; }
-
-    /* Tier 2: try the OTHER SPI bus in case display is using HSPI on
-     * this build. Rebind sd_spi to FSPI. */
-    sd_spi.end();
-    sd_spi.~SPIClass();
-    new (&sd_spi) SPIClass(FSPI);
-    if (try_mount(SD_FREQ,    false, "FSPI fast"))   { s_mounted = true; return true; }
-    if (try_mount( 4000000,   false, "FSPI slow"))   { s_mounted = true; return true; }
-
-    /* Tier 3: card has no FAT or is corrupted — let the driver format
-     * it. Last resort, destructive. */
-    sd_spi.end();
-    sd_spi.~SPIClass();
-    new (&sd_spi) SPIClass(HSPI);
-    if (try_mount( 4000000,   true,  "HSPI format")) { s_mounted = true; return true; }
-    sd_spi.end();
-    sd_spi.~SPIClass();
-    new (&sd_spi) SPIClass(FSPI);
-    if (try_mount( 4000000,   true,  "FSPI format")) { s_mounted = true; return true; }
+    /* HSPI only. NEVER probe FSPI — that's M5GFX's bus for the TFT, and
+     * rebinding sd_spi to FSPI (as the prior Tier 2/3 code did) calls
+     * SPIClass::begin on a bus the display driver is actively using,
+     * which trashes the display SPI state and causes subsequent
+     * fillScreen/draw calls to block forever on a transaction
+     * semaphore. We tolerate "no SD" gracefully — destructive format-
+     * on-fail is reachable via the Tools -> SD Format menu, not boot. */
+    if (try_mount(SD_FREQ,    false, "HSPI fast")) { s_mounted = true; return true; }
+    if (try_mount(10000000,   false, "HSPI half")) { s_mounted = true; return true; }
+    if (try_mount( 4000000,   false, "HSPI slow")) { s_mounted = true; return true; }
 
     return false;
 }
@@ -123,14 +114,14 @@ File sdlog_open(const char *stem, const char *header_line,
 
 bool sd_format(void)
 {
-    /* SD must be known to the FAT layer. Mount with format-on-fail =
-     * true so even a totally-fresh card gets a filesystem. */
-    SD.end();
-    sd_spi.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
-    if (!SD.begin(SD_CS, sd_spi, SD_FREQ, "/sd", 5, true)) {
-        s_mounted = false;
-        return false;
-    }
+    /* Use try_mount with format-on-fail = true so we hit the same
+     * pull-up + CS-toggle init sequence as the regular mount path.
+     * Without those, post-format the bus is left in a half-configured
+     * state and subsequent SD.open() calls from features (e.g.
+     * wardrive's CSV write) fail intermittently. */
+    s_mounted = false;
+    if (!try_mount(SD_FREQ, true,  "format fast"))
+        if (!try_mount(4000000, true,  "format slow")) return false;
     /* Nuke contents: walk root and delete everything. Arduino SD
      * doesn't expose FAT format directly, so a full clean is the
      * closest user-meaningful equivalent. */

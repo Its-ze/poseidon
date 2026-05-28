@@ -53,7 +53,18 @@ void wifi_scanner_run(const uint8_t requester[6],
 
     uint16_t n = 0;
     esp_wifi_scan_get_ap_num(&n);
-    if (n == 0) { ESP_LOGI(TAG, "scan done, 0 APs"); return; }
+    if (n == 0) {
+        ESP_LOGI(TAG, "scan done, 0 APs (sending terminator)");
+        /* Send empty-payload RESP_AP so POSEIDON's UI knows the scan
+         * completed (zero results vs in-progress are indistinguishable
+         * without this). */
+        posei_msg_t msg;
+        proto_init_msg(&msg, POSEI_TYPE_RESP_AP);
+        msg.seq = seq;
+        msg.payload_len = 0;
+        proto_send_to(requester, &msg);
+        return;
+    }
 
     wifi_ap_record_t *records = malloc(sizeof(wifi_ap_record_t) * n);
     if (!records) return;
@@ -87,6 +98,15 @@ void wifi_scanner_run(const uint8_t requester[6],
         proto_send_to(requester, &msg);
         i += batch;
         vTaskDelay(pdMS_TO_TICKS(30));
+    }
+    /* Final terminator — zero-payload RESP_AP marks end of stream so
+     * POSEIDON knows all batches have arrived and the scan is done. */
+    {
+        posei_msg_t fin;
+        proto_init_msg(&fin, POSEI_TYPE_RESP_AP);
+        fin.seq = seq;
+        fin.payload_len = 0;
+        proto_send_to(requester, &fin);
     }
     free(records);
 }

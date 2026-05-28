@@ -148,13 +148,18 @@ static void broadcast_deauth(const uint8_t *bssid, uint8_t ch, int bursts)
 void feat_wifi_clients_all(void)
 {
     radio_switch(RADIO_WIFI);
-    WiFi.mode(WIFI_STA);
+    wifi_lean_sta_init();
 
     s_all_n = 0;
     s_all_ch = 1;
     s_locked = false;
     s_running = true;
 
+    /* Explicit MASK_ALL — capture silently dies on IDF 5.5 without it. */
+    static const wifi_promiscuous_filter_t s_all_filter = {
+        .filter_mask = WIFI_PROMIS_FILTER_MASK_ALL
+    };
+    esp_wifi_set_promiscuous_filter(&s_all_filter);
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_promiscuous_rx_cb(cb);
     esp_wifi_set_channel(s_all_ch, WIFI_SECOND_CHAN_NONE);

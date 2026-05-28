@@ -348,7 +348,7 @@ static wp_verdict_t run_probe(const wp_target_t &t)
     s_have_bredr = false;
 
     NimBLEClient *c = NimBLEDevice::createClient();
-    c->setConnectTimeout(6);
+    c->setConnectTimeout(6000);  /* milliseconds — was 6 ms */
 
     NimBLEAddress addr((uint8_t *)t.addr, t.addr_type);
     if (!c->connect(addr)) {
@@ -628,8 +628,11 @@ void feat_ble_whisperpair(void)
     scan->setActiveScan(true);
     /* Aggressive scan — match window to interval for full-duty scanning,
      * increasing the odds of catching a low-duty Fast Pair advertisement. */
-    scan->setInterval(100);
-    scan->setWindow(99);
+    /* Bruce-base recommends 97/67 over 100/99 — the latter is ~99%
+     * duty cycle locked on adv channel 37, missing adverts on 38/39.
+     * 97/67 hops channels evenly with breathing room. */
+    scan->setInterval(97);
+    scan->setWindow(67);
     scan->start(0, false);
 
     ui_draw_footer(";/.=move  ENTER=probe  R=rescan  `=back");

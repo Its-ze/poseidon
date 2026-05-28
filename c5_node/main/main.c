@@ -192,6 +192,23 @@ static void on_recv(const esp_now_recv_info_t *info,
         pmkid_capture_stop();
         hs_capture_stop();
         break;
+    /* v3 CMDs that the C5 firmware hasn't implemented yet. POSEIDON-side
+     * stubs send these to keep the API surface alive; here we just log.
+     * Each will get a real handler when its feature lands. */
+    case POSEI_TYPE_CMD_CLIENTS_HUNT:
+    case POSEI_TYPE_CMD_CLIENTS_AP:
+    case POSEI_TYPE_CMD_BEACON_SPAM:
+    case POSEI_TYPE_CMD_PROBE_SNIFF:
+    case POSEI_TYPE_CMD_DEAUTH_DETECT:
+    case POSEI_TYPE_CMD_KARMA:
+    case POSEI_TYPE_CMD_APCLONE:
+    case POSEI_TYPE_CMD_SPECTRUM:
+    case POSEI_TYPE_CMD_CIW:
+        ESP_LOGW(TAG, "v3 CMD %u not implemented yet, dropping seq=%u", m->type, m->seq);
+        break;
+    default:
+        ESP_LOGW(TAG, "unknown CMD type=%u seq=%u", m->type, m->seq);
+        break;
     }
 }
 

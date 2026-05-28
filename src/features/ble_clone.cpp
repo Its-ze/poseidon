@@ -25,7 +25,12 @@ static volatile uint16_t s_last_conn_handle = 0;
  * onDisconnect also gets an int reason. */
 class clone_srv_cb : public NimBLEServerCallbacks {
     void onConnect(NimBLEServer *srv, NimBLEConnInfo &info) override {
-        (void)srv; (void)info;
+        (void)srv;
+        /* Capture the conn handle so exit-time ble_gap_terminate
+         * actually targets a real connection. Previously the handle
+         * was left at 0 and terminate returned ENOTCONN — peer would
+         * stay connected after we thought we'd dropped it. */
+        s_last_conn_handle = info.getConnHandle();
         s_conn_count++;
         s_currently_connected = true;
         NimBLEDevice::startAdvertising();

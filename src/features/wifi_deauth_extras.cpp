@@ -125,7 +125,7 @@ static void db_scan_populate(void)
 void feat_wifi_deauth_broadcast(void)
 {
     radio_switch(RADIO_WIFI);
-    WiFi.mode(WIFI_STA);
+    wifi_lean_sta_init();
 
     auto &d = M5Cardputer.Display;
     ui_clear_body();
@@ -142,6 +142,13 @@ void feat_wifi_deauth_broadcast(void)
         return;
     }
 
+    /* Explicit MASK_ALL — passing nullptr (or leaving default) silently
+     * disables capture on IDF 5.5 which on some builds also gates the
+     * raw 80211_tx hook. Match the wifi_deauth.cpp / triton.cpp pattern. */
+    static const wifi_promiscuous_filter_t s_all_filter = {
+        .filter_mask = WIFI_PROMIS_FILTER_MASK_ALL
+    };
+    esp_wifi_set_promiscuous_filter(&s_all_filter);
     esp_wifi_set_promiscuous(true);
     s_b_sent = 0;
     s_b_errs = 0;
@@ -282,21 +289,34 @@ static void det_cb(void *buf, wifi_promiscuous_pkt_type_t type)
 void feat_wifi_deauth_detect(void)
 {
     radio_switch(RADIO_WIFI);
-    WiFi.mode(WIFI_STA);
+    wifi_lean_sta_init();
+    /* Explicit MASK_ALL — without this, detector counts stay at 0 on
+     * IDF 5.5 even though the radio appears configured. */
+    static const wifi_promiscuous_filter_t s_all_filter = {
+        .filter_mask = WIFI_PROMIS_FILTER_MASK_ALL
+    };
+    esp_wifi_set_promiscuous_filter(&s_all_filter);
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_promiscuous_rx_cb(det_cb);
 
     s_det_count = 0;
     s_det_total = 0;
     uint8_t ch = 1;
+    bool auto_hop = true;       /* default: cycle channels 1-13 every 500ms */
+    uint32_t last_hop = 0;
     esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
 
     ui_clear_body();
-    ui_draw_footer(";/.=channel  `=stop");
+    ui_draw_footer(";/.=ch  H=hop  `=stop");
     uint32_t last = 0;
     uint32_t window_ms = millis();
     uint32_t window_count = 0;
     while (true) {
+        if (auto_hop && millis() - last_hop > 500) {
+            last_hop = millis();
+            ch = (ch % 13) + 1;
+            esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
+        }
         if (millis() - last > 300) {
             last = millis();
             if (millis() - window_ms > 1000) {
@@ -327,8 +347,9 @@ void feat_wifi_deauth_detect(void)
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(20); continue; }
         if (k == PK_ESC) break;
-        if (k == ';' || k == PK_UP)   { if (ch < 13) { ch++; esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE); } }
-        if (k == '.' || k == PK_DOWN) { if (ch > 1)  { ch--; esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE); } }
+        if (k == ';' || k == PK_UP)   { auto_hop = false; if (ch < 13) { ch++; esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE); } }
+        if (k == '.' || k == PK_DOWN) { auto_hop = false; if (ch > 1)  { ch--; esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE); } }
+        if (k == 'h' || k == 'H')     { auto_hop = !auto_hop; last_hop = millis(); }
     }
     esp_wifi_set_promiscuous(false);
 }

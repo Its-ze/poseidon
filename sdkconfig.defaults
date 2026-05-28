@@ -1,0 +1,43 @@
+# sdkconfig.defaults — POSEIDON WiFi buffer + memory overrides.
+#
+# Imported from M5PORKCHOP (0ct0sec/M5PORKCHOP/sdkconfig.defaults) which
+# was tuned for sustained packet-capture + raw-TX on the same ESP32-S3
+# hardware. POSEIDON was running stock IDF defaults (STATIC_RX=10,
+# DYNAMIC_RX=32, DYNAMIC_TX=32) which consume ~25 KB more heap than
+# necessary. With AP+STA mode the buffer pools were doubling, leaving
+# only ~28 KB free heap during Triton sessions and triggering both
+# ESP_ERR_NO_MEM (257) on TX and eventual "Arduino Event Malloc Failed"
+# panics.
+#
+# Reducing to Porkchop's values frees +15-25 KB heap with no observable
+# loss in scan/capture quality — Porkchop runs handshake captures at
+# multiple frames/sec sustained with these settings.
+
+# Coredump disabled — saves ~24 KB flash, we don't use it.
+CONFIG_ESP_COREDUMP_ENABLE=n
+
+# WiFi RX buffer counts: minimums for sustained promisc-mode capture
+# without overflow. Static = 4 (IDF minimum), Dynamic = 8.
+CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM=4
+CONFIG_ESP32_WIFI_DYNAMIC_RX_BUFFER_NUM=8
+
+# WiFi TX buffer pool: 24 dynamic buffers. Porkchop ships 16, stock is
+# 32. 16 starved STORM-mode bursts (6 bursts × 4 frames × multiple APs
+# in a tight loop → counter stuck at 4 after first round). 24 keeps
+# most of the heap savings (8 fewer than stock = ~12 KB freed) while
+# absorbing STORM's burst load. Bump to 32 if STORM still throttles.
+CONFIG_ESP32_WIFI_TX_BUFFER_TYPE=1
+CONFIG_ESP32_WIFI_DYNAMIC_TX_BUFFER_NUM=24
+
+# mbedTLS dynamic content buffer — saves heap when TLS isn't active.
+# (We don't currently use TLS but features like net_lanrecon banner-grab
+# could in the future. Keeping conservative.)
+CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
+CONFIG_MBEDTLS_SSL_MAX_CONTENT_LEN=2048
+
+# --- NimBLE memory reductions REMOVED 2026-05-26 ---
+# The HCI_EVT_LO/HI_BUF_COUNT reductions (4/8) caused NimBLEDevice::init
+# to hang on the BT controller's HCI event-queue allocation. NimBLE
+# expects defaults (10/30) to be available; smaller pools deadlock the
+# init handshake. Bad-KB / BlueDucky stay broken without these, but the
+# rest of BLE works again with defaults.

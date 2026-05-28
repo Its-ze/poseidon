@@ -139,7 +139,10 @@ idle:
             d.drawPixel(x, SCR_H - 2, C_MAG_HI);
         }
 
-        if (input_poll() != PK_NONE) return;
+        if (input_poll() != PK_NONE) {
+            Serial.println("[SPLASH_EXIT]");
+            return;
+        }
         delay(80);
     }
 }

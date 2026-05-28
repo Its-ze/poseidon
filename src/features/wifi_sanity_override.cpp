@@ -36,3 +36,15 @@ extern "C" int ieee80211_raw_frame_sanity_check(int32_t arg, int32_t arg2, int32
     if (arg == 31337) return 1;
     return 0;   /* allow everything, including deauth/disassoc */
 }
+
+/* Last esp_wifi_80211_tx return code from wifi_deauth_pair(). Lives
+ * here so it's in a stable TU (next to the sanity override which is
+ * always linked). Updated by wifi_deauth_frame.h after every burst,
+ * displayed on Triton's UI so we can debug "no TX" without serial.
+ *
+ * Sentinel -999 = wifi_deauth_pair has never been called this session
+ * (function is gated behind BSSID list / target presence checks).
+ * Any other value = real return code from the last esp_wifi_80211_tx
+ * call. 0=ESP_OK, 257=ESP_ERR_NO_MEM, 258=ESP_ERR_INVALID_ARG,
+ * 12289=ESP_ERR_WIFI_NOT_INIT. */
+volatile int wifi_deauth_last_rc = -999;

@@ -671,9 +671,17 @@ void feat_nrf24_jammer(void)
         if (active) {
             const jam_preset_t &p = PRESETS[sel];
             if (jam_mode == 0) {
-                /* CW carrier hop. */
+                /* CW carrier hop. setChannel alone DOESN'T move the
+                 * const-carrier TX — it just sets the channel register
+                 * for the next non-CW operation. To actually hop the
+                 * carrier we have to stop + restart it on each channel.
+                 * Bug from audit 2026-05-25: previously the loop just
+                 * called setChannel() and the carrier sat locked to
+                 * chs[0] the entire time. */
                 for (int i = 0; i < p.count; i++) {
+                    rf.stopConstCarrier();
                     rf.setChannel(p.chs[i]);
+                    rf.startConstCarrier(RF24_PA_MAX, p.chs[i]);
                     delayMicroseconds(esp_random() % 60 + 20);
                 }
             } else {

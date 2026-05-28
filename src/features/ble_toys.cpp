@@ -101,7 +101,7 @@ static int s_intensity = 0;
 static bool connect_lovense(const toy_t &t)
 {
     if (!s_client) s_client = NimBLEDevice::createClient();
-    s_client->setConnectTimeout(6);
+    s_client->setConnectTimeout(6000);  /* milliseconds — was 6 ms */
     uint8_t mac[6]; memcpy(mac, t.addr, 6);
     NimBLEAddress addr(mac, t.addr_type);
     if (!s_client->connect(addr)) return false;

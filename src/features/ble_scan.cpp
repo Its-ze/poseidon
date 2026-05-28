@@ -20,6 +20,7 @@
 #include "menu.h"
 #include "ble_types.h"
 #include "ble_db.h"
+#include "../sigdb_bt.h"
 #include "sd_helper.h"
 #include <NimBLEDevice.h>
 #include <SD.h>
@@ -90,6 +91,14 @@ static void classify(const NimBLEAdvertisedDevice *d, char *out, size_t out_sz)
                                out, out_sz);
     if (got) return;
 
+    /* sigdb_bt fallback — GhostBLE's curated 70-entry BT-SIG company-ID
+     * table. First two LE bytes of manufacturer data are the company ID. */
+    if (!md.empty() && md.size() >= 2) {
+        uint16_t cid = (uint16_t)((uint8_t)md[0] | ((uint8_t)md[1] << 8));
+        const char *nm = bt_mfr_name(cid);
+        if (nm) { snprintf(out, out_sz, "%s", nm); return; }
+    }
+
     /* Service UUID fallback. NimBLE stringifies 16-bit UUIDs as the
      * full 128-bit form "0000XXXX-0000-1000-8000-00805f9b34fb" where
      * XXXX is the 16-bit value (chars 4-8), NOT the trailing 4 chars. */
@@ -110,6 +119,9 @@ static void classify(const NimBLEAdvertisedDevice *d, char *out, size_t out_sz)
             }
             if (got16) {
                 const char *nm = ble_db_svc_uuid(u16);
+                if (nm) { snprintf(out, out_sz, "%s", nm); return; }
+                /* sigdb_bt extras — Eddystone, Fast Pair, Drone RID, etc. */
+                nm = bt_svc_name(u16);
                 if (nm) { snprintf(out, out_sz, "%s", nm); return; }
             }
         }
@@ -330,7 +342,20 @@ static void start_scan(void)
 
 void feat_ble_scan(void)
 {
-    radio_switch(RADIO_BLE);
+    Serial.printf("[ble_scan] feat_entry heap=%u bt_status=%d\n",
+                  (unsigned)ESP.getFreeHeap(),
+                  (int)esp_bt_controller_get_status());
+    Serial.flush();
+    /* Skip radio_switch wrapper — call NimBLE init directly to isolate
+     * whether the hang is in radio.cpp's teardown chain or in NimBLE. */
+    if (!NimBLEDevice::isInitialized()) {
+        Serial.println("[ble_scan] calling NimBLEDevice::init directly"); Serial.flush();
+        bool ok = NimBLEDevice::init("");
+        Serial.printf("[ble_scan] direct init -> %d bt_status=%d heap=%u\n",
+                      (int)ok, (int)esp_bt_controller_get_status(),
+                      (unsigned)ESP.getFreeHeap());
+        Serial.flush();
+    }
     s_count = 0;
     s_filter[0] = '\0';
     s_cb_fire_count = 0;
@@ -487,7 +512,7 @@ void feat_ble_scan(void)
             uint16_t col = (x.rssi > -60) ? T_GOOD : (x.rssi > -80) ? T_WARN : T_BAD;
             d.fillRect(91, BODY_Y + 67, (bar_w - 2) * pct / 100, 5, col);
 
-            ui_draw_footer("G=gatt C=clone H=hid X=flood P=spam W=whisper `=back");
+            ui_draw_footer("G=gatt C=clone H=hid X=flood P=spam W=whisper F=find `=back");
             while (true) {
                 uint16_t k2 = input_poll();
                 if (k2 == PK_NONE) { delay(20); continue; }
@@ -499,6 +524,14 @@ void feat_ble_scan(void)
                 if (ch == 'x') { feat_ble_flood(); break; }
                 if (ch == 'p') { feat_ble_spam();  break; }
                 if (ch == 'w') { feat_ble_whisperpair_from_target(); break; }
+                if (ch == 'f') {
+                    /* Geiger hot/cold finder on the currently-selected
+                     * BLE device (not just trackers). Same hunt UI as
+                     * the tracker locator, sourced from live scan. */
+                    extern void feat_ble_finder_hunt_mac(const uint8_t mac[6], const char *label);
+                    feat_ble_finder_hunt_mac(x.addr, x.name);
+                    break;
+                }
             }
             last_count = -1;  /* returning from sub-feature — force fresh paint */
             ui_draw_footer("/=flt S=save R=rescan ENTER=info `=back");

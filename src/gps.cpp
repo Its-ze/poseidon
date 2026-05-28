@@ -121,7 +121,12 @@ static void parse_rmc(char *line)
     s_fix.speed_kts  = (float)atof(f[7]);
     s_fix.course_deg = (float)atof(f[8]);
     strncpy(s_fix.date, f[9], sizeof(s_fix.date) - 1);
-    s_fix.valid   = true;
+    /* Do NOT set s_fix.valid here. RMC's "A" status only means the
+     * GPS module's NMEA layer is happy, not that we have a 3D fix —
+     * a 2D fix can report 'A' while GGA reports fix-quality=0. The
+     * prior code overwrote `alt_m` from a stale 3D fix with garbage
+     * because RMC flipped `valid=true` regardless. Let GGA gate
+     * validity via fix-quality≥1 (parse_gga does this correctly). */
     s_fix.time_ms = millis();
 }
 

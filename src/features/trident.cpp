@@ -231,23 +231,46 @@ void feat_trident(void)
     d.print("TRIDENT PC Bridge active");
     d.setTextColor(T_DIM, T_BG);
     d.setCursor(4, BODY_Y + 36);
-    d.print("streaming to desktop app");
-    d.setCursor(4, BODY_Y + 50);
-    d.print("ESC = disconnect");
+    d.print("run: trident_host.py");
+    /* Status line at BODY_Y+50 is updated by the main loop. */
     ui_draw_footer("ESC=exit  stream controlled by PC");
 
+    /* `Serial` evaluates false on ESP32-S3 USB-Serial-JTAG until the PC
+     * host actually opens the port. The prior code bailed instantly on
+     * `!Serial` which fired the moment the user pressed 'p' — before
+     * trident_host.py had a chance to connect. Stay alive and wait for
+     * the host instead. We still track "ever connected" so a true
+     * mid-session disconnect can be detected and surfaced. */
+    bool ever_connected = false;
+    uint32_t last_status_ms = 0;
     while (g_trident_cdc_active) {
         pump_rx();
-        if (!Serial) {
-            ui_toast("USB disconnected", T_BAD, 1000);
-            break;
+        bool now_connected = (bool)Serial;
+        if (now_connected) ever_connected = true;
+        else if (ever_connected) {
+            ui_toast("USB host gone", T_WARN, 800);
+            ever_connected = false;   /* require fresh re-connect notice */
         }
-        if (s_streaming && millis() - s_last_frame_ms >= FRAME_INTERVAL_MS) {
+        if (s_streaming && now_connected
+            && millis() - s_last_frame_ms >= FRAME_INTERVAL_MS) {
             send_frame();
             s_last_frame_ms = millis();
         }
+        /* Update the on-screen status line every ~500 ms so the user
+         * can see whether the host has connected yet. */
+        if (millis() - last_status_ms > 500) {
+            last_status_ms = millis();
+            auto &d = M5Cardputer.Display;
+            d.fillRect(4, BODY_Y + 50, SCR_W - 8, 12, T_BG);
+            d.setTextColor(now_connected ? T_GOOD : T_DIM, T_BG);
+            d.setCursor(4, BODY_Y + 50);
+            d.print(now_connected
+                    ? (s_streaming ? "host: streaming" : "host: idle")
+                    : "waiting for host...");
+        }
         uint16_t k = input_poll();
         if (k == PK_ESC) break;
+        delay(5);
     }
 
     s_streaming = false;

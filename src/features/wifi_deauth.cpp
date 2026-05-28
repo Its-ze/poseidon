@@ -205,7 +205,7 @@ static bool pmf_warning(void)
 void feat_wifi_deauth(void)
 {
     radio_switch(RADIO_WIFI);
-    WiFi.mode(WIFI_STA);
+    wifi_lean_sta_init();
 
     s_sent = 0;
     s_errs = 0;
@@ -232,7 +232,13 @@ void feat_wifi_deauth(void)
     esp_err_t ap_rc = wifi_silent_ap_begin(s_channel);
     Serial.printf("[deauth] silent_ap ch=%u rc=%d\n", s_channel, (int)ap_rc);
 
-    /* Sniffer callback already layered on top of the AP+promisc mode. */
+    /* Sniffer callback already layered on top of the AP+promisc mode.
+     * Explicit MASK_ALL filter — IDF 5.5 silently drops capture without
+     * one set. Same fix as wardrive/Triton. */
+    static const wifi_promiscuous_filter_t s_all_filter = {
+        .filter_mask = WIFI_PROMIS_FILTER_MASK_ALL
+    };
+    esp_wifi_set_promiscuous_filter(&s_all_filter);
     esp_wifi_set_promiscuous_rx_cb(sniff_cb);
 
     s_running = true;

@@ -114,7 +114,10 @@ static void promisc_cb(void *buf, wifi_promiscuous_pkt_type_t type)
     const uint8_t *bssid = p + 16;
     int idx = find_ap(bssid);
     if (idx < 0) {
-        if (s_ap_count >= WARDRIVE_MAX_APS) return;
+        if (s_ap_count >= WARDRIVE_MAX_APS) {
+            portEXIT_CRITICAL_ISR(&s_wdr_mux);
+            return;
+        }
         idx = s_ap_count++;
         memset(&s_aps[idx], 0, sizeof(wdr_ap_t));
         memcpy(s_aps[idx].bssid, bssid, 6);
@@ -176,17 +179,25 @@ static void hop_task(void *)
 
 void feat_wifi_wardrive(void)
 {
-    radio_switch(RADIO_WIFI);
-    WiFi.mode(WIFI_STA);
-    gps_begin();  /* idempotent */
-
-    if (!sd_mount()) {
-        ui_toast("SD card required", T_BAD, 1500);
+    /* SD mount BEFORE radio_switch — WiFi init grabs ~30 KB of heap and
+     * fragments what's left, and FATFS's mount allocation can then fail
+     * even on a healthy card. Mount first while heap is clean. */
+    if (!sd_mount() && !sd_remount()) {
+        ui_toast("SD mount failed - reseat card?", T_BAD, 1800);
         return;
     }
+
+    radio_switch(RADIO_WIFI);
+    wifi_lean_sta_init();
+    gps_begin();  /* idempotent */
     if (!wdr_open_csv()) {
-        ui_toast("cant open csv", T_BAD, 1500);
-        return;
+        /* CSV open failed despite mount — try a remount and re-open once
+         * more. Covers the case where mount thinks it's good but the
+         * underlying FAT state is wonky after a format. */
+        if (!sd_remount() || !wdr_open_csv()) {
+            ui_toast("cant open csv", T_BAD, 1500);
+            return;
+        }
     }
 
     /* Keep accumulated AP table across sessions so Triton + wifi_scan can
@@ -195,6 +206,13 @@ void feat_wifi_wardrive(void)
     s_beacons  = 0;
     s_current_ch = 1;
 
+    /* Explicit MASK_ALL filter. On IDF 5.5, NOT setting a filter (or
+     * passing nullptr) silently disables capture for some frame types
+     * — Triton hit this bug. Without this we wouldn't see beacons. */
+    static const wifi_promiscuous_filter_t s_all_filter = {
+        .filter_mask = WIFI_PROMIS_FILTER_MASK_ALL
+    };
+    esp_wifi_set_promiscuous_filter(&s_all_filter);
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_promiscuous_rx_cb(promisc_cb);
     esp_wifi_set_channel(s_current_ch, WIFI_SECOND_CHAN_NONE);
@@ -207,6 +225,7 @@ void feat_wifi_wardrive(void)
 
     uint32_t last_redraw = 0;
     uint32_t last_flush  = 0;
+    bool dirty = true;
     while (true) {
         gps_poll();
         uint32_t now = millis();
@@ -219,29 +238,36 @@ void feat_wifi_wardrive(void)
             last_redraw = now;
             auto &d = M5Cardputer.Display;
             ui_draw_status(radio_name(), "wardrive");
-            ui_clear_body();
-            d.setTextColor(T_ACCENT, T_BG);
-            d.setCursor(4, BODY_Y + 2);  d.print("WARDRIVE");
+            /* Chrome ONCE on entry/toast-clobber. Per-frame updates use
+             * fixed-width printfs with bg-color text — each cell
+             * self-overwrites, no body wipe = no flicker. */
+            if (dirty) {
+                ui_clear_body();
+                d.setTextColor(T_ACCENT, T_BG);
+                d.setCursor(4, BODY_Y + 2);  d.print("WARDRIVE");
+                dirty = false;
+            }
             d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 18); d.printf("APs:     %d", s_ap_count);
-            d.setCursor(4, BODY_Y + 30); d.printf("Beacons: %lu", (unsigned long)s_beacons);
-            d.setCursor(4, BODY_Y + 42); d.printf("Channel: %u", s_current_ch);
+            d.setCursor(4, BODY_Y + 18); d.printf("APs:     %-5d",   s_ap_count);
+            d.setCursor(4, BODY_Y + 30); d.printf("Beacons: %-7lu",  (unsigned long)s_beacons);
+            d.setCursor(4, BODY_Y + 42); d.printf("Channel: %-2u",   s_current_ch);
             const gps_fix_t &g = gps_get();
             d.setTextColor(g.valid ? T_GOOD : T_DIM, T_BG);
             d.setCursor(4, BODY_Y + 54);
-            if (g.valid) d.printf("GPS: %.4f, %.4f (%d sats)", g.lat_deg, g.lon_deg, g.sats);
-            else         d.printf("GPS: waiting for fix...");
+            if (g.valid) d.printf("GPS: %.4f, %.4f (%d sats)   ", g.lat_deg, g.lon_deg, g.sats);
+            else         d.printf("GPS: waiting for fix...      ");
             d.setTextColor(T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 70); d.printf("%s", s_csv_path);
+            d.setCursor(4, BODY_Y + 70); d.printf("%-30s", s_csv_path);
         }
 
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(20); continue; }
         if (k == PK_ESC) break;
-        if (k == '?') { ui_show_current_help(); }
+        if (k == '?') { ui_show_current_help(); dirty = true; }
         if (k == 'f' || k == 'F') {
             flush_dirty_rows();
             ui_toast("flushed", T_GOOD, 400);
+            dirty = true;
         }
     }
 

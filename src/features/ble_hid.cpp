@@ -16,6 +16,8 @@
 #include <NimBLEHIDDevice.h>
 #include <HIDTypes.h>
 #include <HIDKeyboardTypes.h>
+#include <esp_wifi.h>
+#include <esp_heap_caps.h>
 
 static NimBLEHIDDevice *s_hid = nullptr;
 static NimBLECharacteristic *s_input = nullptr;
@@ -174,10 +176,23 @@ static int pick_disguise(void)
 void feat_ble_hid(void)
 {
     radio_switch(RADIO_NONE);  /* start clean */
+    /* Release WiFi heap BEFORE NimBLE+HID server init. NimBLE alone
+     * eats ~60 KB, then HID GATT server needs another ~10 KB for the
+     * report map + characteristics. We saw rc=6 (ENOMEM) at
+     * ble_gatts_start because heap was already at 124 B post-NimBLE
+     * init. Freeing the WiFi controller gives us ~30 KB headroom.
+     * SIDE EFFECT: WiFi features dead until reboot — operator's
+     * trade-off for Bad-KB sessions. */
+    esp_wifi_stop();
+    esp_wifi_deinit();
+    Serial.printf("[bad-kb] post-wifi-release heap=%u\n",
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
     int pick = pick_disguise();
     if (pick < 0) return;
     const char *name = s_disguises[pick];
     setup_hid(name);
+    Serial.printf("[bad-kb] post-setup_hid heap=%u\n",
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
 
     ui_clear_body();
     auto &d = M5Cardputer.Display;
@@ -231,4 +246,9 @@ void feat_ble_hid(void)
          * the NimBLE-Arduino API; leave for domain teardown. */
     }
     s_connected = false;
+    /* Release the heap-allocated HIDDevice so a second Bad-KB entry
+     * in the same session doesn't leak another ~1-2 KB. The NimBLE
+     * server itself is owned by NimBLEDevice and freed on deinit. */
+    if (s_hid) { delete s_hid; s_hid = nullptr; }
+    s_input = nullptr;
 }

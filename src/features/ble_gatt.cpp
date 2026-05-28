@@ -208,7 +208,10 @@ static void draw_tree(int cursor)
 static bool try_connect(NimBLEAddress addr)
 {
     if (!s_client) s_client = NimBLEDevice::createClient();
-    s_client->setConnectTimeout(5);
+    /* NimBLE 2.x: setConnectTimeout is MILLISECONDS, not seconds.
+     * Previous code passed 5 → 5 ms → every connect attempt timed
+     * out before TCP-style ACK. Fixed by passing 5000 ms = 5 s. */
+    s_client->setConnectTimeout(5000);
     bool ok = s_client->connect(addr);
     s_connected = ok;
     return ok;

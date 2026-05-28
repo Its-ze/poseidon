@@ -10,9 +10,113 @@
 #include "c5_cmd.h"
 #include "ble_db.h"
 #include "sd_helper.h"
+#include "../wifi_types.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <SD.h>
+
+extern void wifi_show_ap_details(const ap_t &a);
+extern ap_t g_last_selected_ap;
+extern bool g_last_selected_valid;
+#include "sfx.h"
+
+/* Live C5 deauth dashboard — identical UX to feat_wifi_deauth, but
+ * frames stat comes from c5_status_frames() (RESP_STATUS stream from
+ * the satellite) and TX is routed via ESP-NOW. Auto-renews the C5
+ * deauth command every ~50 s so the attack persists until ESC. */
+void c5_deauth_dashboard(const ap_t &a, bool broadcast)
+{
+    radio_switch(RADIO_WIFI);
+    if (!c5_any_online()) { ui_toast("no C5 online", T_BAD, 1200); return; }
+
+    auto &d = M5Cardputer.Display;
+    const uint16_t BURST_MS = 60000;   /* long bursts; re-armed in loop */
+    uint8_t target[6];
+    if (broadcast) memset(target, 0xFF, 6);
+    else           memcpy(target, a.bssid, 6);
+
+    /* Fire the first burst. */
+    c5_cmd_deauth(target, a.channel, broadcast ? 1 : 0, BURST_MS);
+    sfx_deauth_burst();
+
+    ui_clear_body();
+    ui_draw_footer("ESC=stop  SPACE=pause");
+    bool paused = false;
+    bool state_changed = true;
+    uint32_t last_redraw  = 0;
+    uint32_t last_burst   = millis();
+    uint32_t prev_frames  = c5_status_frames();
+    uint32_t prev_sample  = millis();
+    uint32_t rate_per_sec = 0;
+
+    while (true) {
+        uint32_t now = millis();
+
+        /* Re-arm the C5 attack before the previous burst expires. */
+        if (!paused && now - last_burst > (BURST_MS - 4000)) {
+            c5_cmd_deauth(target, a.channel, broadcast ? 1 : 0, BURST_MS);
+            last_burst = now;
+        }
+
+        if (now - last_redraw > 250) {
+            last_redraw = now;
+            ui_dashboard_chrome(broadcast ? ">> 5G NUKE-CH <<" : ">> 5G DEAUTH <<",
+                                state_changed);
+            state_changed = false;
+            /* Wipe only the status text region; chrome animates underneath. */
+            d.fillRect(0, BODY_Y + 14, SCR_W, BODY_H - 28, T_BG);
+
+            d.setTextColor(T_FG, T_BG);
+            d.setCursor(4, BODY_Y + 16);
+            if (broadcast) {
+                d.printf("ALL on ch%u", a.channel);
+            } else {
+                d.printf("%02X:%02X:%02X:%02X:%02X:%02X",
+                         a.bssid[0], a.bssid[1], a.bssid[2],
+                         a.bssid[3], a.bssid[4], a.bssid[5]);
+            }
+            d.setTextColor(T_DIM, T_BG);
+            d.setCursor(4, BODY_Y + 26); d.printf("channel %u  [5G via C5]", a.channel);
+
+            /* Frame rate calc — uses the C5's reported total. RESP_STATUS
+             * arrives in spurts when the C5's TX queue is hot, so smooth
+             * over a 1 s window. */
+            uint32_t cur_frames = c5_status_frames();
+            if (now - prev_sample >= 1000) {
+                rate_per_sec = (cur_frames - prev_frames);
+                prev_frames  = cur_frames;
+                prev_sample  = now;
+            }
+
+            d.setTextColor(paused ? T_WARN : T_ACCENT, T_BG);
+            d.setCursor(4, BODY_Y + 40);
+            d.printf("frames: %lu", (unsigned long)cur_frames);
+            d.setCursor(4, BODY_Y + 50);
+            d.printf("rate  : %lu/s%s", (unsigned long)rate_per_sec,
+                     paused ? " (PAUSED)" : "");
+
+            d.setTextColor(T_DIM, T_BG);
+            d.setCursor(4, BODY_Y + 60);
+            d.printf("via   : C5 satellite");
+
+            ui_freq_bars(SCR_W - 70, BODY_Y + 16, 4, 36);
+            ui_draw_status(radio_name(), paused ? "paused" : "C5-DAUTH");
+        }
+
+        uint16_t k = input_poll();
+        if (k == PK_NONE) { delay(20); continue; }
+        if (k == PK_ESC) { c5_cmd_stop(); break; }
+        if (k == PK_SPACE) {
+            paused = !paused;
+            state_changed = true;
+            if (paused) c5_cmd_stop();
+            else {
+                c5_cmd_deauth(target, a.channel, broadcast ? 1 : 0, BURST_MS);
+                last_burst = millis();
+            }
+        }
+    }
+}
 
 /* Short 4-char auth string for list rendering. Matches ESP-IDF's
  * wifi_auth_mode_t enum ordering. PMF-implying modes (WPA3, W23, W3X)
@@ -140,7 +244,7 @@ void feat_c5_scan_5g(void)
 
     auto &d = M5Cardputer.Display;
     ui_clear_body();  /* one-time entry clear */
-    ui_draw_footer(";/. move  R=rescan  `=back");
+    ui_draw_footer(";/. move  ENTER=info  R=rescan  `=back");
     int cursor = 0;
     int last_n = -1;
     uint32_t last = 0;
@@ -222,7 +326,40 @@ void feat_c5_scan_5g(void)
         if (k == PK_ESC) break;
         if (k == ';' || k == PK_UP)   { if (cursor > 0) cursor--; }
         if (k == '.' || k == PK_DOWN) { cursor++; }
-        if (k == 'r' || k == 'R') { c5_clear_results(); c5_cmd_scan_5g(300); }
+        if (k == 'r' || k == 'R') { c5_clear_results(); c5_cmd_scan_5g(300); last_n = -1; }
+        if (k == PK_ENTER) {
+            /* Pull the current snapshot, sort RSSI-desc to match what's
+             * displayed, then convert the cursor row to an ap_t and hand
+             * off to the shared detail view (same hotkeys as 2.4 GHz
+             * scan; D will route to C5 deauth automatically because
+             * is_5g=true). */
+            c5_ap_t snap[64];
+            int n = c5_aps(snap, 64);
+            for (int i = 1; i < n; ++i) {
+                for (int j = 0; j < n - i; ++j) {
+                    if (snap[j].rssi < snap[j + 1].rssi) {
+                        c5_ap_t t = snap[j]; snap[j] = snap[j + 1]; snap[j + 1] = t;
+                    }
+                }
+            }
+            if (n > 0 && cursor < n) {
+                const c5_ap_t &c = snap[cursor];
+                ap_t a = {};
+                strncpy(a.ssid, c.ssid, sizeof(a.ssid) - 1);
+                a.ssid[sizeof(a.ssid) - 1] = '\0';
+                memcpy(a.bssid, c.bssid, 6);
+                a.rssi    = c.rssi;
+                a.channel = c.channel;
+                a.auth    = c.auth;
+                a.is_5g   = c.is_5g;
+                g_last_selected_ap    = a;
+                g_last_selected_valid = true;
+                wifi_show_ap_details(a);
+                /* Force list redraw after detail screen returns. */
+                last_n = -1;
+                ui_draw_footer(";/. move  ENTER=info  R=rescan  `=back");
+            }
+        }
     }
 }
 
@@ -664,15 +801,19 @@ void feat_c5_nuke_5g(void)
 
         auto &dsp = M5Cardputer.Display;
         uint32_t deadline = millis() + 15000;
-        uint32_t frame = 0;
+        bool dirty = true;
         while (millis() < deadline && five_n == 0) {
-            /* Re-render every 120 ms so the user sees the sweep is
-             * actually working (animated radar + live AP counter). */
-            frame++;
-            ui_clear_body();
-            dsp.setTextColor(T_ACCENT, T_BG);
-            dsp.setCursor(4, BODY_Y + 2); dsp.print("5 GHz SWEEP");
-            dsp.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+            /* Chrome drawn ONCE on entry — the title/HR don't change.
+             * Per-frame updates use fixed-width printfs with bg-color
+             * text so each cell self-overwrites cleanly, no body wipe. */
+            if (dirty) {
+                ui_clear_body();
+                dsp.setTextColor(T_ACCENT, T_BG);
+                dsp.setCursor(4, BODY_Y + 2); dsp.print("5 GHz SWEEP");
+                dsp.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+                ui_draw_footer("`=abort");
+                dirty = false;
+            }
 
             int total_n = c5_aps(aps, 64);
             int cur_2g = 0, cur_5g = 0;
@@ -680,17 +821,20 @@ void feat_c5_nuke_5g(void)
                 if (aps[i].is_5g) cur_5g++; else cur_2g++;
             }
             dsp.setTextColor(T_FG, T_BG);
-            dsp.setCursor(4, BODY_Y + 20);  dsp.printf("total APs: %d", total_n);
+            dsp.setCursor(4, BODY_Y + 20);  dsp.printf("total APs: %-3d", total_n);
             dsp.setTextColor(T_DIM, T_BG);
-            dsp.setCursor(4, BODY_Y + 32);  dsp.printf("2.4G: %d", cur_2g);
+            dsp.setCursor(4, BODY_Y + 32);  dsp.printf("2.4G: %-3d", cur_2g);
             dsp.setTextColor(cur_5g ? T_GOOD : T_DIM, T_BG);
-            dsp.setCursor(4, BODY_Y + 44);  dsp.printf("5G  : %d", cur_5g);
+            dsp.setCursor(4, BODY_Y + 44);  dsp.printf("5G  : %-3d", cur_5g);
 
             dsp.setTextColor(T_DIM, T_BG);
             uint32_t el = (millis() - (deadline - 15000)) / 1000;
-            dsp.setCursor(4, BODY_Y + 60);  dsp.printf("elapsed %lu s / 15", (unsigned long)el);
+            dsp.setCursor(4, BODY_Y + 60);  dsp.printf("elapsed %-2lu s / 15", (unsigned long)el);
+
+            /* Corner radar — clear just its 30x30 bbox per frame so the
+             * sweep afterglow works without wiping the body. */
+            dsp.fillRect(SCR_W - 38, BODY_Y + 30, 32, 32, T_BG);
             ui_radar(SCR_W - 24, BODY_Y + 44, 14, T_ACCENT);
-            ui_draw_footer("`=abort");
 
             delay(120);
             n = total_n;

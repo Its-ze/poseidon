@@ -12,6 +12,7 @@
 #include "ui.h"
 #include "input.h"
 #include <driver/ledc.h>
+#include <driver/gpio.h>
 
 #define IR_PIN 44  /* Cardputer IR LED */
 
@@ -91,40 +92,35 @@ static const char *s_code_names[CODE_COUNT] = {
     "Sony", "Samsung", "LG", "Panasonic", "Philips", "Vizio"
 };
 
+static int s_carrier_half_us = 13;
+
 static void carrier_on(uint32_t freq_hz)
 {
-    ledc_timer_config_t t = {
-        .speed_mode      = LEDC_LOW_SPEED_MODE,
-        .duty_resolution = LEDC_TIMER_8_BIT,
-        .timer_num       = LEDC_TIMER_0,
-        .freq_hz         = freq_hz,
-        .clk_cfg         = LEDC_AUTO_CLK,
-    };
-    ledc_timer_config(&t);
-    ledc_channel_config_t c = {
-        .gpio_num   = IR_PIN,
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .channel    = LEDC_CHANNEL_0,
-        .intr_type  = LEDC_INTR_DISABLE,
-        .timer_sel  = LEDC_TIMER_0,
-        .duty       = 128,  /* 50% for IR */
-        .hpoint     = 0,
-    };
-    ledc_channel_config(&c);
+    /* Bit-bang carrier — see ir_remote.cpp for the LEDC-idle-level
+     * limitation. Store the half-period for the bit-banger. */
+    gpio_reset_pin((gpio_num_t)IR_PIN);
+    pinMode(IR_PIN, OUTPUT);
+    digitalWrite(IR_PIN, LOW);  /* active-LOW LED: HIGH = OFF */
+    s_carrier_half_us = 500000 / (int)freq_hz;
+    if (s_carrier_half_us < 1) s_carrier_half_us = 1;
 }
 
 static void mark(uint16_t us)
 {
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 128);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
-    delayMicroseconds(us);
+    uint32_t end = micros() + us;
+    int half = s_carrier_half_us;
+    while ((int32_t)(end - micros()) > 0) {
+        digitalWrite(IR_PIN, HIGH);   /* LED on */
+        delayMicroseconds(half);
+        digitalWrite(IR_PIN, LOW);  /* LED off */
+        delayMicroseconds(half);
+    }
 }
 
 static void space(uint16_t us)
 {
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 0);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
-    delayMicroseconds(us);
+    digitalWrite(IR_PIN, LOW);  /* LED off */
+    if (us) delayMicroseconds(us);
 }
 
 static void blast(const ir_code_t &c)
@@ -136,10 +132,8 @@ static void blast(const ir_code_t &c)
         if (p[1]) space(p[1]);
         p += 2;
     }
-    space(0);
     /* Force LED off. */
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 0);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+    digitalWrite(IR_PIN, LOW);
 }
 
 static void blaster_task(void *)
@@ -155,7 +149,7 @@ static void blaster_task(void *)
 void feat_ir_tvbgone(void)
 {
     pinMode(IR_PIN, OUTPUT);
-    digitalWrite(IR_PIN, LOW);
+    digitalWrite(IR_PIN, LOW);  /* active-LOW LED: HIGH = OFF at idle */
     s_code_idx = 0;
     s_running = true;
     xTaskCreate(blaster_task, "ir_tvbg", 3072, nullptr, 4, nullptr);
@@ -189,6 +183,5 @@ void feat_ir_tvbgone(void)
 
     s_running = false;
     delay(300);
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 0);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+    digitalWrite(IR_PIN, LOW);  /* park OFF */
 }

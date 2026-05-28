@@ -8,10 +8,79 @@
 #include "gps.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
+#include <esp_netif.h>
+#include <esp_event.h>
 #include <esp_bt.h>
 #include <NimBLEDevice.h>
 
 static radio_domain_t s_active = RADIO_NONE;
+
+void wifi_force_clean_sta(void)
+{
+    /* Probe whether WiFi was ever inited this session. esp_wifi_get_mode
+     * returns ESP_ERR_WIFI_NOT_INIT until esp_wifi_init has run; in
+     * that case there's nothing to reset and the subsequent IDF calls
+     * would themselves return errors and leave the driver in a
+     * half-state that breaks Arduino's later WiFi.mode() init. */
+    wifi_mode_t cur = WIFI_MODE_NULL;
+    if (esp_wifi_get_mode(&cur) != ESP_OK) return;
+    esp_wifi_set_promiscuous(false);
+    esp_wifi_disconnect();
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    delay(30);
+}
+
+bool wifi_lean_sta_init(void)
+{
+    /* If WiFi is already inited (we got here from another feature in
+     * the same session), just ensure mode is STA and return.
+     * esp_wifi_get_mode returns ESP_OK only after esp_wifi_init has run. */
+    wifi_mode_t cur = WIFI_MODE_NULL;
+    if (esp_wifi_get_mode(&cur) == ESP_OK) {
+        if (cur != WIFI_MODE_STA) {
+            esp_wifi_set_promiscuous(false);
+            esp_wifi_disconnect();
+            esp_wifi_set_mode(WIFI_MODE_STA);
+            delay(30);
+        }
+        return true;
+    }
+    /* Fresh init — raw IDF with shrunk buffers to fit in fragmented
+     * DMA RAM (M5GFX framebuffer holds ~60 KB at boot, leaves no
+     * room for default 32-buffer Arduino init). */
+    esp_netif_init();
+    esp_event_loop_create_default();
+    static bool s_sta_netif_created = false;
+    if (!s_sta_netif_created) {
+        esp_netif_create_default_wifi_sta();
+        s_sta_netif_created = true;
+    }
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    /* TIGHT buffer config. Cardputer-Adv has ~52 KB DMA-capable RAM
+     * after M5GFX framebuffer at boot. WiFi init grabs most of it for
+     * its tx_buf + rx_buf pools (each ~1.7 KB). At 8/8 we hit ~14 KB
+     * of TX + ~14 KB of RX = 28 KB consumed, leaving ~1 KB DMA free
+     * for runtime allocations — raw 802.11 TX then OOMs after one
+     * frame. 4/4 leaves ~14 KB DMA-free which is plenty for sustained
+     * raw TX bursts with the 2 ms inter-frame delay. Sacrifice: brief
+     * RX bursts may drop occasional frames (capture rate ~halved at
+     * very high traffic), but TX reliability is far more important. */
+    cfg.static_tx_buf_num  = 0;
+    cfg.dynamic_tx_buf_num = 4;
+    cfg.tx_buf_type        = 1;
+    cfg.cache_tx_buf_num   = 4;
+    cfg.static_rx_buf_num  = 4;
+    cfg.dynamic_rx_buf_num = 4;
+    cfg.ampdu_tx_enable    = 0;
+    cfg.ampdu_rx_enable    = 0;
+    cfg.amsdu_tx_enable    = 0;
+    esp_err_t ie = esp_wifi_init(&cfg);
+    if (ie != ESP_OK) return false;
+    esp_wifi_set_storage(WIFI_STORAGE_RAM);
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    esp_err_t se = esp_wifi_start();
+    return (se == ESP_OK);
+}
 
 const char *radio_name(void)
 {
@@ -71,22 +140,30 @@ bool radio_switch(radio_domain_t target)
 
     switch (target) {
     case RADIO_WIFI:
-        WiFi.mode(WIFI_STA);
-        /* Prior code called WiFi.disconnect(true, true) here which disables
-         * STA via enableSTA(false) — meaning subsequent scanNetworks has
-         * to re-init the WiFi driver. On a freshly-booted device with
-         * plenty of heap this was silent, but after a few features use
-         * memory, esp_wifi_init fails with ENOMEM. Use (false, true) so
-         * STA stays up and credentials are erased without cycling the
-         * whole driver. */
-        WiFi.disconnect(false, true);
+        /* State-only switch — don't touch WiFi here. Calling WiFi.mode(WIFI_STA)
+         * left the driver in a half-init state ("STA not started!" warning
+         * on disconnect), then any later WiFi.mode(WIFI_AP) crashed in
+         * ieee80211_hostap_attach (+0x2c null deref) because the AP-side
+         * driver structures were never allocated. Features now bring up
+         * WiFi themselves from a clean state (WiFi.mode(WIFI_STA) for
+         * scan/wardrive, WiFi.mode(WIFI_AP) for portal/spam). Country
+         * code is still applied lazily on first esp_wifi_init by the
+         * driver default, and esp_wifi_set_country can be called by
+         * features that hop ch12-14. */
         break;
     case RADIO_BLE:
-        /* DON'T init NimBLE here. The BLE feature modules (ble_scan,
-         * ble_spam, etc.) manage the full NimBLE lifecycle themselves
-         * following Bruce's verbatim pattern (deinit + 500ms settle +
-         * init). Double-init from both sides caused controller-state
-         * races that crashed the device. */
+        Serial.printf("[radio] enter RADIO_BLE setup. bt_ctrl_status=%d\n",
+                      (int)esp_bt_controller_get_status());
+        Serial.flush();
+        if (!NimBLEDevice::isInitialized()) {
+            Serial.println("[radio] NimBLEDevice::init() begin"); Serial.flush();
+            bool ok = NimBLEDevice::init("");
+            Serial.printf("[radio] NimBLEDevice::init() -> %d bt_ctrl_status=%d\n",
+                          (int)ok, (int)esp_bt_controller_get_status());
+            Serial.flush();
+        } else {
+            Serial.println("[radio] NimBLE already initialized"); Serial.flush();
+        }
         break;
     case RADIO_LORA:
         break;

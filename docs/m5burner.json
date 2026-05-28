@@ -3,9 +3,23 @@
   "author": "GeneralDussDuss",
   "homepage": "https://generaldussduss.github.io/poseidon/",
   "repo": "https://github.com/GeneralDussDuss/poseidon",
-  "description": "Commander of the Deep — keyboard-first pentesting firmware for M5Stack Cardputer-Adv. 90+ features across WiFi / BLE / sub-GHz / 2.4 GHz / LoRa / IR / RJ45. SaltyJack LAN arsenal (DHCP starve, Responder, WPAD, on-device NTLMv2 cracker). TRIDENT (ESP32-C5 satellite over ESP-NOW) adds 5 GHz deauth, Zigbee sniff, and PMKID capture.",
+  "description": "Commander of the Deep — keyboard-first pentesting firmware for M5Stack Cardputer-Adv. 150+ features across WiFi / BLE / sub-GHz / 2.4 GHz / LoRa / IR / RJ45. Argus mood sprite for Triton. Six themes (POSEIDON / MATRIX / E-INK / SYNTHWAVE / PHANTOM / BLOOD) + ambient procedural motion. SaltyJack LAN arsenal (DHCP starve, Responder, WPAD, on-device NTLMv2 cracker). TRIDENT (ESP32-C5 satellite over ESP-NOW) for 5 GHz deauth, Zigbee sniff, PMKID capture.",
   "icon": "https://generaldussduss.github.io/poseidon/assets/icon.png",
   "firmware": [
+    {
+      "name": "POSEIDON v0.6.0",
+      "version": "0.6.0",
+      "chip": "esp32s3",
+      "target": "M5Cardputer-Adv",
+      "flash_size": "8MB",
+      "psram": true,
+      "url": "https://github.com/GeneralDussDuss/poseidon/releases/download/v0.6.0/poseidon-factory.bin",
+      "offset": "0x0",
+      "description": "Biggest drop since 0.5. Argus mood sprite for Triton (96x96 RGB565, 12 moods). Six themes + ambient procedural motion + 7 idle screensavers + carousel menu. Raw-IDF AP path (Portal, Beacon Spam, Evil Twin all work on Bruce libs). BLE cooperative tick (Sour Apple, Spam, Karma fire correctly). IR LED polarity fixed + full Samsung Smart Remote keymap verified. New features: AP Signal Test, Evil Twin, BLE BlueDucky, SATCOM Tracker, Drone Remote ID, Surveillance Hunter, Defensive Monitor, four nRF52 hat features. C5 protocol v3 with 5G scan terminator fix.",
+      "date": "2026-05-28",
+      "changelog": "https://github.com/GeneralDussDuss/poseidon/blob/master/CHANGELOG.md",
+      "license": "MIT"
+    },
     {
       "name": "POSEIDON v0.5.0",
       "version": "0.5.0",
