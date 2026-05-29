@@ -10,9 +10,12 @@ static bool  s_up    = false;
 
 void nrf24_park_others(void)
 {
-    /* SD CS=12, CC1101 CS=13: hold HIGH so they ignore SPI traffic. */
+    /* SD CS=12, CC1101 CS=13: hold HIGH so they ignore SPI traffic.
+     * Also park LoRa NSS=5 HIGH so a stale LoRa init doesn't drive
+     * MISO when we own the bus. */
     pinMode(12, OUTPUT); digitalWrite(12, HIGH);
     pinMode(13, OUTPUT); digitalWrite(13, HIGH);
+    pinMode(5,  OUTPUT); digitalWrite(5,  HIGH);
 }
 
 bool nrf24_begin(void)
@@ -20,13 +23,16 @@ bool nrf24_begin(void)
     if (s_up) nrf24_end();
     nrf24_park_others();
 
-    /* Use global SPI (FSPI) with explicit pin config — same approach
-     * as CC1101. HSPI (SD) and FSPI share the same GPIO pins; the
-     * last one to call SPI.begin() owns the GPIO matrix. */
-    SPI.begin(40, 39, 14, NRF24_CS);
+    /* Use the SD's HSPI instance (pins 40/39/14). Global SPI is FSPI,
+     * which M5GFX claims for the TFT — calling SPI.begin() there
+     * stole the GPIO matrix from the display every nRF24 op and the
+     * screen would flicker / freeze. Mirror CC1101's pattern instead:
+     * reuse the already-initialised sd_get_spi() instance. */
+    SPIClass &bus = sd_get_spi();
+    pinMode(NRF24_CS, OUTPUT); digitalWrite(NRF24_CS, HIGH);
 
     s_radio = new RF24(NRF24_CE, NRF24_CS);
-    if (!s_radio->begin(&SPI)) {
+    if (!s_radio->begin(&bus)) {
         Serial.println("[nrf24] begin failed");
         delete s_radio; s_radio = nullptr;
         return false;

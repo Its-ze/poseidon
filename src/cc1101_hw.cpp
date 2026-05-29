@@ -3,6 +3,7 @@
  */
 #include "cc1101_hw.h"
 #include "sd_helper.h"
+#include "gps.h"
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 #include <SD.h>
 
@@ -10,9 +11,19 @@ static bool s_up = false;
 
 void cc1101_park_others(void)
 {
-    /* SD CS=12, nRF24 CS=6: hold HIGH so they ignore SPI traffic. */
+    /* Pin 13 = CC1101 CS = GPS UART TX. If the GPS background poller
+     * is running, the UART driver fights us for the pin — symptoms
+     * range from "CS never asserts" to "garbage bytes on SPI". Tear
+     * down GPS before reclaiming the pin, then drive CS HIGH manually
+     * so the chip ignores SPI until cc1101_begin actually addresses it. */
+    gps_end();
+    pinMode(13, OUTPUT); digitalWrite(13, HIGH);
+
+    /* SD CS=12, nRF24 CS=6, LoRa NSS=5: hold HIGH so they ignore the
+     * shared HSPI bus while CC1101 owns it. */
     pinMode(12, OUTPUT); digitalWrite(12, HIGH);
-    pinMode(6, OUTPUT);  digitalWrite(6, HIGH);
+    pinMode(6,  OUTPUT); digitalWrite(6,  HIGH);
+    pinMode(5,  OUTPUT); digitalWrite(5,  HIGH);
 }
 
 bool cc1101_begin(float freq_mhz)
@@ -34,12 +45,20 @@ bool cc1101_begin(float freq_mhz)
     /* Do NOT call setGDO() — it sets GDO0 to OUTPUT which blocks the
      * CC1101's data signal. The official RCSwitch example skips it.
      * GDO0 must be INPUT so the CC1101 drives it and RCSwitch reads. */
-    ELECHOUSE_cc1101.Init();
+    /* bmorcelli fork's Init() returns bool — false means Reset()'s
+     * MISO-wait loop bailed (SPI bus likely wedged). HEAD code ignored
+     * the return value, so a half-init chip could slip through and
+     * silently corrupt subsequent register writes. */
+    if (!ELECHOUSE_cc1101.Init()) {
+        Serial.println("[cc1101] Init() failed — SPI bus likely wedged");
+        return false;
+    }
     delay(10);
     pinMode(CC1101_GDO0, INPUT);  /* CC1101 drives this pin, we read it */
 
-    /* Verify the chip is actually there by reading version register.
-     * getCC1101() returns false if SPI reads back 0x00 or 0xFF. */
+    /* Belt-and-suspenders: read PARTNUM/VERSION registers. Catches a
+     * working SPI bus + no chip on the other end (wrong hat / loose
+     * connector / dead CC1101). */
     if (!ELECHOUSE_cc1101.getCC1101()) {
         Serial.println("[cc1101] chip not detected — wrong hat?");
         return false;

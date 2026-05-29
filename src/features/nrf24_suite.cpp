@@ -16,6 +16,7 @@
 #include "../radio.h"
 #include "../nrf24_hw.h"
 #include "../nrf24_types.h"
+#include "../sd_helper.h"
 #include <RF24.h>
 
 nrf24_target_t g_nrf24_last_device = {};
@@ -24,17 +25,20 @@ bool           g_nrf24_last_valid = false;
 /* ---- Low-level register access ---- */
 
 /* Direct SPI register write — RF24 lib marks write_register private
- * in newer versions. Use raw SPI transfer. */
+ * in newer versions. Use raw SPI transfer on the SAME HSPI bus the
+ * driver opened (sd_get_spi()), not the global FSPI which is owned
+ * by M5GFX for the display. Using global SPI here stole the GPIO
+ * matrix from the TFT every register write → screen tearing. */
 static void nrf_write_reg(uint8_t reg, uint8_t val)
 {
     auto &r = nrf24_radio();
-    /* beginTransaction + manual CS toggle to write register. */
-    SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
+    SPIClass &bus = sd_get_spi();
+    bus.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
     digitalWrite(NRF24_CS, LOW);
-    SPI.transfer(0x20 | (reg & 0x1F));  /* W_REGISTER command */
-    SPI.transfer(val);
+    bus.transfer(0x20 | (reg & 0x1F));  /* W_REGISTER command */
+    bus.transfer(val);
     digitalWrite(NRF24_CS, HIGH);
-    SPI.endTransaction();
+    bus.endTransaction();
 }
 
 /* ---- BLE helpers ---- */
@@ -172,10 +176,22 @@ void feat_nrf24_sniffer(void)
     rf.setPayloadSize(32);
     rf.setDataRate(RF24_2MBPS);
     rf.setCRCLength(RF24_CRC_DISABLED);
-    nrf_write_reg(0x02, 0x00);   /* EN_RXADDR: disable all pipes */
-    nrf_write_reg(0x03, 0x00);   /* SETUP_AW: 0 = promiscuous trick */
-    uint8_t promisc_addr[] = {0xAA};
-    rf.openReadingPipe(0, promisc_addr);
+    /* Mousejack promiscuous trick — 6 noise-address pipes open
+     * simultaneously catch ESB preamble bits across the whole 2.4G
+     * band. Port from Bruce (modules/NRF24/nrf_mousejack.cpp) +
+     * Bastille's original mousejack. The original POSEIDON path
+     * opened ONE pipe with a 1-byte address, which SETUP_AW=0
+     * semantics extend to undefined memory — sniffer captured
+     * essentially nothing. */
+    nrf_write_reg(0x02, 0x3F);   /* EN_RXADDR: enable pipes 0..5 */
+    nrf_write_reg(0x03, 0x00);   /* SETUP_AW: 0 = address-width hack */
+    static const uint8_t noise_addr[6][2] = {
+        {0x55, 0x55}, {0xAA, 0xAA}, {0xA0, 0xAA},
+        {0xAB, 0xAA}, {0xAC, 0xAA}, {0xAD, 0xAA},
+    };
+    for (uint8_t p = 0; p < 6; ++p) {
+        rf.openReadingPipe(p, noise_addr[p]);
+    }
     rf.startListening();
 
     s_dev_count = 0;

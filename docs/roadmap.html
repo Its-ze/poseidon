@@ -17,7 +17,7 @@
   <div class="boot-lines"><div class="boot-line"><span class="dim">[LOAD]</span> roadmap.html <span class="ok">OK</span></div></div>
 </div>
 <div id="scrollProgress"></div>
-<div id="hud"><div class="hud-row"><span class="hud-dot"></span>ROADMAP · v0.6.0 current</div></div>
+<div id="hud"><div class="hud-row"><span class="hud-dot"></span>ROADMAP · v0.6.1 current</div></div>
 
 <nav id="mainNav">
   <a href="index.html" class="nav-logo"><span class="icon">P</span><span>POSEIDON</span></a>
@@ -41,8 +41,8 @@
 <div class="console-strip">
   <div class="console-bar">
     <span class="ck">[TIMELINE]</span>
-    <span>shipped=<span class="nm">v0.1 → v0.6.0</span></span>
-    <span>current=<span class="ck">v0.6.0</span></span>
+    <span>shipped=<span class="nm">v0.1 → v0.6.1</span></span>
+    <span>current=<span class="ck">v0.6.1</span></span>
     <span>next=<span class="vk">v0.7 nRF52840 BLE 5.0 dongle</span></span>
     <span>after=<span class="vk">v0.8 on-device WPA2 crack</span></span>
     <span class="blink">▸</span>
@@ -176,16 +176,16 @@
     </div>
 
 
-    <div class="rm-item planned reveal-left">
+    <div class="rm-item shipped reveal-left">
       <div class="rm-card">
         <div class="rm-head">
           <span class="rm-ver">v0.6.1</span>
-          <span class="rm-date">tomorrow</span>
-          <span class="rm-tag planned">Hardware</span>
+          <span class="rm-date">Shipped 2026-05-29</span>
+          <span class="rm-tag shipped">Live</span>
         </div>
-        <div class="rm-title">Hydra RF hat — sub-GHz regression sweep</div>
+        <div class="rm-title">Built-in sub-GHz library (40 baked signals) · ON-AIR TX indicator · Hydra hat pre-flight</div>
         <div class="rm-body">
-          The Hydra RF hat arrives tomorrow. Any sub-GHz bugs surfaced during the v0.6.0 testing window (CC1101 RF, nRF24 mousejack, sub-GHz replay, Pocket SDR receive) get verified on real hardware + patched the same day. Listed as v0.6.1 because the fixes ride existing code paths, not new features.
+          Forty baked OOK signals ship with the firmware — no SD recordings required. Tesla Charge Port + Frunk, garage codes (Princeton / CAME / NICE / Linear / Holtek / Multicode / Stanley / Liftmaster pre-rolling), doorbells, restaurant pagers, keychain panic alarms, novelty bursts (cricket / TV-B-Gone / air horn), wireless outlet packs + master ALL ON/OFF, ceiling fan (low/med/high/off), smoke alarm test, window/PIR/glass-break sensor alerts. Baked signals merge into their natural category alongside any user recordings dropped into <code>/poseidon/signals/&lt;cat&gt;/</code>. New <b>ON-AIR TX indicator</b> drops a big red badge + frequency + play counter over the broadcast screen during every CC1101 transmit, with a green border flash on completion so you can tell "frame stuck" from "TX actually fired." <b>Hydra RF hat pre-flight</b> — six pre-arrival fixes audited against Bruce / bmorcelli's SmartRC fork / PINGEQUA pin reference: nRF24 driver moved off the FSPI display bus, CC1101 reclaims pin 13 from GPS UART, <code>Init()</code> return value checked, mousejack sniffer ports Bruce's 6-pipe noise-address table, RMT min-pulse 20 µs → 3 µs to catch fast Manchester edges. Hydra regression sweep happens the moment the hat lands.
         </div>
       </div>
     </div>

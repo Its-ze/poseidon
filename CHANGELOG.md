@@ -6,9 +6,58 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+(empty — new work since 0.6.1 lands here)
+
+## [0.6.1] - 2026-05-29
+
 ### Added
 
-(empty — new work since 0.6.0 lands here)
+- **Built-in sub-GHz signal library.** 40 baked OOK signals across the
+  Cars / Pranks / Tesla / Home categories — no SD recordings required.
+  Tesla Charge Port + Frunk, Princeton/CAME/NICE/Linear/Holtek/Multicode/
+  Stanley/Liftmaster garage codes, doorbells (generic Chinese, Auchan/
+  Lidl, talking-novelty, Honeywell + Heath/Zenith chimes), restaurant
+  pagers (LRS + Genesys), keychain panic alarm, cricket chirp, TV-B-Gone
+  RF beep, air horn, wireless outlet packs (5-pack A/B + Etekcity ON/OFF
+  + master ALL ON/OFF), ceiling fan (LOW/MED/HIGH/OFF), smoke alarm
+  test, window sensor alert, PIR motion tripped, glass break alert.
+  Baked signals merge into their natural category alongside any user
+  recordings dropped into `/poseidon/signals/<cat>/`; SD entries
+  appear first, baked underneath prefixed with `*`.
+- **ON-AIR TX indicator.** Big red badge with pulsing dot + frequency
+  readout + play counter overlays the broadcast screen for the full
+  duration of every CC1101 transmit. Red border slab around the body
+  flips to green for 120 ms after TX completes so you can tell "frame
+  stuck" from "TX actually fired."
+- **Hydra RF Cap hardware prep** (lands before the physical hat
+  arrives). Six pre-flight fixes audited against Bruce, bmorcelli's
+  SmartRC fork, and PINGEQUA's official pin reference:
+  - `nrf24_hw.cpp` now uses the HSPI bus (`sd_get_spi()`) instead of
+    the global FSPI, which M5GFX owns for the display. Previously the
+    TFT would tear / freeze on every nRF24 operation.
+  - `cc1101_park_others()` calls `gps_end()` and reclaims pin 13 from
+    the GPS UART driver before driving it as CC1101 CS.
+  - `cc1101_begin()` now checks the `Init()` return value — half-init
+    chips no longer slip through silently.
+  - nRF24 sniffer ports Bruce's 6-pipe mousejack noise-address table
+    (was a single 1-byte pipe that captured almost nothing).
+  - `nrf_write_reg()` raw SPI moved to the HSPI bus too.
+  - CC1101 RMT min pulse width 20 µs → 3 µs (Bruce's value, catches
+    fast Manchester edges from 1200-baud transponders).
+
+### Fixed
+
+- nRF24 LoRa NSS pin parking — was floating during nRF24 sessions,
+  could drive MISO if a stale LoRa init lingered.
+
+### Notes
+
+- Baked sub-GHz signals are **representative patterns from public
+  references** — they TX cleanly through CC1101 but won't necessarily
+  fire any specific real-world target. Use them as test signals and
+  drop your recorded captures into `/poseidon/signals/<cat>/` on SD
+  for verified payloads.
+- Hydra cap regression sweep happens the moment the hardware lands.
 
 ## [0.6.0] - 2026-05-28
 

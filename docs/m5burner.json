@@ -7,6 +7,20 @@
   "icon": "https://generaldussduss.github.io/poseidon/assets/icon.png",
   "firmware": [
     {
+      "name": "POSEIDON v0.6.1",
+      "version": "0.6.1",
+      "chip": "esp32s3",
+      "target": "M5Cardputer-Adv",
+      "flash_size": "8MB",
+      "psram": true,
+      "url": "https://github.com/GeneralDussDuss/poseidon/releases/download/v0.6.1/poseidon-factory.bin",
+      "offset": "0x0",
+      "description": "Built-in sub-GHz library — 40 baked OOK signals across Cars / Pranks / Tesla / Home Auto categories. Tesla Charge Port + Frunk, garage codes (Princeton / CAME / NICE / Linear / Holtek / Multicode / Stanley / Liftmaster), doorbells, restaurant pagers, novelty bursts, wireless outlet packs + master ALL ON/OFF, ceiling fan controls, smoke + window + PIR + glass-break sensor alerts. ON-AIR TX indicator with big red badge + frequency + play counter overlays the broadcast screen for every transmit. Hydra RF hat pre-flight — six pre-arrival fixes audited against Bruce, bmorcelli's SmartRC fork, and PINGEQUA pin reference (nRF24 off the display bus, CC1101 reclaims pin 13 from GPS UART, Init() return checked, Bruce's 6-pipe mousejack noise table, RMT 3 us min pulse).",
+      "date": "2026-05-29",
+      "changelog": "https://github.com/GeneralDussDuss/poseidon/blob/master/CHANGELOG.md",
+      "license": "MIT"
+    },
+    {
       "name": "POSEIDON v0.6.0",
       "version": "0.6.0",
       "chip": "esp32s3",

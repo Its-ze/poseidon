@@ -150,7 +150,11 @@ int cc1101_rmt_rx(int16_t *out_pulses, int max_pulses,
 
     {
         rmt_receive_config_t rc = {};
-        rc.signal_range_min_ns = 20 * 1000;           /* 20 µs glitch filter */
+        /* Stolen from Bruce (modules/rf/record.cpp): 3 µs glitch filter.
+         * The previous 20 µs ate the fast Manchester edges that 1200-baud
+         * transponders + some HID-style remotes use. 3 µs matches what
+         * Bruce captures reliably across their .sub library. */
+        rc.signal_range_min_ns = 3 * 1000;            /* 3 µs glitch filter */
         rc.signal_range_max_ns = gap_us * 1000ULL;    /* gap_us silence = end */
         if (rmt_receive(rx_chan, syms, max_syms * sizeof(rmt_symbol_word_t),
                         &rc) != ESP_OK) goto done;

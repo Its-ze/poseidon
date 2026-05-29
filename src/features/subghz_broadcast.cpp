@@ -17,10 +17,11 @@
 #include "../cc1101_hw.h"
 #include "../cc1101_rmt.h"
 #include "../sd_helper.h"
+#include "subghz_signals_data.h"
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 #include <SD.h>
 
-#define MAX_FILES 30
+#define MAX_FILES 64
 #define MAX_PULSES 2048
 #define SIGNALS_DIR "/poseidon/signals"
 
@@ -42,6 +43,28 @@ static const sig_category_t CATS[] = {
 
 static char s_files[MAX_FILES][48];
 static int  s_file_count = 0;
+/* Per-entry "is this a baked signal?" tag. Index into SUBGHZ_BAKED[]
+ * when true; otherwise s_files[i] is an SD path. Baked entries are
+ * appended AFTER any SD scan results so SD recordings appear at the
+ * top of each category list. */
+static bool    s_is_baked[MAX_FILES];
+static uint8_t s_baked_idx[MAX_FILES];
+
+/* Append every SUBGHZ_BAKED[] entry whose category matches the given
+ * subdir name. Called after scan_dir() so baked signals show up under
+ * their natural category (Cars / Pranks / Tesla / Home / All files). */
+static void append_baked_for_category(const char *subdir)
+{
+    bool all = (subdir[0] == '\0');
+    for (uint16_t i = 0; i < SUBGHZ_BAKED_N && s_file_count < MAX_FILES; ++i) {
+        if (!all && strcmp(SUBGHZ_BAKED[i].category, subdir) != 0) continue;
+        snprintf(s_files[s_file_count], sizeof(s_files[0]),
+                 "* %s", SUBGHZ_BAKED[i].name);
+        s_is_baked[s_file_count] = true;
+        s_baked_idx[s_file_count] = (uint8_t)i;
+        ++s_file_count;
+    }
+}
 
 static bool scan_dir(const char *subdir)
 {
@@ -51,16 +74,20 @@ static bool scan_dir(const char *subdir)
     else
         snprintf(path, sizeof(path), "%s", SIGNALS_DIR);
 
+    /* Reset list + baked tags. Even if SD open fails (no /signals dir
+     * yet), the baked-append step downstream still populates entries. */
+    s_file_count = 0;
+    for (int i = 0; i < MAX_FILES; ++i) { s_is_baked[i] = false; s_baked_idx[i] = 0; }
+
     File dir = SD.open(path);
     if (!dir) return false;
-
-    s_file_count = 0;
     File f;
     while ((f = dir.openNextFile()) && s_file_count < MAX_FILES) {
         String nm = f.name();
         if (nm.endsWith(".sub")) {
             strncpy(s_files[s_file_count], f.path(), 47);
             s_files[s_file_count][47] = '\0';
+            s_is_baked[s_file_count] = false;
             s_file_count++;
         } else if (f.isDirectory() && subdir[0] == '\0') {
             /* Recurse one level for "All files" mode */
@@ -200,7 +227,12 @@ void feat_subghz_broadcast(void)
         int cat = pick_category();
         if (cat < 0) return;
 
+        /* Scan SD first (any user recordings show at the top of the list),
+         * then append every matching baked signal. A category with zero
+         * SD files still shows the baked entries — that's the whole
+         * point of baking them in. */
         scan_dir(CATS[cat].path);
+        append_baked_for_category(CATS[cat].path);
         if (s_file_count == 0) {
             ui_toast("no .sub files in category", T_WARN, 1200);
             continue;
@@ -209,24 +241,39 @@ void feat_subghz_broadcast(void)
         int file = pick_file(CATS[cat].name);
         if (file < 0) continue;
 
-        /* Parse and transmit the selected file. */
+        int16_t *raw = (int16_t *)malloc(MAX_PULSES * sizeof(int16_t));
+        if (!raw) { ui_toast("OOM", T_BAD, 1000); return; }
+
+        float freq = 433.92f;
+        int   plen = 0;
+        const char *display_name = nullptr;
+
         radio_switch(RADIO_SUBGHZ);
-        if (!cc1101_begin(433.92f)) {
+        if (!cc1101_begin(s_is_baked[file] ? SUBGHZ_BAKED[s_baked_idx[file]].freq_mhz
+                                           : 433.92f)) {
             ui_toast("CC1101 not found", T_BAD, 1500);
-            radio_switch(RADIO_NONE);
-            return;
+            free(raw); radio_switch(RADIO_NONE); return;
         }
 
-        float freq = parse_sub_freq(s_files[file]);
-        ELECHOUSE_cc1101.setMHZ(freq);
-
-        int16_t *raw = (int16_t *)malloc(MAX_PULSES * sizeof(int16_t));
-        if (!raw) { ui_toast("OOM", T_BAD, 1000); cc1101_end(); radio_switch(RADIO_NONE); return; }
-
-        int plen = parse_sub_raw(s_files[file], raw, MAX_PULSES);
+        if (s_is_baked[file]) {
+            const subghz_baked_t &bk = SUBGHZ_BAKED[s_baked_idx[file]];
+            freq = bk.freq_mhz;
+            plen = bk.pulse_count;
+            if (plen > MAX_PULSES) plen = MAX_PULSES;
+            /* Copy from flash .rodata into RAM buffer — TX path expects
+             * int16_t* it can read sequentially without flash-cache
+             * stalls during the timing-critical RMT write. */
+            for (int i = 0; i < plen; ++i) raw[i] = bk.pulses[i];
+            display_name = bk.name;
+        } else {
+            freq = parse_sub_freq(s_files[file]);
+            ELECHOUSE_cc1101.setMHZ(freq);
+            plen = parse_sub_raw(s_files[file], raw, MAX_PULSES);
+            const char *b = strrchr(s_files[file], '/');
+            display_name = b ? b + 1 : s_files[file];
+        }
 
         auto &d = M5Cardputer.Display;
-        const char *base = strrchr(s_files[file], '/');
         uint32_t plays = 0;
 
         while (true) {
@@ -236,7 +283,7 @@ void feat_subghz_broadcast(void)
             d.setCursor(4, BODY_Y + 2); d.print("BROADCAST");
             d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
             d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 20); d.printf("file: %s", base ? base + 1 : s_files[file]);
+            d.setCursor(4, BODY_Y + 20); d.printf("file: %s", display_name);
             d.setCursor(4, BODY_Y + 32); d.printf("freq: %.3f MHz", freq);
             d.setCursor(4, BODY_Y + 44); d.printf("pulses: %d", plen);
             d.setTextColor(T_GOOD, T_BG);
@@ -260,14 +307,51 @@ void feat_subghz_broadcast(void)
             if (k == PK_NONE) { delay(20); continue; }
             if (k == PK_ESC) break;
             if (k == PK_ENTER) {
-                d.setTextColor(T_BAD, T_BG);
-                d.setCursor(4, BODY_Y + 98); d.print("TX...");
+                /* Big unmistakable ON-AIR indicator. The frame fills
+                 * before cc1101_rmt_tx blocks; the panel still shows
+                 * it for the full TX duration (no animation possible
+                 * while RMT is timing-critical) and we wipe it after. */
+                int by = BODY_Y;
+                /* Red border slab around the body — impossible to miss. */
+                d.fillRect(0, by, SCR_W,           4, T_BAD);
+                d.fillRect(0, FOOTER_Y - 4, SCR_W, 4, T_BAD);
+                d.fillRect(0, by, 4,           BODY_H, T_BAD);
+                d.fillRect(SCR_W - 4, by, 4,   BODY_H, T_BAD);
+                /* Solid red badge: filled circle + "ON AIR" label,
+                 * centered horizontally near the top of the body. */
+                int cx = SCR_W / 2;
+                int cy = by + 40;
+                d.fillCircle(cx - 50, cy, 8, T_BAD);
+                d.drawCircle(cx - 50, cy, 11, T_BAD);
+                d.setTextColor(0xFFFF, T_BAD);
+                d.fillRoundRect(cx - 36, cy - 10, 86, 22, 4, T_BAD);
+                d.setTextSize(2);
+                d.setCursor(cx - 32, cy - 7);
+                d.print("ON AIR");
+                d.setTextSize(1);
+                /* Show frequency + plays underneath. */
+                d.setTextColor(T_FG, T_BG);
+                d.setCursor(cx - 40, cy + 22);
+                d.printf("%.3f MHz", freq);
+                d.setCursor(cx - 28, cy + 34);
+                d.printf("play #%lu", (unsigned long)(plays + 1));
+
+                /* Fire the radio. cc1101_rmt_tx blocks for the full
+                 * pulse stream duration. */
                 ELECHOUSE_cc1101.SetTx();
                 pinMode(CC1101_GDO0, OUTPUT);
                 cc1101_rmt_tx(raw, plen);
                 ELECHOUSE_cc1101.setSidle();
                 ELECHOUSE_cc1101.SetRx();
                 plays++;
+
+                /* Brief post-TX flash so the user sees the difference
+                 * between "frame stuck" and "TX actually completed". */
+                d.fillRect(0, by, SCR_W,           4, T_GOOD);
+                d.fillRect(0, FOOTER_Y - 4, SCR_W, 4, T_GOOD);
+                d.fillRect(0, by, 4,           BODY_H, T_GOOD);
+                d.fillRect(SCR_W - 4, by, 4,   BODY_H, T_GOOD);
+                delay(120);
             }
         }
 
