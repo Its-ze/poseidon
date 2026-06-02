@@ -394,11 +394,13 @@ void feat_evil_twin(void)
     }
     SD.mkdir("/poseidon");
 
-    /* BTDM release REQUIRED for AP-mode on Bruce libs. Unavoidable
-     * (without it, AP setup hits ieee80211_hostap_attach +0x2c).
-     * One-way until POWER CYCLE — BLE dies for the session. */
+    /* POS-AUDIT-007: BTDM release one-way; gate on status. See
+     * wifi_portal.cpp for full rationale. */
     esp_wifi_set_promiscuous(false);
-    esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+    if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE) {
+        esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+        ui_toast("BLE disabled until reboot", T_WARN, 1200);
+    }
     esp_log_level_set("wifi",      ESP_LOG_INFO);
     esp_log_level_set("wifi_init", ESP_LOG_INFO);
 

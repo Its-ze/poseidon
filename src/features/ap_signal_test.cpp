@@ -59,7 +59,11 @@ static bool ap_bring_up(uint8_t ch)
      * the session after this. Software reset (ESP.restart) does NOT
      * restore the BTDM controller. User must unplug + replug to recover
      * BLE. The AP-mode menu entries' = info text should warn about this. */
-    esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+    /* POS-AUDIT-007: gate on status — see wifi_portal.cpp. */
+    if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE) {
+        esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+        ui_toast("BLE disabled until reboot", T_WARN, 1200);
+    }
 
     esp_log_level_set("wifi",      ESP_LOG_INFO);
     esp_log_level_set("wifi_init", ESP_LOG_INFO);

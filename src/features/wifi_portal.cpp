@@ -423,11 +423,17 @@ static void run_portal(void)
     esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     if (sta) esp_netif_destroy_default_wifi(sta);
 
-    /* BTDM release REQUIRED for AP-mode on Bruce libs (otherwise
-     * ieee80211_hostap_attach hits a null-deref at +0x2c). One-way
-     * until POWER CYCLE — BLE features dead for rest of session.
-     * Unavoidable trade-off given the pinned libs. */
-    esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+    /* POS-AUDIT-007: BTDM release is one-way until power cycle. Only
+     * release if the BT controller has never been brought up this
+     * session (status IDLE). If a BLE feature already inited it, the
+     * mem_release call would do nothing useful AND we keep BLE intact.
+     * Tradeoff: AP-mode on Bruce libs may crash in
+     * ieee80211_hostap_attach if BTDM still resident — caller's
+     * problem post-BLE. */
+    if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE) {
+        esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+        ui_toast("BLE disabled until reboot", T_WARN, 1200);
+    }
 
     esp_log_level_set("wifi",      ESP_LOG_INFO);
     esp_log_level_set("wifi_init", ESP_LOG_INFO);
