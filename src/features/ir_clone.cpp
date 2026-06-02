@@ -38,7 +38,7 @@ static void carrier_setup(int hz)
     if (s_half_us < 1) s_half_us = 1;
     gpio_reset_pin((gpio_num_t)IR_TX_PIN);
     pinMode(IR_TX_PIN, OUTPUT);
-    digitalWrite(IR_TX_PIN, LOW);  /* active-LOW LED: HIGH = OFF */
+    digitalWrite(IR_TX_PIN, HIGH);  /* active-LOW LED: HIGH = OFF */
 }
 
 /* Bit-banged carrier — see ir_remote.cpp for why we don't use LEDC.
@@ -56,7 +56,7 @@ static inline void mark(uint16_t us)
 }
 static inline void space(uint16_t us)
 {
-    digitalWrite(IR_TX_PIN, LOW);
+    digitalWrite(IR_TX_PIN, HIGH);  /* LED off (active-LOW) */
     if (us) delayMicroseconds(us);
 }
 
@@ -217,7 +217,7 @@ static void send_btn(const ir_profile_t &prof, const ir_btn_t &btn)
     case IR_PROTO_SONY:    send_sony12(btn.cmd, btn.addr); break;
     }
     /* Park pin HIGH (LED off) between bursts. */
-    digitalWrite(IR_TX_PIN, LOW);
+    digitalWrite(IR_TX_PIN, HIGH);
     delay(10);
 }
 
@@ -275,7 +275,7 @@ static void profile_screen(const ir_profile_t &prof)
 void feat_ir_clone(void)
 {
     pinMode(IR_TX_PIN, OUTPUT);
-    digitalWrite(IR_TX_PIN, LOW);  /* active-LOW LED: HIGH = OFF at idle */
+    digitalWrite(IR_TX_PIN, HIGH);  /* active-LOW LED: HIGH = OFF at idle */
     /* Pre-arm carrier so the first send doesn't pay timer-init latency. */
     s_carrier_hz = 0;
     carrier_setup(38000);
@@ -317,8 +317,8 @@ void feat_ir_clone(void)
             ui_draw_footer(";/. pick  ENTER=open  `=back");
         }
     }
-    /* Park OFF on exit. */
-    digitalWrite(IR_TX_PIN, LOW);
+    /* Park OFF on exit (active-LOW: HIGH=off). */
+    digitalWrite(IR_TX_PIN, HIGH);
 }
 
 /* =====================================================================
@@ -338,7 +338,7 @@ void blast_raw(uint16_t carrier_khz, const uint16_t *pairs)
         if (p[1]) space(p[1]);
         p += 2;
     }
-    digitalWrite(IR_TX_PIN, LOW);  /* park OFF */
+    digitalWrite(IR_TX_PIN, HIGH);  /* park OFF (active-LOW: HIGH=off) */
 }
 
 #include "ir_extras_data.h"
@@ -349,7 +349,7 @@ static void prank_run_screen(const char *title, const char *blurb,
                              void (*body)(void))
 {
     pinMode(IR_TX_PIN, OUTPUT);
-    digitalWrite(IR_TX_PIN, LOW);
+    digitalWrite(IR_TX_PIN, HIGH);  /* idle: LED off (active-LOW) */
     s_carrier_hz = 0;
     carrier_setup(38000);
 
@@ -380,7 +380,7 @@ static void prank_run_screen(const char *title, const char *blurb,
     }
     delay(120);
     body();
-    digitalWrite(IR_TX_PIN, LOW);  /* park OFF */
+    digitalWrite(IR_TX_PIN, HIGH);  /* park OFF (active-LOW: HIGH=off) */
 
     /* Done — wait for any key. */
     d.setTextColor(T_GOOD, T_BG);

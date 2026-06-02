@@ -374,7 +374,7 @@ void carousel_run_submenu(const menu_node_t *parent)
                 sel->action();
                 g_current_feature_item = nullptr;
                 /* Defensive IR park — see menu.cpp comment. */
-                pinMode(44, OUTPUT); digitalWrite(44, LOW);
+                pinMode(44, OUTPUT); digitalWrite(44, HIGH);
                 Serial.printf("[FEAT_EXIT] %s\n", sel->label);
                 ui_draw_status(radio_name(), "");
                 ui_draw_footer(CAROUSEL_FOOTER);
@@ -401,6 +401,8 @@ void carousel_run_submenu(const menu_node_t *parent)
                     g_current_feature_item = sel;
                     sel->action();
                     g_current_feature_item = nullptr;
+                    /* Defensive IR park — same as regular path. */
+                    pinMode(44, OUTPUT); digitalWrite(44, HIGH);
                     Serial.printf("[FEAT_EXIT] %s\n", sel->label);
                     ui_draw_status(radio_name(), "");
                     ui_draw_footer(CAROUSEL_FOOTER);

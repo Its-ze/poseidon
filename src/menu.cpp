@@ -1320,7 +1320,7 @@ static void run_submenu(const menu_node_t *parent)
                 /* Defensive IR park — IR features should self-park HIGH
                  * but if any path skips that, the LED stays glowing.
                  * Hard-set OFF here after every feature returns. */
-                pinMode(44, OUTPUT); digitalWrite(44, LOW);
+                pinMode(44, OUTPUT); digitalWrite(44, HIGH);
                 Serial.printf("[FEAT_EXIT] %s\n", sel->label);
                 ui_draw_status(radio_name(), "");
                 ui_draw_footer(FOOTER_HINTS);
@@ -1354,7 +1354,7 @@ static void run_submenu(const menu_node_t *parent)
                         ch->action();
                         g_current_feature_item = nullptr;
                         /* Defensive IR park — same as above. */
-                        pinMode(44, OUTPUT); digitalWrite(44, LOW);
+                        pinMode(44, OUTPUT); digitalWrite(44, HIGH);
                         Serial.printf("[FEAT_EXIT] %s\n", ch->label);
                         ui_draw_status(radio_name(), "");
                         ui_draw_footer(FOOTER_HINTS);

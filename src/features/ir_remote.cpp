@@ -107,7 +107,7 @@ static void carrier_on(void)
     ledc_stop(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, 1);  /* tvbgone */
     gpio_reset_pin((gpio_num_t)IR_PIN);
     pinMode(IR_PIN, OUTPUT);
-    digitalWrite(IR_PIN, LOW);  /* active-LOW LED: HIGH = OFF */
+    digitalWrite(IR_PIN, HIGH);  /* active-LOW LED: HIGH = OFF */
 }
 
 /* Half-period = 13 us → period = 26 us → ~38.5 kHz, within IR-receiver
@@ -124,7 +124,7 @@ static inline void mark(uint16_t us)
 }
 static inline void space(uint16_t us)
 {
-    digitalWrite(IR_PIN, LOW);  /* LED off */
+    digitalWrite(IR_PIN, HIGH);  /* LED off (active-LOW) */
     if (us) delayMicroseconds(us);
 }
 
@@ -146,7 +146,7 @@ static void send_samsung(uint8_t cmd, uint8_t addr_override)
         }
     }
     mark(560);
-    digitalWrite(IR_PIN, LOW);  /* park OFF */
+    digitalWrite(IR_PIN, HIGH);  /* park OFF (active-LOW: HIGH=off) */
 }
 
 void feat_ir_remote(void)
@@ -193,7 +193,7 @@ void feat_ir_remote(void)
             d.printf("? raw key = 0x%X (%d)", (unsigned)k, (int)k);
         }
     }
-    digitalWrite(IR_PIN, LOW);  /* park OFF on exit */
+    digitalWrite(IR_PIN, HIGH);  /* park OFF on exit (active-LOW: HIGH=off) */
 }
 
 /* ===== IR LED hardware diagnostic =====================================

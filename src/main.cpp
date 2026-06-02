@@ -61,10 +61,10 @@ static bool ir_feature_active(void)
 static void ir_watchdog_task(void *_)
 {
     pinMode(44, OUTPUT);
-    digitalWrite(44, LOW);
+    digitalWrite(44, HIGH);
     while (1) {
         if (!ir_feature_active()) {
-            digitalWrite(44, LOW);
+            digitalWrite(44, HIGH);
         }
         vTaskDelay(pdMS_TO_TICKS(50));
     }
@@ -78,7 +78,7 @@ void setup()
      * HIGH before anything else (M5GFX board autodetect, libraries,
      * etc.) so the pin is firmly OFF from the very first instruction. */
     pinMode(44, OUTPUT);
-    digitalWrite(44, LOW);
+    digitalWrite(44, HIGH);
 
     /* Cardputer-Adv hat compatibility: the CAP-LoRa1262 wires SX1262
      * NSS=G5, BUSY=G6, DIO1=G4, RST=G3. At power-on the SX1262 drives
@@ -136,7 +136,7 @@ void setup()
     /* Re-park IR LED HIGH after all the library inits in case any of
      * them poked GPIO 44. */
     pinMode(44, OUTPUT);
-    digitalWrite(44, LOW);
+    digitalWrite(44, HIGH);
 
     /* Bring up the GNSS UART + background NMEA poller so GPS-consuming
      * features (Wardrive, R4 GPS fix) always have a recent snapshot. */
