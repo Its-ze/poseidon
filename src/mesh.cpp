@@ -135,8 +135,16 @@ bool mesh_begin(const char *node_name)
         s_name[sizeof(s_name) - 1] = '\0';
     }
 
-    /* ESP-NOW needs WiFi initialized. Station mode, disconnected. */
-    if (WiFi.getMode() == WIFI_OFF) WiFi.mode(WIFI_STA);
+    /* ESP-NOW needs WiFi initialized. Probe via raw IDF since
+     * WiFi.getMode() reads Arduino's tracked state which is OFF when
+     * WiFi was inited via raw esp_wifi_init (Triton, portal, etc).
+     * Calling WiFi.mode(WIFI_STA) in that case double-creates the
+     * default STA netif and asserts esp_netif_create_default_wifi_sta.
+     * Mirror of c5_cmd.cpp:250-253. POS-AUDIT-020. */
+    wifi_mode_t cur = WIFI_MODE_NULL;
+    if (esp_wifi_get_mode(&cur) != ESP_OK) {
+        WiFi.mode(WIFI_STA);
+    }
     if (esp_now_init() != ESP_OK) return false;
     esp_now_register_recv_cb(on_recv);
 
