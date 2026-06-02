@@ -93,6 +93,11 @@ void cc1101_end(void)
     if (!s_up) return;
     ELECHOUSE_cc1101.setSidle();
     ELECHOUSE_cc1101.goSleep();
+    /* POS-AUDIT-012: restore GDO0 to INPUT (was OUTPUT for some TX paths)
+     * and float CS so the next HSPI user sees a clean bus. Other parked
+     * CS lines (SD=12, nRF24=6, LoRa=5) are released by their owners. */
+    pinMode(CC1101_GDO0, INPUT);
+    pinMode(CC1101_CS, INPUT);
     s_up = false;
 }
 
