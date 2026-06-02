@@ -342,20 +342,12 @@ static void start_scan(void)
 
 void feat_ble_scan(void)
 {
-    Serial.printf("[ble_scan] feat_entry heap=%u bt_status=%d\n",
-                  (unsigned)ESP.getFreeHeap(),
-                  (int)esp_bt_controller_get_status());
-    Serial.flush();
-    /* Skip radio_switch wrapper — call NimBLE init directly to isolate
-     * whether the hang is in radio.cpp's teardown chain or in NimBLE. */
-    if (!NimBLEDevice::isInitialized()) {
-        Serial.println("[ble_scan] calling NimBLEDevice::init directly"); Serial.flush();
-        bool ok = NimBLEDevice::init("");
-        Serial.printf("[ble_scan] direct init -> %d bt_status=%d heap=%u\n",
-                      (int)ok, (int)esp_bt_controller_get_status(),
-                      (unsigned)ESP.getFreeHeap());
-        Serial.flush();
-    }
+    /* POS-AUDIT-006: route through radio_switch so prior WiFi domains
+     * tear down via teardown_current() before NimBLE comes up.
+     * Previously this called NimBLEDevice::init("") directly to "isolate
+     * whether the hang is in radio.cpp" — that hang was POS-AUDIT-008
+     * (WiFi.mode(WIFI_OFF) churn), now fixed at the source. */
+    radio_switch(RADIO_BLE);
     s_count = 0;
     s_filter[0] = '\0';
     s_cb_fire_count = 0;
@@ -365,29 +357,6 @@ void feat_ble_scan(void)
     draw_list(0);
 
     start_scan();
-
-    /* On-screen diagnostic — serial CDC is unreliable here so dump the
-     * scan outcome directly to the display and pause until a keypress. */
-    {
-        auto &dd = M5Cardputer.Display;
-        dd.fillRect(0, BODY_Y, SCR_W, BODY_H, T_BG);
-        dd.setTextColor(T_ACCENT, T_BG);
-        dd.setCursor(4, BODY_Y + 4); dd.print("BLE SCAN DIAG");
-        dd.drawFastHLine(4, BODY_Y + 14, SCR_W - 8, T_ACCENT);
-        dd.setTextColor(T_FG, T_BG);
-        bool init_ok = NimBLEDevice::isInitialized();
-        NimBLEScan *sc = NimBLEDevice::getScan();
-        esp_bt_controller_status_t bts = esp_bt_controller_get_status();
-        wifi_mode_t wm2 = WIFI_MODE_NULL; esp_wifi_get_mode(&wm2);
-        dd.setCursor(4, BODY_Y + 20);  dd.printf("nimble init: %s", init_ok ? "yes" : "NO");
-        dd.setCursor(4, BODY_Y + 30);  dd.printf("scan obj   : %s", sc ? "yes" : "NO");
-        dd.setCursor(4, BODY_Y + 40);  dd.printf("bt ctrl    : %d (need 3)", (int)bts);
-        dd.setCursor(4, BODY_Y + 50);  dd.printf("wifi mode  : %d (0=off)", (int)wm2);
-        dd.setCursor(4, BODY_Y + 60);  dd.printf("cb fires   : %lu", (unsigned long)s_cb_fire_count);
-        dd.setCursor(4, BODY_Y + 70);  dd.printf("s_count    : %d", s_count);
-        dd.setCursor(4, BODY_Y + 85);  dd.setTextColor(T_DIM, T_BG); dd.print("any key to continue");
-        while (input_poll() == PK_NONE) delay(20);
-    }
 
     int cursor = 0;
     uint32_t last_redraw = 0;
