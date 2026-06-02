@@ -35,6 +35,16 @@ static uint32_t s_tx = 0;
 static uint32_t s_rx = 0;
 static uint32_t s_last_hello = 0;
 
+/* net-003: s_peers + s_peer_count are touched by three contexts:
+ *   - on_recv (ESP-NOW callback, lwip task context)
+ *   - mesh_task (eviction loop @ 500 ms)
+ *   - menu/UI thread via mesh_snapshot()
+ * Without serialisation, the eviction swap-down (s_peers[i] =
+ * s_peers[--s_peer_count]) can race a concurrent on_recv insert that
+ * also reads s_peer_count, leading to overwritten entries or stale
+ * snapshot reads. portMUX held for ≤100 µs around each touch site. */
+static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
+
 static int find_peer(const uint8_t *mac)
 {
     for (int i = 0; i < s_peer_count; ++i)
@@ -62,9 +72,10 @@ static void on_recv(const uint8_t *mac, const uint8_t *data, int len)
     if (h->magic != MESH_MAGIC || h->version != MESH_VERSION) return;
     if (h->type != MESH_TYPE_HELLO) return;
 
+    portENTER_CRITICAL(&s_mux);
     int idx = find_peer(mac);
     if (idx < 0) {
-        if (s_peer_count >= MESH_MAX_PEERS) return;
+        if (s_peer_count >= MESH_MAX_PEERS) { portEXIT_CRITICAL(&s_mux); return; }
         idx = s_peer_count++;
         memcpy(s_peers[idx].mac, mac, 6);
     }
@@ -81,6 +92,7 @@ static void on_recv(const uint8_t *mac, const uint8_t *data, int len)
      * esp_now_recv_info_t API in a future ESP-IDF upgrade. */
     p.rssi      = 0;
     p.last_seen = millis();
+    portEXIT_CRITICAL(&s_mux);
 }
 
 static void send_hello(void)
@@ -117,11 +129,13 @@ static void mesh_task(void *)
             send_hello();
         }
         /* Evict stale peers. */
+        portENTER_CRITICAL(&s_mux);
         for (int i = s_peer_count - 1; i >= 0; --i) {
             if (now - s_peers[i].last_seen > MESH_TIMEOUT_MS) {
                 s_peers[i] = s_peers[--s_peer_count];
             }
         }
+        portEXIT_CRITICAL(&s_mux);
         delay(500);
     }
     vTaskDelete(nullptr);
@@ -145,6 +159,13 @@ bool mesh_begin(const char *node_name)
     if (esp_wifi_get_mode(&cur) != ESP_OK) {
         WiFi.mode(WIFI_STA);
     }
+    /* Clear peer table BEFORE registering the recv cb so an in-flight
+     * frame between register and reset cannot land on a stale entry
+     * that the eviction loop later swap-down to a freed slot. */
+    portENTER_CRITICAL(&s_mux);
+    s_peer_count = 0;
+    portEXIT_CRITICAL(&s_mux);
+
     if (esp_now_init() != ESP_OK) return false;
     esp_now_register_recv_cb(on_recv);
 
@@ -155,7 +176,6 @@ bool mesh_begin(const char *node_name)
     if (!esp_now_is_peer_exist(BROADCAST_MAC)) esp_now_add_peer(&pi);
 
     s_up = true;
-    s_peer_count = 0;
     s_tx = s_rx = 0;
     xTaskCreate(mesh_task, "mesh", 4096, nullptr, 3, &s_mesh_handle);
     return true;
@@ -174,13 +194,19 @@ void mesh_stop(void)
         s_mesh_handle = nullptr;
     }
     esp_now_deinit();
+    /* on_recv can no longer fire after esp_now_deinit, but UI snapshot
+     * threads may still read; reset under the lock for consistency. */
+    portENTER_CRITICAL(&s_mux);
     s_peer_count = 0;
+    portEXIT_CRITICAL(&s_mux);
 }
 
 int mesh_peers(mesh_peer_t *out, int max)
 {
+    portENTER_CRITICAL(&s_mux);
     int n = s_peer_count < max ? s_peer_count : max;
     memcpy(out, s_peers, n * sizeof(mesh_peer_t));
+    portEXIT_CRITICAL(&s_mux);
     return n;
 }
 
