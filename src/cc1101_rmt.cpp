@@ -21,6 +21,7 @@
 #include <driver/rmt_rx.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <esp_task_wdt.h>
 
 #define RMT_RESOLUTION_HZ   1000000   /* 1 MHz → 1 µs tick */
 #define RMT_MEM_SYMBOLS     64
@@ -160,11 +161,30 @@ int cc1101_rmt_rx(int16_t *out_pulses, int max_pulses,
                         &rc) != ESP_OK) goto done;
     }
 
-    /* Wait for the rx_done notification or user timeout. */
-    if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(timeout_ms)) == 0) {
-        /* Timed out — no signal. Stop and clean up. */
-        rmt_disable(rx_chan);
-        goto done;
+    /* POS-AUDIT-013 / rf-008: Wait for rx_done notification or timeout.
+     * Arduino-ESP32 v3 (IDF 5.x) registers loopTask with TWDT (default
+     * 5 s). A monolithic 20 s ulTaskNotifyTake from subghz_record was
+     * tripping the panic — slice into 1 s chunks and reset TWDT between
+     * slices. esp_task_wdt_reset() returns ESP_ERR_INVALID_STATE if the
+     * current task isn't subscribed; we ignore (no-op for unregistered
+     * callers like custom tasks). */
+    {
+        uint32_t remaining = timeout_ms;
+        bool got = false;
+        while (remaining > 0) {
+            uint32_t slice = remaining > 1000 ? 1000 : remaining;
+            if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(slice)) != 0) {
+                got = true;
+                break;
+            }
+            (void)esp_task_wdt_reset();
+            remaining -= slice;
+        }
+        if (!got) {
+            /* Timed out across all slices — no signal. Stop and clean. */
+            rmt_disable(rx_chan);
+            goto done;
+        }
     }
     rmt_disable(rx_chan);
 
