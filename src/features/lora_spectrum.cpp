@@ -188,13 +188,16 @@ static void run_bars(SX1262 &radio, const lora_range_t &range)
 #define WF_ROWS 60
 #define WF_COLS 200
 
-static void run_waterfall(SX1262 &radio, const lora_range_t &range)
+/* rf-013: returns true on user ESC (clean exit, outer keeps running),
+ * false on OOM (outer should tear down LoRa and bail to menu so the
+ * radio + antenna switch don't sit hot in a degraded state). */
+static bool run_waterfall(SX1262 &radio, const lora_range_t &range)
 {
     auto &d = M5Cardputer.Display;
     const int GX = 4, GY = BODY_Y + 14, GW = WF_COLS, GH = WF_ROWS;
 
     uint16_t *ring = (uint16_t *)malloc(GH * GW * sizeof(uint16_t));
-    if (!ring) { ui_toast("OOM", T_BAD, 1000); return; }
+    if (!ring) { ui_toast("OOM", T_BAD, 1000); return false; }
     memset(ring, 0, GH * GW * sizeof(uint16_t));
     int head = 0, count = 0;
 
@@ -231,7 +234,7 @@ static void run_waterfall(SX1262 &radio, const lora_range_t &range)
         uint32_t t0 = millis();
         while (millis() - t0 < 50) {
             uint16_t k = input_poll();
-            if (k == PK_ESC) { free(ring); return; }
+            if (k == PK_ESC) { free(ring); return true; }
             delay(4);
         }
     }
@@ -379,11 +382,15 @@ void feat_lora_spectrum(void)
             radio.setFrequency(RANGES[range].center);
             radio.startReceive();
             if (mode == 0)       run_bars(radio, RANGES[range]);
-            else if (mode == 1)  run_waterfall(radio, RANGES[range]);
+            else if (mode == 1)  {
+                /* rf-013: bail to outer teardown on OOM. */
+                if (!run_waterfall(radio, RANGES[range])) goto teardown;
+            }
             else                 run_scope(radio, RANGES[range].center);
         }
     }
 
+teardown:
     lora_end();
     radio_switch(RADIO_NONE);
 }
