@@ -14,6 +14,7 @@
 #include "led_fx.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include <string.h>
 
 static const char *TAG = "zb_sniffer";
@@ -24,7 +25,34 @@ static volatile bool s_running = false;
 static volatile uint8_t s_channel = 15;
 static volatile bool  s_hop = false;
 
-/* Receive callback runs in ISR context — must be brief. */
+/* POS-AUDIT-005: ISR-safe queue/drain split. The ISR now only memcpys
+ * a small summary into a FreeRTOS queue (xQueueSendFromISR is IRAM-safe);
+ * a normal-priority drain task picks them up and calls esp_now_send +
+ * led_fx_set in task context. Previously the ISR called both directly,
+ * which crashed during concurrent flash ops (esp_now_send is NOT
+ * IRAM-resident). */
+static QueueHandle_t s_zb_q;
+static TaskHandle_t  s_zb_drain;
+
+#define ZB_Q_DEPTH 16
+
+static void zb_drain_task(void *_)
+{
+    posei_zb_t z;
+    while (1) {
+        if (xQueueReceive(s_zb_q, &z, portMAX_DELAY) != pdTRUE) continue;
+        if (!s_running) continue;   /* drop late frames after stop */
+        posei_msg_t msg;
+        proto_init_msg(&msg, POSEI_TYPE_RESP_ZB);
+        msg.seq = s_seq;
+        memcpy(msg.payload, &z, sizeof(z));
+        msg.payload_len = sizeof(z);
+        proto_send_to(s_requester, &msg);
+        led_fx_set(LED_MODE_ZB_RX);
+    }
+}
+
+/* Receive callback runs in ISR context — must be brief and IRAM-safe. */
 IRAM_ATTR void esp_ieee802154_receive_done(uint8_t *frame,
                                             esp_ieee802154_frame_info_t *info)
 {
@@ -32,27 +60,25 @@ IRAM_ATTR void esp_ieee802154_receive_done(uint8_t *frame,
     uint8_t len = frame[0];
     if (len < 5) { esp_ieee802154_receive_handle_done(frame); return; }
 
-    posei_msg_t msg;
-    proto_init_msg(&msg, POSEI_TYPE_RESP_ZB);
-    msg.seq = s_seq;
-    posei_zb_t *z = (posei_zb_t *)msg.payload;
-    memset(z, 0, sizeof(*z));
-    z->channel = s_channel;
-    z->rssi    = info ? info->rssi : 0;
+    posei_zb_t z;
+    memset(&z, 0, sizeof(z));
+    z.channel = s_channel;
+    z.rssi    = info ? info->rssi : 0;
     uint8_t fc0 = frame[1];
-    z->frame_type = fc0 & 0x07;
+    z.frame_type = fc0 & 0x07;
     /* Dest PAN id at offset 3 (little endian). */
-    if (len >= 5) z->pan_id = frame[3] | (frame[4] << 8);
-    /* Full address fields require decoding addressing modes; keep it
-     * minimal for now. */
-    if (len >= 7) z->seq = frame[2];
-    msg.payload_len = sizeof(posei_zb_t);
-    proto_send_to(s_requester, &msg);
-    led_fx_set(LED_MODE_ZB_RX);
+    if (len >= 5) z.pan_id = frame[3] | (frame[4] << 8);
+    if (len >= 7) z.seq = frame[2];
+
+    BaseType_t hp_woken = pdFALSE;
+    /* Non-blocking; if queue is full we drop the frame rather than stall
+     * the ISR. */
+    xQueueSendFromISR(s_zb_q, &z, &hp_woken);
 
     esp_ieee802154_receive_handle_done(frame);
     /* Some IDF builds need explicit re-arm even after handle_done. */
     esp_ieee802154_receive();
+    if (hp_woken) portYIELD_FROM_ISR();
 }
 
 /* IEEE 802.15.4 MAC beacon request frame. Frame control:
@@ -93,6 +119,15 @@ void zb_sniffer_start(const uint8_t requester[6], uint8_t channel, uint16_t seq)
 {
     memcpy(s_requester, requester, 6);
     s_seq = seq;
+
+    /* POS-AUDIT-005: queue + drain task lifecycle. Lazy-init both so
+     * repeated start/stop cycles don't leak. */
+    if (!s_zb_q) {
+        s_zb_q = xQueueCreate(ZB_Q_DEPTH, sizeof(posei_zb_t));
+    }
+    if (!s_zb_drain && s_zb_q) {
+        xTaskCreate(zb_drain_task, "zb_drain", 4096, NULL, 4, &s_zb_drain);
+    }
 
     esp_ieee802154_enable();
     if (channel == 0xFF) {
