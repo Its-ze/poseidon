@@ -11,6 +11,37 @@
 #include "sfx.h"
 #include <M5Cardputer.h>
 #include <Preferences.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
+
+/* POS-AUDIT-017 part 2: SFX runs on a dedicated player task fed by a
+ * FreeRTOS queue. Public sfx_X functions enqueue a 1-byte event and
+ * return immediately — no audio path blocks the caller. Previously
+ * sfx_select (~45 ms), sfx_back (~40 ms), sfx_click (~8 ms) ran inline
+ * on the loopTask from input_poll_raw on every keypress; ENTER → feature
+ * had 45 ms of perceptible latency, rapid letter-mnemonic nav was
+ * throttled to ~70 keys/sec. Notification SFX from WiFi RX paths
+ * (POS-AUDIT-019 wifi_pmkid) used to block the loop while the radio
+ * task continued firing handshakes — drop events here are accepted; the
+ * SFX is decoration, not data. */
+enum sfx_evt_t : uint8_t {
+    SFX_E_CLICK = 0,
+    SFX_E_SELECT,
+    SFX_E_BACK,
+    SFX_E_ERROR,
+    SFX_E_TOAST,
+    SFX_E_SCAN_START,
+    SFX_E_SCAN_HIT,
+    SFX_E_DEAUTH_BURST,
+    SFX_E_CAPTURE,
+    SFX_E_CRACKED,
+    SFX_E_BOOT,
+    SFX_E_ALERT,
+    SFX_E_GLITCH,
+};
+static QueueHandle_t s_sfx_q = nullptr;
+static void sfx_player_task(void *);  /* fwd: defined after play_X */
 
 /* POS-AUDIT-017 part 1: NVS handle scoped per call rather than held
  * open from sfx_init for the lifetime of the firmware. The previous
@@ -40,6 +71,7 @@ static void apply_volume(void)
 
 void sfx_init(void)
 {
+    if (s_inited) return;             /* idempotent — header says safe to call multiple times */
     Preferences p;
     if (p.begin("sfx", true)) {        /* read-only */
         s_volume = p.getUChar("vol", 5);
@@ -48,6 +80,18 @@ void sfx_init(void)
     }
     if (s_volume > 10) s_volume = 10;
     apply_volume();
+
+    /* Player task + queue. 8 events is enough — sfx are short and the
+     * player drains fast. Stack 3 KB covers worst-case sfx_boot (deepest
+     * call chain through sweep + chord, both stack-frame-only). Priority 1
+     * so even idle UI tasks preempt it; we don't want SFX timing to
+     * starve real work. */
+    if (!s_sfx_q) {
+        s_sfx_q = xQueueCreate(8, sizeof(uint8_t));
+        if (s_sfx_q) {
+            xTaskCreate(sfx_player_task, "sfx", 3072, nullptr, 1, nullptr);
+        }
+    }
     s_inited = true;
 }
 
@@ -123,9 +167,9 @@ static void sweep(int f0, int f1, int dur_ms)
     }
 }
 
-/* ========== UI cues — digital / Tron ========== */
+/* ========== UI cues — digital / Tron (player-task impls) ========== */
 
-void sfx_click(void)
+static void play_click(void)
 {
     /* Short digital tick — reliably audible. 8ms with a descending second
      * tone. Previous 2ms × 2-stacked was below the M5 speaker's floor and
@@ -135,13 +179,13 @@ void sfx_click(void)
     note(2200, 5);
 }
 
-void sfx_select(void)
+static void play_select(void)
 {
     /* Short descending activation glide — the Tron "acknowledge". */
     sweep(3800, 2400, 45);
 }
 
-void sfx_back(void)
+static void play_back(void)
 {
     /* Quick sweep-down-then-tail — decisive disengagement. */
     sweep(2800, 1400, 35);
@@ -149,7 +193,7 @@ void sfx_back(void)
     note(900, 15);
 }
 
-void sfx_error(void)
+static void play_error(void)
 {
     /* Broken-modem: low buzz + harsh noise burst. */
     note(220, 35); delay(5);
@@ -157,7 +201,7 @@ void sfx_error(void)
     sweep(400, 140, 60);
 }
 
-void sfx_toast(void)
+static void play_toast(void)
 {
     /* Soft digital chirp — subtle info cue. */
     sweep(2400, 3200, 22);
@@ -165,7 +209,7 @@ void sfx_toast(void)
 
 /* ========== attack cues — cyberpunk ========== */
 
-void sfx_scan_start(void)
+static void play_scan_start(void)
 {
     /* Data-link initializing: dual-sweep up then lock. */
     sweep(400, 2800, 90);
@@ -174,14 +218,14 @@ void sfx_scan_start(void)
     note(2800, 20);
 }
 
-void sfx_scan_hit(void)
+static void play_scan_hit(void)
 {
     /* Target acquired — bright ping with sweep-up tail. */
     note(3800, 10);
     sweep(3800, 5200, 35);
 }
 
-void sfx_deauth_burst(void)
+static void play_deauth_burst(void)
 {
     /* Aggressive rising zap + industrial hit. Hard, mean. */
     sweep(200, 2400, 60);
@@ -191,7 +235,7 @@ void sfx_deauth_burst(void)
     note(600, 30);
 }
 
-void sfx_capture(void)
+static void play_capture(void)
 {
     /* Bright glitch-into-chord — data acquired. */
     const int freqs[4] = { 3200, 1800, 4200, 2600 };
@@ -201,7 +245,7 @@ void sfx_capture(void)
     chord(chord_notes, 3, 120);
 }
 
-void sfx_cracked(void)
+static void play_cracked(void)
 {
     /* The win SFX: glitch-rise-to-chord finale. */
     sweep(400, 2800, 120);
@@ -214,7 +258,7 @@ void sfx_cracked(void)
 
 /* ========== system cues — cinematic ========== */
 
-void sfx_boot(void)
+static void play_boot(void)
 {
     /* Power-on sequence — sub-bass heartbeat, modem handshake, chord bloom.
      *   1. Two sub-bass pulses  — deep, "waking up"
@@ -238,7 +282,7 @@ void sfx_boot(void)
     chord(final_chord, 4, 220);
 }
 
-void sfx_alert(void)
+static void play_alert(void)
 {
     /* Siren-style alternating high/low — unmistakable warning. */
     for (int i = 0; i < 3; i++) {
@@ -247,7 +291,7 @@ void sfx_alert(void)
     }
 }
 
-void sfx_glitch(void)
+static void play_glitch(void)
 {
     /* Full broken-signal texture — frequency noise. */
     const int freqs[8] = { 3800, 600, 2200, 4400, 900, 3200, 500, 2800 };
@@ -256,3 +300,53 @@ void sfx_glitch(void)
         delay(8);
     }
 }
+
+/* ========== player task + enqueue wrappers ========== */
+
+static void sfx_player_task(void *_)
+{
+    uint8_t evt;
+    while (1) {
+        if (xQueueReceive(s_sfx_q, &evt, portMAX_DELAY) != pdTRUE) continue;
+        /* Re-check audio_on() at play time — user may have muted between
+         * enqueue and dequeue. play_X internals also check via note(). */
+        if (!audio_on()) continue;
+        switch (evt) {
+        case SFX_E_CLICK:        play_click();        break;
+        case SFX_E_SELECT:       play_select();       break;
+        case SFX_E_BACK:         play_back();         break;
+        case SFX_E_ERROR:        play_error();        break;
+        case SFX_E_TOAST:        play_toast();        break;
+        case SFX_E_SCAN_START:   play_scan_start();   break;
+        case SFX_E_SCAN_HIT:     play_scan_hit();     break;
+        case SFX_E_DEAUTH_BURST: play_deauth_burst(); break;
+        case SFX_E_CAPTURE:      play_capture();      break;
+        case SFX_E_CRACKED:      play_cracked();      break;
+        case SFX_E_BOOT:         play_boot();         break;
+        case SFX_E_ALERT:        play_alert();        break;
+        case SFX_E_GLITCH:       play_glitch();       break;
+        default: break;
+        }
+    }
+}
+
+static inline void enqueue(uint8_t evt)
+{
+    /* Drop if queue full or not yet initialised — SFX is decoration. */
+    if (!s_sfx_q) return;
+    (void)xQueueSend(s_sfx_q, &evt, 0);
+}
+
+void sfx_click(void)        { enqueue(SFX_E_CLICK); }
+void sfx_select(void)       { enqueue(SFX_E_SELECT); }
+void sfx_back(void)         { enqueue(SFX_E_BACK); }
+void sfx_error(void)        { enqueue(SFX_E_ERROR); }
+void sfx_toast(void)        { enqueue(SFX_E_TOAST); }
+void sfx_scan_start(void)   { enqueue(SFX_E_SCAN_START); }
+void sfx_scan_hit(void)     { enqueue(SFX_E_SCAN_HIT); }
+void sfx_deauth_burst(void) { enqueue(SFX_E_DEAUTH_BURST); }
+void sfx_capture(void)      { enqueue(SFX_E_CAPTURE); }
+void sfx_cracked(void)      { enqueue(SFX_E_CRACKED); }
+void sfx_boot(void)         { enqueue(SFX_E_BOOT); }
+void sfx_alert(void)        { enqueue(SFX_E_ALERT); }
+void sfx_glitch(void)       { enqueue(SFX_E_GLITCH); }
