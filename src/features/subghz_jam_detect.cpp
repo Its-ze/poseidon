@@ -70,11 +70,15 @@ void feat_subghz_jam_detect(void)
     radio_switch(RADIO_SUBGHZ);
 
     int fi = pick_freq();
-    if (fi < 0) return;
+    if (fi < 0) {
+        radio_switch(RADIO_NONE);   /* POS-AUDIT-002: re-arm GPS UART pin 13 */
+        return;
+    }
     float freq = JAM_FREQS[fi];
 
     if (!cc1101_begin(freq)) {
         ui_toast("CC1101 init failed", T_BAD, 1500);
+        radio_switch(RADIO_NONE);   /* POS-AUDIT-002: re-arm GPS UART pin 13 */
         return;
     }
     ELECHOUSE_cc1101.setRxBW(270);   /* wider = catches more noise */
@@ -111,7 +115,12 @@ void feat_subghz_jam_detect(void)
             d.printf("peak warm: %d dBm", peak_warm);
         }
         uint16_t k = input_poll();
-        if (k == PK_ESC) return;
+        if (k == PK_ESC) {
+            cc1101_set_idle();
+            cc1101_end();
+            radio_switch(RADIO_NONE);   /* POS-AUDIT-002 */
+            return;
+        }
         if (k == '?') { ui_show_current_help(); ui_draw_footer("`=stop  ?=help"); }
         delay(20);
     }
@@ -202,4 +211,5 @@ void feat_subghz_jam_detect(void)
 
     cc1101_set_idle();
     cc1101_end();
+    radio_switch(RADIO_NONE);   /* POS-AUDIT-002: re-arm GPS UART pin 13 */
 }
