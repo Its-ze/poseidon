@@ -12,7 +12,12 @@
 #include <M5Cardputer.h>
 #include <Preferences.h>
 
-static Preferences s_prefs;
+/* POS-AUDIT-017 part 1: NVS handle scoped per call rather than held
+ * open from sfx_init for the lifetime of the firmware. The previous
+ * static Preferences s_prefs held a read-write handle in NVS until
+ * power-loss — writes via putUChar / putBool sat in the in-RAM cache
+ * because we never called .end() to flush. Now every read/write opens
+ * → operates → closes, matching theme.cpp's pattern. */
 static uint8_t s_volume = 5;     /* 0..10 user-facing */
 static bool    s_mute = false;
 static bool    s_inited = false;
@@ -35,9 +40,12 @@ static void apply_volume(void)
 
 void sfx_init(void)
 {
-    s_prefs.begin("sfx", false);
-    s_volume = s_prefs.getUChar("vol", 5);
-    s_mute   = s_prefs.getBool("mute", false);
+    Preferences p;
+    if (p.begin("sfx", true)) {        /* read-only */
+        s_volume = p.getUChar("vol", 5);
+        s_mute   = p.getBool("mute", false);
+        p.end();
+    }
     if (s_volume > 10) s_volume = 10;
     apply_volume();
     s_inited = true;
@@ -47,7 +55,13 @@ void sfx_set_volume(uint8_t vol)
 {
     if (vol > 10) vol = 10;
     s_volume = vol;
-    if (s_inited) s_prefs.putUChar("vol", vol);
+    if (s_inited) {
+        Preferences p;
+        if (p.begin("sfx", false)) {
+            p.putUChar("vol", vol);
+            p.end();
+        }
+    }
     apply_volume();
 }
 
@@ -56,7 +70,13 @@ uint8_t sfx_get_volume(void) { return s_volume; }
 void sfx_set_mute(bool on)
 {
     s_mute = on;
-    if (s_inited) s_prefs.putBool("mute", on);
+    if (s_inited) {
+        Preferences p;
+        if (p.begin("sfx", false)) {
+            p.putBool("mute", on);
+            p.end();
+        }
+    }
     apply_volume();
 }
 
