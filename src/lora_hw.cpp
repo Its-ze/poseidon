@@ -119,9 +119,14 @@ int lora_begin(const lora_config_t &cfg)
      * CS line — but GPIO 13 is ALSO the GPS UART TX pin (see gps.h:18-19).
      * Forcing it OUTPUT/HIGH after gps_begin() left the UART driver
      * fighting our output mode, causing intermittent NMEA loss. CC1101
-     * never coexists with LoRa (radio_switch handles mutual exclusion)
-     * so we don't need to park its CS here. */
+     * never coexists with LoRa (radio_switch handles mutual exclusion +
+     * cc1101_end now restores CS=13 to INPUT, POS-AUDIT-012) so we
+     * don't park pin 13 here. */
     pinMode(12, OUTPUT); digitalWrite(12, HIGH);  /* SD CS */
+    /* POS-AUDIT-026: defensive nRF24 CS park. nRF24 doesn't share radio
+     * domain with LoRa, but if a non-radio_switch path left CE/CS driven
+     * the SX1262 could see noise on the shared HSPI bus. */
+    pinMode(6, OUTPUT); digitalWrite(6, HIGH);    /* nRF24 CS */
 
     /* Release from reset. */
     pinMode(LORA_NSS, OUTPUT); digitalWrite(LORA_NSS, HIGH);
