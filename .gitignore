@@ -38,3 +38,6 @@ _release/
 
 # Superpowers brainstorm session output (HTML mockups, server state) — local only
 .superpowers/
+
+# Audit pipeline — keep maps/findings, ignore upstream reference clones
+_audit/refs/
