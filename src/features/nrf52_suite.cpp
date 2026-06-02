@@ -23,7 +23,6 @@
 #include "../sfx.h"
 #include "../nrf52_hw.h"
 #include "../nrf52_led.h"
-#include "../menu_registry.h"
 #include <Arduino.h>
 
 /* ---- Forward declarations ---- */
