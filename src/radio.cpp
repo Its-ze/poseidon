@@ -100,15 +100,18 @@ static void teardown_current(void)
 {
     switch (s_active) {
     case RADIO_WIFI:
-        /* WiFi.disconnect(true,true) calls enableSTA(false) which itself
-         * tears down the driver — then esp_wifi_deinit() below runs on
-         * an already-deinited driver. Use (false,false) to just drop the
-         * association without touching driver state; the explicit stop +
-         * deinit chain handles actual shutdown in the right order. */
+        /* POS-AUDIT-008: PORKCHOP pattern. WiFi.mode(WIFI_OFF) is BANNED
+         * — combined with esp_wifi_deinit, repeated session churn
+         * fragments the heap and the next esp_wifi_init returns
+         * ESP_ERR_NO_MEM (257), eventually deadlocking the driver.
+         * esp_wifi_stop alone leaves the driver structures resident so
+         * the next feature's WiFi.mode(STA/AP) + start is clean off a
+         * hot driver. Heap-aware deinit gate (only deinit when heap is
+         * healthy AND largest-free > kMinHeapForTls) lands with
+         * POS-AUDIT-118. WiFi.disconnect(false,false) just drops the
+         * association without driver-state poke. */
         WiFi.disconnect(false, false);
-        WiFi.mode(WIFI_OFF);
         esp_wifi_stop();
-        esp_wifi_deinit();
         break;
     case RADIO_BLE:
         /* Only deinit if NimBLE is actually initialized — features that
