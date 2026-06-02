@@ -395,19 +395,21 @@ Source: 2026-06-01 v0.6.1 full audit (commit f5bfc66). Tickets sorted by severit
 - **Release gate:** yes
 - **Source findings:** rf-008
 
-### POS-AUDIT-014 — [HIGH][IR/specials] src/features/drone_remoteid.cpp:108,197 — SD I/O inside portENTER_CRITICAL
+### POS-AUDIT-014 — [HIGH→STALE][IR/specials] src/features/drone_remoteid.cpp:108,197 — SD I/O inside portENTER_CRITICAL
 
-- **Severity:** HIGH
+- **Status:** STALE — finding does not match current source
+- **Severity:** HIGH (originally)
 - **Module:** IR / specials
 - **Phase:** 1
 - **File:** src/features/drone_remoteid.cpp:108,197 + s_mux at :67
-- **Problem:** `decode_astm()` holds `portENTER_CRITICAL(&s_mux)` and calls `log_event()` which does `s_log.printf` + `s_log.flush()` — FATFS calls under a portMUX. Hardlock vector if SD blocks. Surveillance feature got this right with deferred queue; drone_remoteid did not adopt the pattern.
-- **Fix recipe:** Move `log_event` OUT of critical section; use deferred ring like surveillance_hunter (lines 154-237 of that file). Enqueue summary from inside CRITICAL, drain from main loop.
-- **Effort:** M
+- **Problem (claimed):** `decode_astm()` holds `portENTER_CRITICAL(&s_mux)` and calls `log_event()` which does `s_log.printf` + `s_log.flush()` — FATFS calls under a portMUX.
+- **Verification (POS-AUDIT-018 follow-up):** `portEXIT_CRITICAL(&s_mux)` is at line 195; `log_event(dr, msg_type)` is at line 197. SD I/O is NOT inside the critical section. The `dr` reference into `s_drones[idx]` is read after EXIT, but the only writer is `decode_astm` itself (running single-threaded on the NimBLE host task), so no race exists. Source finding `drn-001` mis-characterised line 197's position relative to line 195.
+- **Fix recipe (not needed):** —
+- **Effort:** 0
 - **Depends on:** none
-- **Verification:** Stress-test with multiple drone broadcasts while SD is busy with wardrive write; no hardlock
-- **Release gate:** yes
-- **Source findings:** drn-001
+- **Verification:** Visual inspection of lines 149-197 confirms log_event is post-EXIT
+- **Release gate:** no (closed-stale)
+- **Source findings:** drn-001 (audit description error)
 
 ### POS-AUDIT-015 — [HIGH][IR/specials] src/features/defensive_monitor.cpp:608 + :201-228 — NimBLE churn + alert MPSC race
 
