@@ -39,7 +39,9 @@ void sfx_toast(void);    /* info pop-up */
 void sfx_scan_start(void);
 void sfx_scan_hit(void);      /* new network / signal found */
 void sfx_deauth_burst(void);  /* firing frames */
-void sfx_capture(void);       /* handshake / PMKID grabbed */
+void sfx_capture(void);       /* generic capture grabbed */
+void sfx_hs_capture(void);    /* full 4-way handshake captured (longer fanfare) */
+void sfx_pmkid_capture(void); /* PMKID grabbed (shorter double-beep) */
 void sfx_cracked(void);       /* wifi pwned */
 
 /* System cues */

@@ -22,6 +22,7 @@
 #include "radio.h"
 #include "menu.h"
 #include "../wifi_wardrive.h"
+#include "../sfx.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <SD.h>
@@ -438,20 +439,20 @@ static void draw_notification(void)
         d.drawPixel(bx + bw - 4, y, fg);
     }
 
-    /* Sound cue: only on the first frame of the notification. */
+    /* POS-AUDIT-019: Sound cue dispatched to sfx player task — must
+     * not block the UI main loop while the WiFi RX task continues
+     * firing promisc_cb → emit_handshake (blocking SD writes were
+     * being queued into the 8-slot dynamic_rx_buf pool which could
+     * overflow before the previous ~600 ms inline tone+delay returned).
+     * sfx_X enqueues into a FreeRTOS queue (POS-AUDIT-017b) and returns
+     * in <2 µs; the SFX is dropped silently if the queue is already
+     * full, which is fine — the toast badge stays on screen as the
+     * primary capture indicator. */
     static uint32_t s_last_tone_start = 0;
     if (s_notify_start != s_last_tone_start) {
         s_last_tone_start = s_notify_start;
-        if (big) {
-            /* Three-note rising fanfare. */
-            M5Cardputer.Speaker.tone(1200, 120); delay(130);
-            M5Cardputer.Speaker.tone(1800, 120); delay(130);
-            M5Cardputer.Speaker.tone(2400, 240);
-        } else {
-            /* Short double-beep for PMKID. */
-            M5Cardputer.Speaker.tone(1500, 80);  delay(90);
-            M5Cardputer.Speaker.tone(2000, 120);
-        }
+        if (big) sfx_hs_capture();
+        else     sfx_pmkid_capture();
     }
 }
 

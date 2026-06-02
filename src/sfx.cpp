@@ -35,6 +35,8 @@ enum sfx_evt_t : uint8_t {
     SFX_E_SCAN_HIT,
     SFX_E_DEAUTH_BURST,
     SFX_E_CAPTURE,
+    SFX_E_HS_CAPTURE,
+    SFX_E_PMKID_CAPTURE,
     SFX_E_CRACKED,
     SFX_E_BOOT,
     SFX_E_ALERT,
@@ -245,6 +247,22 @@ static void play_capture(void)
     chord(chord_notes, 3, 120);
 }
 
+static void play_hs_capture(void)
+{
+    /* POS-AUDIT-019: full WPA2 4-way handshake captured — three-note
+     * rising fanfare. Mirrors wifi_pmkid.cpp's previous inline tones. */
+    note(1200, 120); delay(130);
+    note(1800, 120); delay(130);
+    note(2400, 240);
+}
+
+static void play_pmkid_capture(void)
+{
+    /* POS-AUDIT-019: PMKID grabbed — shorter double-beep. */
+    note(1500, 80);  delay(90);
+    note(2000, 120);
+}
+
 static void play_cracked(void)
 {
     /* The win SFX: glitch-rise-to-chord finale. */
@@ -321,6 +339,8 @@ static void sfx_player_task(void *_)
         case SFX_E_SCAN_HIT:     play_scan_hit();     break;
         case SFX_E_DEAUTH_BURST: play_deauth_burst(); break;
         case SFX_E_CAPTURE:      play_capture();      break;
+        case SFX_E_HS_CAPTURE:    play_hs_capture();    break;
+        case SFX_E_PMKID_CAPTURE: play_pmkid_capture(); break;
         case SFX_E_CRACKED:      play_cracked();      break;
         case SFX_E_BOOT:         play_boot();         break;
         case SFX_E_ALERT:        play_alert();        break;
@@ -346,6 +366,8 @@ void sfx_scan_start(void)   { enqueue(SFX_E_SCAN_START); }
 void sfx_scan_hit(void)     { enqueue(SFX_E_SCAN_HIT); }
 void sfx_deauth_burst(void) { enqueue(SFX_E_DEAUTH_BURST); }
 void sfx_capture(void)      { enqueue(SFX_E_CAPTURE); }
+void sfx_hs_capture(void)    { enqueue(SFX_E_HS_CAPTURE); }
+void sfx_pmkid_capture(void) { enqueue(SFX_E_PMKID_CAPTURE); }
 void sfx_cracked(void)      { enqueue(SFX_E_CRACKED); }
 void sfx_boot(void)         { enqueue(SFX_E_BOOT); }
 void sfx_alert(void)        { enqueue(SFX_E_ALERT); }
