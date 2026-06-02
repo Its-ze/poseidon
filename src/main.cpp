@@ -138,10 +138,15 @@ void setup()
     pinMode(44, OUTPUT);
     digitalWrite(44, HIGH);
 
-    /* Bring up the GNSS UART + background NMEA poller so GPS-consuming
-     * features (Wardrive, R4 GPS fix) always have a recent snapshot. */
-    gps_begin();
-    xTaskCreate(gps_task, "gps", 3072, nullptr, 2, nullptr);
+    /* sys-015 / OPSEC: GPS is OFF by default. The user must opt in via
+     * Settings → GPS Enable before WiFi captures / wardrive logs carry
+     * observer coordinates. Without the gate, WhisperPair / drone RID /
+     * surveillance JSONL would silently embed our position the moment
+     * a fix arrived. gps_user_enabled() reads NVS once and caches. */
+    if (gps_user_enabled()) {
+        gps_begin();
+        xTaskCreate(gps_task, "gps", 3072, nullptr, 2, nullptr);
+    }
 
     /* IR LED watchdog — keeps GPIO 44 forced HIGH whenever no IR feature
      * is active. Catches stuck-on bugs from any code path. */

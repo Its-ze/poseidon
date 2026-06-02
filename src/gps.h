@@ -36,6 +36,13 @@ struct gps_fix_t {
 bool gps_begin(void);
 void gps_end(void);
 void gps_poll(void);
+
+/* OPSEC gate. GPS is OFF by default at boot — the user must
+ * explicitly opt in via the menu before WiFi captures / wardrive logs
+ * carry observer coordinates. Persisted in NVS namespace "gps", key
+ * "enabled" (uint8_t, 0=off, 1=on). See sys-015 / POS-AUDIT entry. */
+bool gps_user_enabled(void);
+void gps_set_user_enabled(bool on);
 /* Restart the UART at a different baud. Returns the new baud. The
  * cycle covers every rate the ATGM336H/AT6668 datasheets list. */
 uint32_t gps_cycle_baud(void);

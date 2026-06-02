@@ -3,6 +3,7 @@
  */
 #include "gps.h"
 #include <HardwareSerial.h>
+#include <Preferences.h>
 
 static HardwareSerial s_uart(1);
 static gps_fix_t s_fix = {};
@@ -34,6 +35,36 @@ void gps_end(void)
 }
 
 uint32_t gps_current_baud(void) { return s_baud; }
+
+/* sys-015 / OPSEC: GPS is OFF by default. NVS namespace "gps", key
+ * "enabled" (uint8_t). Cached on first read so menu pages can poll
+ * cheaply; gps_set_user_enabled invalidates and persists. */
+static bool s_user_enabled_cache    = false;
+static bool s_user_enabled_loaded   = false;
+
+bool gps_user_enabled(void)
+{
+    if (!s_user_enabled_loaded) {
+        Preferences p;
+        if (p.begin("gps", true)) {
+            s_user_enabled_cache = p.getUChar("enabled", 0) ? true : false;
+            p.end();
+        }
+        s_user_enabled_loaded = true;
+    }
+    return s_user_enabled_cache;
+}
+
+void gps_set_user_enabled(bool on)
+{
+    s_user_enabled_cache  = on;
+    s_user_enabled_loaded = true;
+    Preferences p;
+    if (p.begin("gps", false)) {
+        p.putUChar("enabled", on ? 1 : 0);
+        p.end();
+    }
+}
 
 static volatile bool s_pause_poll = false;
 

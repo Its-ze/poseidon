@@ -2187,3 +2187,11 @@ PORKCHOP heap-policy adoption tracked under POS-AUDIT-118.
 - **Fix:** Mirror responder's `nt_resp_len <= 1024` cap.
 - **Depends on:** none · **Verification:** Crafted oversized NTLM response; no OOM · **Release gate:** yes · **Source:** slt-015
 
+### POS-AUDIT-322 — [HIGH][GPS/OPSEC] src/main.cpp:143-144 — GPS on at boot by default leaks observer position
+
+- **Severity:** HIGH · **Phase:** 1 · **File:** src/main.cpp:143-144 + src/gps.cpp + src/gps.h · **Effort:** S
+- **Problem:** `gps_begin()` + `xTaskCreate(gps_task)` ran unconditionally at boot. Any WiFi capture / wardrive / drone RID / surveillance JSONL written before the user could disable GPS embedded observer lat/lon. Violates the user's OPSEC invariant ("GPS OFF by default; user must opt in").
+- **Fix:** NVS-backed `gps_user_enabled()` gate. Namespace `"gps"`, key `"enabled"` (uint8_t), default `0`. `main.cpp` boot path skips `gps_begin` + task spawn unless flag is set. Helper cached on first read; `gps_set_user_enabled(bool)` persists + invalidates.
+- **Follow-up:** Settings menu toggle calling `gps_set_user_enabled` + on-the-fly `gps_begin` / `xTaskCreate` — tracked as future Phase-4 polish (post-v0.7 cut). Currently user must flip the NVS key externally OR rebuild with default-on.
+- **Depends on:** none · **Verification:** Cold boot → no GPS UART traffic at 13/15, no `gps` task in `vTaskList`, `gps_snapshot` returns false · **Release gate:** yes · **Source:** sys-015 (REFACTOR_PLAN Phase 1)
+
