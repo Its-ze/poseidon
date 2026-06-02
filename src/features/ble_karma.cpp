@@ -70,6 +70,7 @@ void feat_ble_karma(void)
 
     NimBLEScan *scan = NimBLEDevice::getScan();
     scan->setScanCallbacks(&s_cb, true);
+    scan->setMaxResults(0);   /* POS-AUDIT-011 */
     scan->setActiveScan(false);
     scan->setInterval(45);
     scan->setWindow(30);

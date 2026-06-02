@@ -312,6 +312,7 @@ void feat_ble_finder(void)
 
     NimBLEScan *scan = NimBLEDevice::getScan();
     scan->setScanCallbacks(&s_cb_obj, true);
+    scan->setMaxResults(0);   /* POS-AUDIT-011: don't accumulate ad vector */
     /* Active scan — AirTag advertises passively (mfr-data only), but
      * Tile and some SmartTag knockoffs only emit name + service UUID
      * in scan-response, which is invisible to passive scanners. Without
@@ -341,6 +342,7 @@ void feat_ble_finder(void)
              * can disrupt scan state). */
             scan = NimBLEDevice::getScan();
             scan->setScanCallbacks(&s_cb_obj, true);
+    scan->setMaxResults(0);   /* POS-AUDIT-011: don't accumulate ad vector */
             scan->setActiveScan(false);
             scan->setInterval(40);
             scan->setWindow(30);
@@ -405,6 +407,7 @@ void feat_ble_finder_hunt_mac(const uint8_t mac[6], const char *label)
     NimBLEScan *scan = NimBLEDevice::getScan();
     if (scan->isScanning()) scan->stop();
     scan->setScanCallbacks(&s_cb_obj, true);
+    scan->setMaxResults(0);   /* POS-AUDIT-011: don't accumulate ad vector */
     scan->setActiveScan(false);
     scan->setInterval(40);
     scan->setWindow(30);

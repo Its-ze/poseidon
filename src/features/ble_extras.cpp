@@ -82,6 +82,7 @@ void feat_ble_tracker(void)
 
     NimBLEScan *scan = NimBLEDevice::getScan();
     scan->setScanCallbacks(s_tracker_cb, true);
+    scan->setMaxResults(0);   /* POS-AUDIT-011 */
     scan->setActiveScan(false);
     scan->setInterval(45);
     scan->setWindow(30);
@@ -207,6 +208,7 @@ void feat_ble_sniff(void)
     /* s_sniff_cb is static-allocated. */
     NimBLEScan *scan = NimBLEDevice::getScan();
     scan->setScanCallbacks(s_sniff_cb, true);
+    scan->setMaxResults(0);   /* POS-AUDIT-011 */
     scan->setActiveScan(false);
     scan->start(0, false);
 

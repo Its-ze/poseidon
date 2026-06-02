@@ -625,6 +625,7 @@ void feat_ble_whisperpair(void)
 
     NimBLEScan *scan = NimBLEDevice::getScan();
     scan->setScanCallbacks(&s_cb, true);
+    scan->setMaxResults(0);   /* POS-AUDIT-011: don't accumulate ad vector */
     scan->setActiveScan(true);
     /* Aggressive scan — match window to interval for full-duty scanning,
      * increasing the odds of catching a low-duty Fast Pair advertisement. */

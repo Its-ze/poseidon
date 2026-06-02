@@ -227,6 +227,7 @@ void feat_ble_toys(void)
 
     NimBLEScan *scan = NimBLEDevice::getScan();
     scan->setScanCallbacks(&s_cb, true);
+    scan->setMaxResults(0);   /* POS-AUDIT-011 */
     scan->setActiveScan(true);
     scan->setInterval(45);
     scan->setWindow(30);
