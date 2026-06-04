@@ -95,9 +95,20 @@ static void cb(void *buf, wifi_promiscuous_pkt_type_t type)
 static void hop_task(void *)
 {
     while (s_running) {
+        /* POS-AUDIT-211 / wifi-024: re-check s_locked immediately
+         * before the set_channel syscall to close the small race
+         * window between the decision and the issue. The outer
+         * 200/400 ms cadence still allows a fresh burst to start
+         * after the decision but before the hop fires; the second
+         * check catches that case and skips the hop, which is the
+         * cheapest defense short of a full mutex+state-machine
+         * rewrite (deferred to Phase 2 / wifi-024 follow-up). */
         if (!s_locked) {
-            s_all_ch = (s_all_ch % 13) + 1;
-            esp_wifi_set_channel(s_all_ch, WIFI_SECOND_CHAN_NONE);
+            uint8_t next_ch = (s_all_ch % 13) + 1;
+            if (!s_locked) {
+                s_all_ch = next_ch;
+                esp_wifi_set_channel(s_all_ch, WIFI_SECOND_CHAN_NONE);
+            }
         }
         delay(s_locked ? 200 : 400);
     }

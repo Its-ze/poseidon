@@ -73,16 +73,20 @@ static const char *ssid_for(const uint8_t *bssid)
 static void cache_beacon(const uint8_t *bssid, const uint8_t *tags, int len)
 {
     if (len < 2 || tags[0] != 0 || tags[1] == 0 || tags[1] > 32) return;
+    /* POS-AUDIT-206 / wifi-019: serialise against hunt_task's snapshot
+     * read. Critical section is bounded (linear scan + memcpy of ≤32 B). */
+    portENTER_CRITICAL(&s_pmkid_mux);
     int idx = -1;
     for (int i = 0; i < s_cache_n; ++i)
         if (memcmp(s_cache[i].bssid, bssid, 6) == 0) { idx = i; break; }
     if (idx < 0) {
-        if (s_cache_n >= BS_CACHE) return;
+        if (s_cache_n >= BS_CACHE) { portEXIT_CRITICAL(&s_pmkid_mux); return; }
         idx = s_cache_n++;
         memcpy(s_cache[idx].bssid, bssid, 6);
     }
     memcpy(s_cache[idx].ssid, tags + 2, tags[1]);
     s_cache[idx].ssid[tags[1]] = '\0';
+    portEXIT_CRITICAL(&s_pmkid_mux);
 }
 
 static void hex_append(char *buf, const uint8_t *data, int n)
@@ -371,9 +375,24 @@ static void hunt_task(void *)
 {
     while (s_running) {
         if (s_hunt && s_cache_n > 0) {
-            for (int i = 0; i < s_cache_n && s_running && s_hunt; ++i) {
-                memcpy(s_hunt_frame + 10, s_cache[i].bssid, 6);
-                memcpy(s_hunt_frame + 16, s_cache[i].bssid, 6);
+            /* POS-AUDIT-206 / wifi-019: snapshot the BSSID list before
+             * the burst loop. cache_beacon is called from promisc_cb
+             * (WiFi RX task context) and can mutate s_cache[i].bssid
+             * concurrently with the inner-loop read; under busy RF the
+             * memcpy at line 375 would pull half-written bytes and we'd
+             * blast TXs at MAC chimeras. Snapshot fits 32×6=192 B on
+             * the hunt_task stack (4 KB allocation). */
+            uint8_t snap_bssid[BS_CACHE][6];
+            int n;
+            portENTER_CRITICAL(&s_pmkid_mux);
+            n = s_cache_n;
+            if (n > BS_CACHE) n = BS_CACHE;
+            memcpy(snap_bssid, s_cache, n * sizeof(snap_bssid[0]));
+            portEXIT_CRITICAL(&s_pmkid_mux);
+
+            for (int i = 0; i < n && s_running && s_hunt; ++i) {
+                memcpy(s_hunt_frame + 10, snap_bssid[i], 6);
+                memcpy(s_hunt_frame + 16, snap_bssid[i], 6);
                 /* Fire a burst of 3 frames on the current channel.
                  * 2 ms vTaskDelay between frames lets the DMA pool
                  * drain between TXs — without this back-to-back TXs
