@@ -25,7 +25,7 @@ Generated 2026-06-01 from commit f5bfc66.
 - **theme.cpp** — 191 LOC, six curated 16-bit 565 palettes (POSEIDON/MATRIX/E-INK/SYNTHWAVE/PHANTOM/BLOOD), NVS persistence, live-preview without NVS write.
 - **input.cpp** — 144 LOC, TCA8418 keyboard poller, modal line editor, injected-key ring for TRIDENT bridge, idle tracking for screensaver.
 - **screensaver.cpp** — 1,090 LOC, 10 full-screen idle painters (wardrive sim, matrix rain, breathing, deep scan, port scan, hex cascade, terminal crack, neural arc, glitch BSOD, tide waves); NVS-backed enable/timeout/pick.
-- **splash.cpp** — 148 LOC, animated boot splash: procedural caustics, metallic trident sprite, title bloom, scanline sweep.
+- **splash.cpp** — 148 LOC, animated boot splash: Hokusai Great Wave full-screen image with magenta scanline materialization sweep + fade-in + tag-line crawl. (sys-022 errata fix — earlier draft said "metallic trident sprite, title bloom, scanline sweep".)
 - **sfx.cpp** — 238 LOC, tone-based SFX library (click, select, back, error, scan_hit, capture, cracked, boot jingle, alert, glitch); NVS-backed volume + mute.
 - **argus.cpp** — 175 LOC, 48×48 RGB565 sprite renderer for Triton gotchi mood portraits; 10 moods, procedural overlays. Tags: [TX-cache]
 - **ui_ambient.cpp** — 153 LOC, per-theme ambient layer renderer (matrix rain for MATRIX theme, no-op for E-INK, subtle particle drift for others).
@@ -33,8 +33,8 @@ Generated 2026-06-01 from commit f5bfc66.
 - **radio.cpp** — 179 LOC, lazy domain switcher: tears down old radio domain before bringing up new one; `wifi_lean_sta_init` with reduced DMA buffers; raw IDF AP pattern reference. Tags: [WiFi-AP-IDF, BLE-coop, HSPI-park]
 - **menu_carousel.cpp** — 417 LOC, big-card carousel renderer with corner brackets, large hotkey badge, slide animation, shared keyboard semantics with terminal style. Tags: [IR-active-low]
 - **menu_icons.cpp** — 50 LOC, icon-drawing helpers (procedural pixel art, no bitmaps) used by carousel and SaltyJack views.
-- **menu_registry.cpp** — 201 LOC, dynamic self-registration system; `__attribute__((constructor))` static init; builds menu_node_t arrays from registered features before setup().
-- **hat_manager.cpp** — 64 LOC, hat detection by probing SPI/I2C (CAP-LoRa1262, HYDRA_RF_424, ESP32_C5_NODE, FEATHER_NRF52); parks SPI CS lines. Tags: [HSPI-park]
+- ~~**menu_registry.cpp**~~ — Removed (Phase 0 / POS-AUDIT-004): was 201 LOC of dead self-registration with zero call sites.
+- ~~**hat_manager.cpp**~~ — Removed (Phase 0 / POS-AUDIT sys-013): was 64 LOC stub that always returned `HatType::NONE`; no callers in the codebase.
 - **sd_helper.cpp** — 142 LOC, idempotent SD mount, shared HSPI bus accessor `sd_get_spi()`, `sdlog_open()` canonical CSV logger bootstrap, FAT format. Tags: [HSPI-park]
 - **gps.cpp** — 172 LOC, minimal NMEA GGA+RMC parser on UART1 (GPIO 15 RX, 13 TX), baud-cycle support, background snapshot API. Tags: [GPS-off]
 - **lora_hw.cpp** — 252 LOC, SX1262 RadioLib wrapper via shared HSPI; PI4IOE5V6408 antenna switch on I2C; preset configs for 433/868/915/Meshtastic bands. Tags: [HSPI-park]
@@ -76,8 +76,8 @@ Generated 2026-06-01 from commit f5bfc66.
 - **nrf52_hw.h** — 44 LOC, `NRF52Hardware` class; begin/end/is_up/send_command/available/read_line.
 - **nrf52_led.h** — 78 LOC, `nrf52_led_mode_t` enum (24 modes), nrf52_led_set/oneshot.
 - **sd_helper.h** — 53 LOC, sd_mount/is_mounted/format, sd_get_spi, sd_remount, sdlog_open.
-- **hat_manager.h** — 36 LOC, `HatType` enum (5 types), `HatManager` class with pre_init/post_init/detect/park_* statics.
-- **menu_registry.h** — 80 LOC, `MenuRegistry` class, `REGISTER_FEATURE` + `REGISTER_SUBMENU` macros.
+- ~~**hat_manager.h**~~ — Removed alongside hat_manager.cpp (Phase 0 / sys-013).
+- ~~**menu_registry.h**~~ — Removed alongside menu_registry.cpp (Phase 0 / POS-AUDIT-004).
 - **subghz_types.h** — 26 LOC, `subghz_capture_t` (512 pulses, freq, ts), `g_subghz_last_cap` / `g_subghz_last_valid` externs.
 - **nrf24_types.h** — 24 LOC, `nrf24_target_t` (addr/channel/type/packet_count), `g_nrf24_last_device` / `g_nrf24_last_valid` externs.
 - **version.h** — 21 LOC, `poseidon_version()` + `poseidon_build_date()` inline wrappers; `-D` flag injection from platformio.ini.
@@ -264,4 +264,4 @@ Headers included by 3 or more other files (based on grep include counts):
 | BLE-coop | ble_scan.cpp, ble_spam.cpp, ble_hid.cpp, ble_whisperpair.cpp, ble_gatt.cpp, ble_flood.cpp, ble_karma.cpp, ble_clone.cpp, ble_findmy.cpp, ble_sourapple.cpp, ble_toys.cpp, ble_blueducky.cpp, ble_extras.cpp, drone_remoteid.cpp, nrf52_ble_mitm_relay.cpp, nrf52_wifi_ble_combo.cpp | All BLE features use cooperative tick; none create xTaskCreate around NimBLE work. ble_spam.cpp and ble_sourapple.cpp internally use xTaskCreate for a separate spam_task — these are NOT around NimBLE init, they run after NimBLE is already initialized, so they are safe. |
 | IR-active-low | main.cpp, ir_remote.cpp, ir_tvbgone.cpp, ir_clone.cpp, menu_carousel.cpp (IR state check) | main.cpp parks GPIO 44 HIGH at boot + watchdog task. ir_remote.cpp correctly uses LEDC `output_invert=1`. ir_tvbgone.cpp and ir_clone.cpp use bit-banged carrier (active-LOW: HIGH=off) — correct behavior, no LEDC invert needed for bit-bang. |
 | GPS-off | wifi_wardrive.cpp, triton.cpp, surveillance_hunter.cpp, drone_remoteid.cpp, defensive_monitor.cpp, feat_satcom.cpp, radio_lora.cpp, mesh/meshtastic_node.cpp, mesh.cpp, mesh_position.cpp, gps.cpp | All GPS-tagged captures are gated: wardrive writes GPS fields only when `gps_snapshot()` returns true AND `g.valid`. triton.cpp's wardrive CSV file is only opened when a GPS fix is present during the session. No feature writes GPS coordinates unconditionally. |
-| HSPI-park | cc1101_hw.cpp, nrf24_hw.cpp, nrf24_suite.cpp, lora_hw.cpp, hat_manager.cpp, sd_helper.cpp, subghz_scan.cpp, subghz_replay.cpp, subghz_record.cpp, subghz_broadcast.cpp, subghz_jammer.cpp, subghz_spectrum.cpp, subghz_jam_detect.cpp, subghz_bruteforce.cpp, lora_spectrum.cpp, radio_lora.cpp, rf_finder.cpp | All share the HSPI bus (SCK=40, MISO=39, MOSI=14). SD uses CS=10 (internal), LoRa uses CS=G5, CC1101 uses CS=13, nRF24 uses CS=G6. cc1101_hw.cpp calls `cc1101_park_others()` to pull other CS lines HIGH before SPI ops. nrf24_suite.cpp explicitly uses `sd_get_spi()` for raw register writes to avoid FSPI/M5GFX bus contention. radio_switch(RADIO_SUBGHZ) calls `gps_end()` because CC1101 CS=13 conflicts with GPS UART TX=13. |
+| HSPI-park | cc1101_hw.cpp, nrf24_hw.cpp, nrf24_suite.cpp, lora_hw.cpp, sd_helper.cpp, subghz_scan.cpp, subghz_replay.cpp, subghz_record.cpp, subghz_broadcast.cpp, subghz_jammer.cpp, subghz_spectrum.cpp, subghz_jam_detect.cpp, subghz_bruteforce.cpp, lora_spectrum.cpp, radio_lora.cpp, rf_finder.cpp | All share the HSPI bus (SCK=40, MISO=39, MOSI=14). SD uses CS=12 (`sd_helper.cpp:24 #define SD_CS 12`), LoRa uses CS=G5, CC1101 uses CS=13, nRF24 uses CS=G6. cc1101_hw.cpp calls `cc1101_park_others()` to pull other CS lines HIGH before SPI ops. nrf24_suite.cpp explicitly uses `sd_get_spi()` for raw register writes to avoid FSPI/M5GFX bus contention. radio_switch(RADIO_SUBGHZ) calls `gps_end()` because CC1101 CS=13 conflicts with GPS UART TX=13. (Errata: earlier draft said SD CS=10 and listed `hat_manager.cpp` which was dead code deleted under Phase 0 hygiene.) |

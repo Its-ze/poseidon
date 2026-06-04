@@ -808,9 +808,14 @@ static const ir_extra_blast_t IR_EXTRA_POWER_TABLE[] = {
  * Requires: forward-decl `void blast_raw(uint16_t kHz, const uint16_t *p);`
  *           that drives the LED via the bit-banger.
  */
-extern void blast_raw(uint16_t carrier_khz, const uint16_t *pairs);
+/* ir-003 / Phase 0 hygiene: was a file-scope extern decl pair here
+ * (blast_raw + Arduino delay) that leaked into any TU including this
+ * header — and the delay decl took uint32_t, conflicting with
+ * Arduino.h's unsigned-long signature. Route through the proper
+ * header instead. */
+#include "ir_clone.h"
+#include <Arduino.h>      /* delay() */
 
-extern void delay(uint32_t);  /* Arduino — forward decl for header. */
 static inline void prank_power_bomb(void)
 {
     for (size_t i = 0; i < IR_EXTRA_POWER_N; ++i) {
@@ -834,8 +839,8 @@ static inline void prank_power_bomb(void)
  * Expected reaction: live channel changes 25-50 times per call. User
  * frantically grabs remote, eventually power-cycles the TV.
  */
-extern void send_samsung(uint8_t cmd);
-extern void send_lg(uint8_t cmd);
+/* send_samsung / send_lg / blast_raw decls are now in ir_clone.h
+ * (included above). No file-scope externs leaking from this header. */
 
 static inline void prank_channel_scramble(void)
 {

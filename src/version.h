@@ -16,5 +16,11 @@
 #undef POSEIDON_BUILD_DATE
 #define POSEIDON_BUILD_DATE __DATE__
 
-inline const char *poseidon_version(void)    { return POSEIDON_VERSION; }
-inline const char *poseidon_build_date(void) { return POSEIDON_BUILD_DATE; }
+/* sys-027: static inline so each TU that includes this header gets
+ * its own internal-linkage definition, matching Bruce's pattern.
+ * Plain `inline` in C++ relies on the compiler picking exactly one
+ * definition at link time — fine on this build but ODR-fragile if
+ * the header is later included from a C TU or under different
+ * inlining decisions. `static inline` is unconditional. */
+static inline const char *poseidon_version(void)    { return POSEIDON_VERSION; }
+static inline const char *poseidon_build_date(void) { return POSEIDON_BUILD_DATE; }

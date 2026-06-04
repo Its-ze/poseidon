@@ -14,7 +14,8 @@
  *   3V3 → Feather 3V
  *   GND → Feather GND
  *
- * Uses UART1 at 115200 baud. The Feather runs custom firmware that:
+ * Uses UART2 at 115200 baud (UART1 belongs to GPS). The Feather
+ * runs custom firmware that:
  *   - Accepts text commands ("BLE_SCAN", "ZB_SNIFF 15", etc.)
  *   - Streams results back as "DEV:", "PKT:", "ZB:" prefixed lines
  *   - Drives its own NeoPixel (pin D8) based on LED mode commands

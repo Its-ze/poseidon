@@ -20,6 +20,7 @@
 #include "../theme.h"
 #include "ui.h"
 #include "input.h"
+#include "ir_clone.h"
 #include <driver/ledc.h>
 #include <driver/gpio.h>
 #include <ctype.h>

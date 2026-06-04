@@ -1,7 +1,8 @@
 /*
  * nrf52_hw.cpp — UART bridge to Adafruit Feather nRF52840 Bluefruit.
  *
- * Uses UART1 on the top hat header (G3 TX, G40 RX) at 115200 baud.
+ * Uses UART2 on the top hat header (G3 TX, G4 RX) at 115200 baud.
+ * (UART1 is owned by GPS — see comment at the nrfSerial decl.)
  * The Feather is just another "hat" — mutually exclusive with
  * LoRa-1262, Hydra RF Cap, and C5 node. No pin conflicts.
  */
@@ -43,7 +44,7 @@ bool NRF52Hardware::begin()
     String resp;
     if (send_command("PING", resp) && resp.indexOf("PONG") >= 0) {
         s_up = true;
-        Serial.println("[nrf52] Feather Bluefruit detected on UART1 (G3/G4)");
+        Serial.println("[nrf52] Feather Bluefruit detected on UART2 (G3/G4)");
 
         /* Light it up — boot animation on the NeoPixel. */
         nrf52_led_set(NRF52_LED_BOOT);

@@ -1928,12 +1928,12 @@ PORKCHOP heap-policy adoption tracked under POS-AUDIT-118.
 - **Fix:** Consolidate; move recursive nuke into sd_helper.cpp; document confirmation contract.
 - **Depends on:** none · **Verification:** SD format from tools menu works · **Release gate:** yes · **Source:** sys-014
 
-### POS-AUDIT-285 — [MED][System] hat_manager detect() stub returns NONE
+### POS-AUDIT-285 — [MED→RESOLVED][System] hat_manager detect() stub returns NONE
 
-- **Severity:** MED · **Phase:** 0 · **File:** src/hat_manager.cpp:27-36 + hat_manager.h · **Effort:** S/M
-- **Problem:** Implementation unconditionally returns `HatType::NONE`. Map claims active probing — false. Park helpers unused.
-- **Fix:** Either implement probe sequences (SX1262 v05, CC1101 PARTNUM=0x80, NRF24 STATUS) OR delete the class.
-- **Depends on:** none · **Verification:** Per-hat presence reported correctly OR deletion sweep · **Release gate:** no · **Source:** sys-013
+- **Status:** RESOLVED — deleted in Phase 0 hygiene
+- **Severity:** MED (originally) · **Phase:** 0 · **File:** src/hat_manager.cpp + .h (DELETED) · **Effort:** S
+- **Resolution:** Repo-wide grep confirmed zero external callers. Deleted both files. Per-hat detection at the actual usage points (cc1101_begin, lora_begin, nrf24_begin) returns failure if the hat is absent, which is the only "detection" any caller uses.
+- **Source:** sys-013
 
 ### POS-AUDIT-286 — [MED][System] deauth_autotest cruft in production main
 
