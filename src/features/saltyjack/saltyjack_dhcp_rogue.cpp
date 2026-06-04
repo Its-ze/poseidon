@@ -26,6 +26,7 @@
 #include "../../ui.h"
 #include "../../input.h"
 #include "../../radio.h"
+#include "../../wifi_ap_helpers.h"
 #include "saltyjack.h"
 #include "saltyjack_style.h"
 #include <WiFi.h>
@@ -281,18 +282,19 @@ static bool setup_sta_mode(void)
 
 static bool setup_ap_mode(void)
 {
-    WiFi.mode(WIFI_AP);
-    /* Open SSID — evil-twin lures want targets to auto-associate without
-     * a prompt for a password, so no WPA2. */
-    WiFi.softAP("POSEIDON-SaltyJack");
-    delay(300);
-    s_server_ip   = WiFi.softAPIP();
+    /* POS-AUDIT-010 / slt-001: was WiFi.mode(WIFI_AP) + WiFi.softAP() —
+     * banned Arduino path on pinned Bruce libs (hostap_attach crash).
+     * Use the shared raw-IDF helper. Open SSID — evil-twin lures want
+     * targets to auto-associate without a password prompt. */
+    if (!wifi_raw_ap_up("POSEIDON-SaltyJack")) return false;
+    s_server_ip   = wifi_raw_ap_ip();
     s_subnet_mask = IPAddress(255, 255, 255, 0);
-    s_gateway     = WiFi.softAPIP();
-    s_dns         = WiFi.softAPIP();
+    s_gateway     = s_server_ip;
+    s_dns         = s_server_ip;
 
-    /* Stop the ESP-IDF built-in DHCP server so UDP port 67 is free. The stop
-     * is async — give lwIP a beat to close the internal PCB before we bind. */
+    /* Stop the ESP-IDF built-in DHCP server so UDP port 67 is free.
+     * The stop is async — give lwIP a beat to close the internal PCB
+     * before we bind. */
     esp_netif_t *ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
     if (ap_netif) esp_netif_dhcps_stop(ap_netif);
     delay(100);
@@ -303,6 +305,7 @@ static void teardown_ap_mode(void)
 {
     esp_netif_t *ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
     if (ap_netif) esp_netif_dhcps_start(ap_netif);
+    wifi_raw_ap_down();
 }
 
 static void run_rogue(rogue_mode_t mode)

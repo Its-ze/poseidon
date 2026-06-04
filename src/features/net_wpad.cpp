@@ -15,6 +15,7 @@
 #include "input.h"
 #include "radio.h"
 #include "../sd_helper.h"
+#include "../wifi_ap_helpers.h"
 #include <WiFi.h>
 #include <DNSServer.h>
 #include <SD.h>
@@ -275,9 +276,15 @@ void feat_wpad_abuse(void)
 {
     radio_switch(RADIO_WIFI);
 
-    WiFi.mode(WiFi.localIP().toString() == "0.0.0.0" ? WIFI_MODE_AP : WIFI_MODE_APSTA);
-    WiFi.softAP("FreeWiFi", nullptr, 1, false, 10);
-    IPAddress apIP = WiFi.softAPIP();
+    /* POS-AUDIT-010 / net-002: raw-IDF AP. The previous APSTA gate
+     * (conditional on whether we already had STA join) is dropped —
+     * the helper teardown leaves the driver clean for the next
+     * radio_switch user, no surface left for the APSTA buffer-double. */
+    if (!wifi_raw_ap_up("FreeWiFi", 1, false, 10)) {
+        ui_toast("ap start failed", T_BAD, 1500);
+        return;
+    }
+    IPAddress apIP = wifi_raw_ap_ip();
 
     DNSServer dns;
     dns.start(53, "*", apIP);
@@ -320,7 +327,7 @@ void feat_wpad_abuse(void)
 
     proxy.stop();
     dns.stop();
-    WiFi.mode(WIFI_MODE_APSTA);
+    wifi_raw_ap_down();
 }
 
 /* ================================================================== *
@@ -505,11 +512,16 @@ static void ad_handle_client(WiFiClient &client) {
 void feat_autodiscover(void)
 {
     radio_switch(RADIO_WIFI);
-    WiFi.mode(WiFi.localIP().toString() == "0.0.0.0" ? WIFI_MODE_AP : WIFI_MODE_APSTA);
 
-    IPAddress apIP(192,168,4,1);
-    WiFi.softAPConfig(apIP, apIP, IPAddress(255,255,255,0));
-    WiFi.softAP("Corporate-WiFi", nullptr, 1, false, 10);
+    /* POS-AUDIT-010 / net-002: raw-IDF AP via helper. softAPConfig
+     * was setting the gateway / netmask to the lwIP defaults
+     * (192.168.4.1 / 255.255.255.0) — exactly what raw-IDF gives us
+     * for free, so the explicit config is dropped. */
+    if (!wifi_raw_ap_up("Corporate-WiFi", 1, false, 10)) {
+        ui_toast("ap start failed", T_BAD, 1500);
+        return;
+    }
+    IPAddress apIP = wifi_raw_ap_ip();
 
     DNSServer dns;
     dns.start(53, "*", apIP);
@@ -552,5 +564,5 @@ void feat_autodiscover(void)
 
     srv.stop();
     dns.stop();
-    WiFi.mode(WIFI_MODE_APSTA);
+    wifi_raw_ap_down();
 }

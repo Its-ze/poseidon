@@ -13,7 +13,9 @@
 #include "ui.h"
 #include "input.h"
 #include "radio.h"
+#include "../wifi_ap_helpers.h"
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <WiFiUdp.h>
 #include <WiFiClient.h>
 #include <WiFiServer.h>
@@ -553,11 +555,13 @@ void feat_dead_drop(void)
     char ssid_buf[32];
     if (!input_line("AP SSID (hidden):", ssid_buf, sizeof(ssid_buf))) return;
 
-    /* Create hidden AP. */
-    WiFi.mode(WIFI_MODE_AP);
-    WiFi.softAP(ssid_buf, nullptr, 1, true /* hidden */, 8);
-    delay(200);
-    IPAddress apIP = WiFi.softAPIP();
+    /* POS-AUDIT-010 / net-002: hidden raw-IDF AP via shared helper.
+     * hidden=true, max_conn=8 match the previous Arduino call. */
+    if (!wifi_raw_ap_up(ssid_buf, 1, true, 8)) {
+        ui_toast("ap start failed", T_BAD, 1500);
+        return;
+    }
+    IPAddress apIP = wifi_raw_ap_ip();
 
     dd_dns = new DNSServer();
     dd_dns->start(53, "*", apIP);
@@ -579,7 +583,12 @@ void feat_dead_drop(void)
         dd_dns->processNextRequest();
         dd_web->handleClient();
 
-        uint32_t now_clients = WiFi.softAPgetStationNum();
+        /* raw-IDF post POS-AUDIT-010 — Arduino state may be stale.
+         * esp_wifi_ap_get_sta_list is the only sta-count call IDF 5.x
+         * exposes; mirror the pattern from wifi_portal.cpp:568. */
+        wifi_sta_list_t stas = {};
+        esp_wifi_ap_get_sta_list(&stas);
+        uint32_t now_clients = (uint32_t)stas.num;
         if (now_clients != clients) {
             clients = now_clients;
             ui_text(4, BODY_Y + 52, T_GOOD, "clients: %d", clients);
@@ -594,8 +603,9 @@ void feat_dead_drop(void)
     dd_dns->stop();
     delete dd_web; dd_web = nullptr;
     delete dd_dns; dd_dns = nullptr;
-    WiFi.softAPdisconnect(true);
-    WiFi.mode(WIFI_MODE_STA);
+    /* POS-AUDIT-010 teardown: stop+deinit matching raw-IDF bring-up.
+     * No WiFi.mode(STA) flip — that's the surface POS-AUDIT-008 banned. */
+    wifi_raw_ap_down();
     ui_toast("dead drop stopped", T_DIM, 800);
 }
 

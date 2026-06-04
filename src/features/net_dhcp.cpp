@@ -15,6 +15,7 @@
 #include "ui.h"
 #include "input.h"
 #include "radio.h"
+#include "../wifi_ap_helpers.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <esp_netif.h>
@@ -324,13 +325,16 @@ static void rogue_dhcp_loop(bool ap_mode)
     IPAddress myIP, mySubnet;
 
     if (ap_mode) {
-        WiFi.mode(WIFI_MODE_AP);
-        WiFi.softAP("FreeWiFi", nullptr, 1, false, 10);
-        /* Stop built-in DHCP so we can serve our own */
+        /* POS-AUDIT-010 / net-002: raw-IDF AP via helper. */
+        if (!wifi_raw_ap_up("FreeWiFi", 1, false, 10)) {
+            ui_toast("ap start failed", T_BAD, 1500);
+            return;
+        }
+        /* Stop built-in DHCP so we can serve our own. */
         esp_netif_t *ap_nif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
         if (ap_nif) esp_netif_dhcps_stop(ap_nif);
-        myIP     = WiFi.softAPIP();
-        mySubnet = WiFi.softAPSubnetMask();
+        myIP     = wifi_raw_ap_ip();
+        mySubnet = IPAddress(255, 255, 255, 0);
     } else {
         if (WiFi.status() != WL_CONNECTED) {
             ui_toast("join WiFi first", T_WARN, 1500);
@@ -407,6 +411,8 @@ static void rogue_dhcp_loop(bool ap_mode)
     if (ap_mode) {
         esp_netif_t *ap_nif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
         if (ap_nif) esp_netif_dhcps_start(ap_nif);
+        /* POS-AUDIT-010 teardown matching raw-IDF bring-up. */
+        wifi_raw_ap_down();
     }
 }
 
