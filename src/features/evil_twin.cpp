@@ -35,6 +35,7 @@
 #include "radio.h"
 #include "../wifi_types.h"
 #include "wifi_deauth_frame.h"
+#include "../sfx.h"
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
@@ -331,12 +332,18 @@ static bool et_run_portal_phase(void)
 
         if (s_cred_flash) {
             s_cred_flash = false;
-            M5Cardputer.Speaker.tone(1800, 80);
-            delay(90);
-            M5Cardputer.Speaker.tone(2400, 120);
-            ui_action_overlay("CRED CAPTURED",
+            /* POS-AUDIT-009: tone goes through the SFX async player task
+             * (POS-AUDIT-017b) and the overlay services DNS+HTTP via the
+             * tick callback — Android captive-portal probe was timing
+             * out across the previous 1.2 s blocking overlay window. */
+            sfx_pmkid_capture();
+            ui_action_overlay_with_tick("CRED CAPTURED",
                               s_last_user[0] ? s_last_user : "no user",
-                              ACT_BG_WAVES, T_BAD, 1200);
+                              ACT_BG_WAVES, T_BAD, 1200,
+                              [](void *){
+                                  if (s_dns) s_dns->processNextRequest();
+                                  if (s_http) s_http->handleClient();
+                              }, nullptr);
             /* Overlay clobbered the static body — repaint it. */
             et_draw_static();
             last_draw = 0;

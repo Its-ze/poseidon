@@ -20,6 +20,7 @@
 #include "input.h"
 #include "radio.h"
 #include "wifi_types.h"
+#include "../sfx.h"
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
@@ -545,18 +546,23 @@ static void run_portal(void)
         s_dns->processNextRequest();
         s_http->handleClient();
 
-        /* New cred? Dramatic overlay + tone so the operator notices from
-         * across the room. Overlay is blocking (1.2s) so the DNS/HTTP
-         * handlers pause during it — acceptable because the HTTP 200
-         * response has already gone out from inside the handler. */
+        /* New cred? Dramatic overlay so the operator notices from across
+         * the room. POS-AUDIT-009: now uses the with-tick variant so
+         * DNS+HTTP keep responding during the 1.2 s window — Android
+         * captive-portal probe gives up after ~1-3 s, was timing out.
+         * Tone moved to sfx_pmkid_capture (already async via the SFX
+         * player task per POS-AUDIT-017b) so the inline tone+delay
+         * doesn't stall the loop either. */
         if (s_cred_flash) {
             s_cred_flash = false;
-            M5Cardputer.Speaker.tone(1800, 80);
-            delay(90);
-            M5Cardputer.Speaker.tone(2400, 120);
-            ui_action_overlay("CRED CAPTURED",
+            sfx_pmkid_capture();
+            ui_action_overlay_with_tick("CRED CAPTURED",
                               s_last_user[0] ? s_last_user : "no user",
-                              ACT_BG_WAVES, T_BAD, 1200);
+                              ACT_BG_WAVES, T_BAD, 1200,
+                              [](void *){
+                                  if (s_dns) s_dns->processNextRequest();
+                                  if (s_http) s_http->handleClient();
+                              }, nullptr);
             last = 0;  /* force redraw of the live counters */
         }
 

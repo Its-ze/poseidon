@@ -711,9 +711,23 @@ void ui_freq_bars(int x, int y, int bar_w, int bar_h_max)
     ui_eq_bars(x, y, bar_w, bar_h_max, T_ACCENT);
 }
 
-/* ---- full-screen action overlay ---- */
+/* ---- full-screen action overlay ----
+ * Two entry points share one implementation. The plain ui_action_overlay
+ * forwards to the with-tick variant with a null callback so neither has
+ * to duplicate the (sizeable) animation loop. POS-AUDIT-009 introduced
+ * the tick path to keep captive-portal DNS + HTTP responsive while a
+ * CRED-CAPTURED overlay is on screen. */
 void ui_action_overlay(const char *headline, const char *subtitle,
                        action_anim_t bg, uint16_t color, uint32_t duration_ms)
+{
+    ui_action_overlay_with_tick(headline, subtitle, bg, color, duration_ms,
+                                 nullptr, nullptr);
+}
+
+void ui_action_overlay_with_tick(const char *headline, const char *subtitle,
+                                  action_anim_t bg, uint16_t color,
+                                  uint32_t duration_ms,
+                                  void (*tick_cb)(void *), void *cb_ctx)
 {
     auto &d = M5Cardputer.Display;
     /* Full-screen canvas — drawing into RAM eliminates the per-frame
@@ -735,7 +749,14 @@ void ui_action_overlay(const char *headline, const char *subtitle,
             d.setCursor((SCR_W - sw) / 2, SCR_H / 2 + 16);
             d.print(subtitle);
         }
-        delay(duration_ms);
+        /* POS-AUDIT-009: in the no-canvas fallback we still need to keep
+         * the caller's background work (DNS+HTTP for portal) responsive
+         * across the duration_ms window. Slice the wait. */
+        uint32_t fb_start = millis();
+        while (millis() - fb_start < duration_ms) {
+            if (tick_cb) tick_cb(cb_ctx);
+            delay(10);
+        }
         return;
     }
 
@@ -850,6 +871,11 @@ void ui_action_overlay(const char *headline, const char *subtitle,
             /* Atomic push — one DMA transfer, no visible mid-frame. */
             canvas.pushSprite(0, 0);
         }
+        /* POS-AUDIT-009: tick the caller's background service (e.g.
+         * captive-portal DNS + HTTP). Fires every ~20 ms — well inside
+         * the typical 1-3 s probe-redirect timeout window of Android /
+         * iOS captive-portal detection. */
+        if (tick_cb) tick_cb(cb_ctx);
         delay(20);
     }
 

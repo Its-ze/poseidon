@@ -107,6 +107,17 @@ enum action_anim_t {
 void ui_action_overlay(const char *headline, const char *subtitle,
                        action_anim_t bg, uint16_t color, uint32_t duration_ms);
 
+/* POS-AUDIT-009: variant that calls tick_cb() once per loop iteration
+ * (~every 20 ms) so callers with background service work — typically
+ * captive-portal DNS + HTTP — can keep responding to clients while
+ * the overlay is on screen. cb_ctx is passed through to the callback
+ * unchanged. tick_cb may be nullptr (degrades to the plain overlay).
+ * Otherwise identical to the 5-arg version. */
+void ui_action_overlay_with_tick(const char *headline, const char *subtitle,
+                                  action_anim_t bg, uint16_t color,
+                                  uint32_t duration_ms,
+                                  void (*tick_cb)(void *), void *cb_ctx);
+
 /* Magenta/cyan "attack dashboard" chrome: hex stream backdrop, title
  * bar, border-flash frame, radar sweep in the corner. Call at the top
  * of every redraw — it only paints chrome, leaving the middle rows
