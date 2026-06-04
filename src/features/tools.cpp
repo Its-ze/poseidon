@@ -42,29 +42,14 @@ void feat_tool_sd_format(void)
     if (strcmp(buf, "YES") != 0) { ui_toast("cancelled", T_DIM, 500); return; }
 
     ui_toast("formatting...", T_WARN, 0);
-    if (!sd_mount()) { ui_toast("SD mount fail", T_BAD, 1200); return; }
-    /* Walk + delete every file + dir. No FAT format API on Arduino SD,
-     * so deep-delete is the best we can do. */
-    std::function<bool(const char *)> nuke = [&](const char *path) -> bool {
-        File f = SD.open(path);
-        if (!f) return false;
-        if (f.isDirectory()) {
-            File c = f.openNextFile();
-            while (c) {
-                char sub[192];
-                snprintf(sub, sizeof(sub), "%s/%s", path, c.name());
-                nuke(sub);
-                c = f.openNextFile();
-            }
-            f.close();
-            if (strcmp(path, "/") != 0) SD.rmdir(path);
-        } else {
-            f.close();
-            SD.remove(path);
-        }
-        return true;
-    };
-    nuke("/");
+    /* POS-AUDIT-284 / sys-014: delegate to sd_format() — the canonical
+     * single implementation of the recursive nuke now lives in
+     * sd_helper.cpp. The confirmation gate above (YES prompt + ENTER)
+     * is the contract sd_format's docstring requires of UI callers. */
+    if (!sd_format()) {
+        ui_toast("SD format failed", T_BAD, 1500);
+        return;
+    }
     ui_toast("done", T_GOOD, 800);
 }
 

@@ -130,9 +130,48 @@ void sd_rotate_on_size(const char *path, size_t max_bytes)
     SD.rename(path, rolled);
 }
 
+/* POS-AUDIT-284 / sys-014: recursive nuke helper for sd_format. The
+ * previous sd_format only walked the top level and called SD.rmdir
+ * on directories — but Arduino SD.rmdir REQUIRES the directory to be
+ * empty, so /poseidon and its subdirs survived. tools.cpp had its
+ * own recursive nuke duplicating this responsibility. Consolidate
+ * here, called from sd_format below. */
+static void sd_recursive_delete(const char *path)
+{
+    File f = SD.open(path);
+    if (!f) return;
+    if (f.isDirectory()) {
+        File c = f.openNextFile();
+        while (c) {
+            char sub[192];
+            snprintf(sub, sizeof(sub), "%s/%s",
+                     strcmp(path, "/") == 0 ? "" : path, c.name());
+            bool child_is_dir = c.isDirectory();
+            c.close();
+            sd_recursive_delete(sub);
+            if (!child_is_dir) {
+                /* file already removed by recursive call's else branch */
+            }
+            c = f.openNextFile();
+        }
+        f.close();
+        if (strcmp(path, "/") != 0) SD.rmdir(path);
+    } else {
+        f.close();
+        SD.remove(path);
+    }
+}
+
 bool sd_format(void)
 {
-    /* Use try_mount with format-on-fail = true so we hit the same
+    /* POS-AUDIT-284: this is the destructive wipe entry point. CALLERS
+     * MUST CONFIRM with the user before invoking — there is no internal
+     * confirmation prompt because the helper is reused from tools menu,
+     * format-on-mount-fail paths, and potentially future setup wizards.
+     * feat_tool_sd_format is the canonical UI surface; anyone else
+     * calling this must own their own confirmation contract.
+     *
+     * Use try_mount with format-on-fail = true so we hit the same
      * pull-up + CS-toggle init sequence as the regular mount path.
      * Without those, post-format the bus is left in a half-configured
      * state and subsequent SD.open() calls from features (e.g.
@@ -140,21 +179,9 @@ bool sd_format(void)
     s_mounted = false;
     if (!try_mount(SD_FREQ, true,  "format fast"))
         if (!try_mount(4000000, true,  "format slow")) return false;
-    /* Nuke contents: walk root and delete everything. Arduino SD
-     * doesn't expose FAT format directly, so a full clean is the
-     * closest user-meaningful equivalent. */
-    File root = SD.open("/");
-    if (root) {
-        File f;
-        while ((f = root.openNextFile())) {
-            String path = f.path();
-            bool is_dir = f.isDirectory();
-            f.close();
-            if (is_dir) SD.rmdir(path.c_str());
-            else        SD.remove(path.c_str());
-        }
-        root.close();
-    }
+    /* Full recursive nuke — Arduino SD has no FAT format API, so a
+     * complete content wipe is the closest user-meaningful equivalent. */
+    sd_recursive_delete("/");
     s_mounted = true;
     return true;
 }
