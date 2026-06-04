@@ -57,6 +57,7 @@
 #include "menu.h"
 #include "ble_types.h"
 #include "sd_helper.h"
+#include <esp_task_wdt.h>
 #include <NimBLEDevice.h>
 #include <SD.h>
 #include <esp_random.h>
@@ -422,10 +423,16 @@ static wp_verdict_t run_probe(const wp_target_t &t)
     bool wrote = kbp->writeValue(blob, 80, false);
     if (!wrote) kbp->writeValue(blob, 80, true);
 
+    /* POS-AUDIT-227 / ble-011: 3 s wait sits at delay(50) granularity
+     * and never yields to the TWDT. Default TWDT timeout is 5 s, so
+     * a slow target that takes the full 3 s plus any pre-wait jitter
+     * could clip the panic threshold. Cheap esp_task_wdt_reset per
+     * slice keeps loopTask's subscription happy. */
     uint32_t start = millis();
     while (millis() - start < WP_PROBE_WAIT_MS) {
         if (s_notify_received) break;
         delay(50);
+        (void)esp_task_wdt_reset();
     }
 
     bool vuln = s_notify_received;
