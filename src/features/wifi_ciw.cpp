@@ -17,6 +17,10 @@
 #include "radio.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
+#include <esp_netif.h>
+#include <esp_event.h>
+#include <esp_bt.h>
+#include <esp_log.h>
 
 /* ── Payload categories ───────────────────────────────────────────── */
 enum CiwCat : uint8_t {
@@ -234,11 +238,76 @@ void feat_wifi_ciw(void)
         return;
     }
 
-    /* Start AP mode for raw beacon injection */
-    WiFi.mode(WIFI_MODE_AP);
-    WiFi.softAP(active[0].ssid, nullptr, 1, false, 10);
+    /* POS-AUDIT-003: Raw-IDF AP bring-up — Arduino WiFi.softAP path is
+     * banned (ieee80211_hostap_attach +0x2c crash on pinned Bruce libs;
+     * repeated softAP re-attach drives ESP_ERR_NO_MEM 257). Recipe
+     * mirrors wifi_portal.cpp:417-481 (will share via wifi_raw_ap_up()
+     * helper in Phase 2 / wifi-042).
+     *
+     * The AP is a vehicle for esp_wifi_80211_tx(WIFI_IF_AP) — the real
+     * SSID rotation happens via raw beacon TX in the inner loop. We
+     * keep the AP itself on a single static SSID and never re-call
+     * softAP-equivalent during rotation. */
+    esp_wifi_set_promiscuous(false);
+    esp_wifi_stop();
+    esp_wifi_deinit();
+    delay(300);
+    esp_netif_t *sta_if = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (sta_if) esp_netif_destroy_default_wifi(sta_if);
 
-    /* Enable promiscuous for raw TX */
+    /* POS-AUDIT-007 pattern: only release BTDM if BT controller is IDLE.
+     * If BLE already inited it, mem_release is a no-op and we keep BLE. */
+    if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE) {
+        esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+    }
+
+    esp_log_level_set("wifi",      ESP_LOG_INFO);
+    esp_log_level_set("wifi_init", ESP_LOG_INFO);
+    esp_netif_init();
+    esp_event_loop_create_default();
+    esp_netif_create_default_wifi_ap();
+
+    wifi_init_config_t wcfg = WIFI_INIT_CONFIG_DEFAULT();
+    /* Shrink TX/RX buffer pools to fit the ~115 KB internal SRAM left
+     * after Cardputer + GFX claim their share — matches wifi_portal /
+     * beacon_spam values that are verified to actually beacon. */
+    wcfg.static_tx_buf_num  = 0;
+    wcfg.dynamic_tx_buf_num = 16;
+    wcfg.tx_buf_type        = 1;
+    wcfg.cache_tx_buf_num   = 4;
+    wcfg.static_rx_buf_num  = 4;
+    wcfg.dynamic_rx_buf_num = 16;
+    wcfg.ampdu_tx_enable    = 0;
+    wcfg.ampdu_rx_enable    = 0;
+    if (esp_wifi_init(&wcfg) != ESP_OK) {
+        ui_toast("wifi_init fail", T_BAD, 1500);
+        return;
+    }
+    esp_wifi_set_storage(WIFI_STORAGE_RAM);
+    esp_wifi_set_mode(WIFI_MODE_AP);
+
+    wifi_config_t apc = {};
+    /* Use a fixed, low-profile SSID for the vehicle AP. The CIW payloads
+     * themselves are blasted only via raw beacon TX below. */
+    const char *ap_ssid = "ciw";
+    strncpy((char *)apc.ap.ssid, ap_ssid, sizeof(apc.ap.ssid) - 1);
+    apc.ap.ssid_len        = strlen(ap_ssid);
+    apc.ap.channel         = 1;
+    apc.ap.authmode        = WIFI_AUTH_OPEN;
+    apc.ap.max_connection  = 4;
+    apc.ap.beacon_interval = 100;
+    apc.ap.ssid_hidden     = 0;
+    if (esp_wifi_set_config(WIFI_IF_AP, &apc) != ESP_OK ||
+        esp_wifi_start() != ESP_OK) {
+        ui_toast("wifi_start fail", T_BAD, 1500);
+        esp_wifi_deinit();
+        return;
+    }
+    /* Some builds ignore the channel in the config struct; force it. */
+    esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
+    delay(50);
+
+    /* Enable promiscuous for raw TX (esp_wifi_80211_tx contract). */
     esp_wifi_set_promiscuous(true);
 
     int idx = 0;
@@ -259,13 +328,15 @@ void feat_wifi_ciw(void)
         if (k == '+' || k == '=') { if (rotateInterval > 1000) rotateInterval -= 1000; }
         if (k == '-' || k == '_') { rotateInterval += 1000; }
 
-        /* Rotate SSID */
+        /* Rotate SSID (raw beacon only — POS-AUDIT-003 dropped the
+         * per-rotation WiFi.softAP() re-call that drove ESP_ERR_NO_MEM
+         * 257 cascades). Scanners on nearby clients pick up the new
+         * SSID off the broadcast beacon; the vehicle AP itself stays
+         * pinned on "ciw" to avoid driver thrash. */
         if (millis() - lastRotate >= rotateInterval) {
             idx = (idx + 1) % activeN;
-            WiFi.softAP(active[idx].ssid, nullptr, 1, false, 10);
             lastRotate = millis();
 
-            /* Also send raw beacon for maximum coverage */
             uint8_t bssid[6];
             bssid[0] = 0xDE; bssid[1] = 0xAD;
             bssid[2] = random(0,256); bssid[3] = random(0,256);
@@ -291,7 +362,14 @@ void feat_wifi_ciw(void)
         delay(10);
     }
 
+    /* POS-AUDIT-003 teardown: raw-IDF stop+deinit matching the bring-up.
+     * Previously the teardown ended in WiFi.mode(WIFI_MODE_APSTA) which
+     * doubled WiFi buffers and corrupted the next radio user. radio.cpp
+     * teardown(RADIO_WIFI) (POS-AUDIT-008 partial) drops only the assoc,
+     * so we must explicitly stop+deinit here for the AP driver state.
+     * radio_switch(RADIO_NONE) is the standard cap. */
     esp_wifi_set_promiscuous(false);
-    WiFi.softAPdisconnect(true);
-    WiFi.mode(WIFI_MODE_APSTA);
+    esp_wifi_stop();
+    esp_wifi_deinit();
+    radio_switch(RADIO_NONE);
 }
