@@ -44,9 +44,21 @@
 #define DM_ALERT_COOLDOWN_MS      4000   /* same alert class quiet period    */
 
 /* Time-slicing: ESP32-S3 has one antenna so we can't run WiFi promisc
- * and NimBLE scan simultaneously. Alternate phases. */
-#define DM_PHASE_WIFI_MS          3000
-#define DM_PHASE_BLE_MS           2000
+ * and NimBLE scan simultaneously. Alternate phases.
+ *
+ * POS-AUDIT-015 / dfn-001: each NimBLE init/deinit cycle churns ~30 KB
+ * of heap. The previous 3 s / 2 s windows meant a deinit every 5 s —
+ * long sessions silently fragmented heap until init failed and the
+ * BLE phase silently stopped firing. Widened to 30 s / 15 s (12x less
+ * churn). Detection latency for the BLE classes goes from "next 2 s
+ * window" to "next 15 s window" — still well inside the human-attention
+ * threshold for a defensive monitor + same order of magnitude as the
+ * beacon-spam / deauth-flood threshold windows (1 s averaging × N
+ * before alert). Full coexist pattern (NimBLE passive scan alongside
+ * promisc) is the proper long-term fix and lands with POS-AUDIT-118
+ * heap-policy gating. */
+#define DM_PHASE_WIFI_MS          30000
+#define DM_PHASE_BLE_MS           15000
 
 static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
 static volatile bool     s_running    = false;
@@ -307,7 +319,15 @@ static void ble_on_adv(const NimBLEAdvertisedDevice *dev)
         /* Same name, different MAC = spoof / clone */
         char detail[40];
         snprintf(detail, sizeof(detail), "name shared by 2+ MACs");
+        /* POS-AUDIT-015 / dfn-002: enqueue_alert is shared with the WiFi
+         * promisc_cb which holds s_mux as ISR-critical. NimBLE callbacks
+         * run from the host task (regular context). Without serialisation
+         * the head/tail advance in enqueue_alert races against the WiFi
+         * side and corrupts the MPSC ring. Use the non-ISR variant
+         * here — same s_mux as the WiFi callers consume. */
+        portENTER_CRITICAL(&s_mux);
         enqueue_alert(DM_CLS_BLE_SPOOF, addr, name, dev->getRSSI(), 0, detail);
+        portEXIT_CRITICAL(&s_mux);
         memcpy((void *)s_ble_names[slot].addr, addr, 6);
     }
     s_ble_names[slot].last_ms = millis();
@@ -333,7 +353,11 @@ static void ble_window_tick(void)
         snprintf(detail, sizeof(detail), "%lu new BLE/s",
                  (unsigned long)s_ble_new_last_window);
         uint8_t zero[6] = {0};
+        /* POS-AUDIT-015 / dfn-002: paired with the ISR-critical WiFi
+         * callers. See ble_on_adv site for context. */
+        portENTER_CRITICAL(&s_mux);
         enqueue_alert(DM_CLS_BLE_FLOOD, zero, nullptr, 0, 0, detail);
+        portEXIT_CRITICAL(&s_mux);
     }
 }
 
