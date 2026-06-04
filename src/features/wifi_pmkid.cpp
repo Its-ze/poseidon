@@ -155,6 +155,15 @@ static void emit_handshake(const uint8_t *bssid, const uint8_t *sta,
                            const uint8_t *m2_eapol, int m2_len)
 {
     if (!s_out) return;
+    /* POS-AUDIT-205 / wifi-018: cap m2_len so the hex-expanded EAPOL
+     * frame (2× m2_len) plus the constant header bytes fits inside
+     * s_emit_handshake_line[600]. 260 B EAPOL → 520 B hex + ~70 B of
+     * fixed header / separators / SSID hex = ~590 B, just inside the
+     * 600 B buffer. Multi-AKM RSN KDEs can theoretically push EAPOL
+     * past 260 B; clipping at the cap is hashcat-safe (msg-pair-02
+     * line semantics tolerate truncated EAPOL provided MIC is intact). */
+    if (m2_len > 260) m2_len = 260;
+    if (m2_len < 0)   m2_len = 0;
     const char *ssid = ssid_for(bssid);
     /* hashcat 22000 format:
        WPA*02*MIC*MAC_AP*MAC_STA*ESSID_HEX*ANONCE*EAPOL_FRAME_HEX*MSG_PAIR */

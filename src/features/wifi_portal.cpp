@@ -581,7 +581,17 @@ static void run_portal(void)
 
         uint16_t k = input_poll();
         if (k == PK_ESC) break;
-        if (k == PK_NONE) { delay(5); }
+        if (k == PK_NONE) {
+            /* POS-AUDIT-212 / wifi-025: when no STA is associated, the
+             * 5 ms idle was driving ~200 processNextRequest+handleClient
+             * calls per UI frame. Read the AP STA count and back off to
+             * 20 ms when nobody's connected — DNS/HTTP have nothing to
+             * serve anyway. Drops to 5 ms the moment a client associates
+             * so the redirect responds with minimum latency. */
+            wifi_sta_list_t stas_idle = {};
+            esp_wifi_ap_get_sta_list(&stas_idle);
+            delay(stas_idle.num == 0 ? 20 : 5);
+        }
     }
 
     if (s_http) { s_http->close(); delete s_http; s_http = nullptr; }
