@@ -55,6 +55,16 @@ void feat_ble_clone(void)
         ui_toast("scan + select first", T_WARN, 1200);
         return;
     }
+    /* POS-AUDIT-221 / ble-005: clone only works against random-addr
+     * peripherals. We force the high bits to 0xC0 (random static)
+     * before installing as our own — if the target was public, that
+     * OR mutates the address and our "clone" is no longer a collision.
+     * Refuse the operation cleanly rather than silently producing a
+     * cosmetic-only attack. */
+    if (g_ble_target.is_public) {
+        ui_toast("clone needs random-MAC target", T_WARN, 1500);
+        return;
+    }
     radio_switch(RADIO_BLE);
 
     /* g_ble_target.addr is stored in NimBLE's native little-endian

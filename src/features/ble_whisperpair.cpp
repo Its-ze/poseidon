@@ -690,6 +690,15 @@ void feat_ble_whisperpair_from_target(void)
         return;
     }
     radio_switch(RADIO_BLE);
+    /* POS-AUDIT-226 / ble-024: caller (ble_scan detail popup) may have
+     * started a passive scan that's still active. WhisperPair's probe
+     * needs a clean connectable state — concurrent scan steals the
+     * radio slot and the connect attempt times out. */
+    NimBLEScan *prev_scan = NimBLEDevice::getScan();
+    if (prev_scan && prev_scan->isScanning()) {
+        prev_scan->stop();
+        delay(20);
+    }
     load_pubkeys();
 
     /* Synthesize a wp_target_t from g_ble_target. Mode UNKNOWN because

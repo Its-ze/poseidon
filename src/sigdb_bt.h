@@ -72,8 +72,8 @@ static const bt_mfr_t BT_MFR[] = {
     { 0x0C68, "Anker" },
     { 0x0DFB, "TP-Link" },
     { 0x07E4, "Tile" },
-    { 0x0131, "Cypress" },
-    { 0x0157, "Mi-Fit / Huami" },
+    /* POS-AUDIT-223: dropped duplicate 0x0131 (Cypress at line 55 wins
+     * first-match) and 0x0157 (Anhui Huami / Mi-Fit same registrant). */
     { 0x0E0A, "Ring" },
     { 0x0E1F, "Nest Labs" },
     { 0x011A, "Estimote" },

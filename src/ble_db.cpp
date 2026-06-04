@@ -28,7 +28,7 @@ static const oui_t OUI[] = {
     { 0x04DB56, "Apple" }, { 0x04F13E, "Apple" }, { 0x04F7E4, "Apple" },
     { 0x086698, "Apple" }, { 0x085BD6, "Apple" }, { 0x0C3021, "Apple" },
     { 0x0C3E9F, "Apple" }, { 0x0C4DE9, "Apple" }, { 0x0C7435, "Apple" },
-    { 0x0C771A, "Apple" }, { 0x10417F, "Apple" }, { 0x10417F, "Apple" },
+    { 0x0C771A, "Apple" }, { 0x10417F, "Apple" }, /* dup 0x10417F removed (POS-AUDIT-222) */
     { 0x1040F3, "Apple" }, { 0x109ADD, "Apple" }, { 0x14109F, "Apple" },
     { 0x14205E, "Apple" }, { 0x28CFE9, "Apple" }, { 0x28E02C, "Apple" },
     { 0x3451C9, "Apple" }, { 0x38CADA, "Apple" }, { 0x3C1598, "Apple" },
@@ -83,8 +83,9 @@ static const oui_t OUI[] = {
     { 0x34D270, "Amazon" }, { 0x38F73D, "Amazon" }, { 0x40B4CD, "Amazon" },
     { 0x44650D, "Amazon" }, { 0x50DCE7, "Amazon" }, { 0x68DB54, "Amazon" },
 
-    /* Xiaomi / Redmi */
-    { 0x001A11, "Xiaomi" }, { 0x04CF8C, "Xiaomi" }, { 0x08D8FE, "Xiaomi" },
+    /* Xiaomi / Redmi (POS-AUDIT-222: 0x001A11 dropped — Google row at
+     * line ~55 wins first-match; would never match here anyway) */
+    { 0x04CF8C, "Xiaomi" }, { 0x08D8FE, "Xiaomi" },
     { 0x0C1DAF, "Xiaomi" }, { 0x14F65A, "Xiaomi" }, { 0x28E31F, "Xiaomi" },
     { 0x2C36F8, "Xiaomi" }, { 0x34CE00, "Xiaomi" }, { 0x3480B3, "Xiaomi" },
     { 0x38A28C, "Xiaomi" }, { 0x485D36, "Xiaomi" }, { 0x50EC50, "Xiaomi" },
@@ -117,14 +118,16 @@ static const oui_t OUI[] = {
     /* Dell, HP, Lenovo */
     { 0x0017A4, "Dell" }, { 0x0021B7, "Dell" }, { 0x2C44FD, "Dell" },
     { 0x8C85C1, "Dell" }, { 0xF8BC12, "Dell" },
-    { 0x0017A4, "HP" }, { 0x00306E, "HP" }, { 0x1CC1DE, "HP" },
+    /* POS-AUDIT-222: 0x0017A4 dropped — Dell row above wins first-match. */
+    { 0x00306E, "HP" }, { 0x1CC1DE, "HP" },
     { 0x000E7F, "HP" }, { 0xEC8EB5, "HP" },
     { 0x002481, "Lenovo" }, { 0x5C93A2, "Lenovo" },
 
     /* Nintendo / Sony PS */
     { 0x00024C, "Nintendo" }, { 0x001A1A, "Nintendo" }, { 0x001BEA, "Nintendo" },
     { 0x002DE2, "Nintendo" }, { 0x00FA9D, "Nintendo" },
-    { 0x0013A9, "Sony PS" }, { 0xFC0FE6, "Sony PS" }, { 0xF8461C, "Sony PS" },
+    /* POS-AUDIT-222: 0x0013A9 dropped — Sony row at line ~64 wins. */
+    { 0xFC0FE6, "Sony PS" }, { 0xF8461C, "Sony PS" },
 
     /* Misc consumer */
     { 0x001788, "Fitbit" }, { 0x0021E8, "Garmin" }, { 0x0C8CDC, "Garmin" },
