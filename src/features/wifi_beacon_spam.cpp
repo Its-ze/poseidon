@@ -36,8 +36,13 @@ static const char *s_rick_ssids[] = {
 };
 #define RICK_COUNT (sizeof(s_rick_ssids)/sizeof(s_rick_ssids[0]))
 
-/* Raw 802.11 beacon frame template (IEEE 802.11 probe response style). */
-static uint8_t s_beacon[128] = {
+/* POS-AUDIT-200 / wifi-012: const template; spam_task copies into its
+ * own stack-local buffer before mutating per-iteration fields (BSSID,
+ * SSID length, SSID, rates, DS). Audit posited a "main↔task race" on
+ * the prior static s_beacon — pick_list returns before spam_task
+ * spawns so the race didn't actually exist, but const+stack-local is
+ * the right pattern regardless and matches POS-AUDIT-018 on C5 side. */
+static const uint8_t s_beacon_tmpl[128] = {
     0x80, 0x00, 0x00, 0x00,                              /* type: beacon */
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff,                  /* dst: broadcast */
     0,0,0,0,0,0,                                         /* src: spoofed BSSID */
@@ -52,24 +57,26 @@ static uint8_t s_beacon[128] = {
     /* Then: supported rates + DS param */
 };
 
-/* Append the post-SSID tags (rates + DS). Returns total frame length. */
-static int build_beacon(const char *ssid, uint8_t ch, uint8_t bssid[6])
+/* Append the post-SSID tags (rates + DS). Returns total frame length.
+ * Caller passes its own 128 B `frame` buffer (initialised from
+ * s_beacon_tmpl); we mutate that in place. */
+static int build_beacon(uint8_t *frame, const char *ssid, uint8_t ch, uint8_t bssid[6])
 {
-    memcpy(s_beacon + 10, bssid, 6);
-    memcpy(s_beacon + 16, bssid, 6);
+    memcpy(frame + 10, bssid, 6);
+    memcpy(frame + 16, bssid, 6);
     size_t ssid_len = strlen(ssid);
     if (ssid_len > 32) ssid_len = 32;
-    s_beacon[37] = (uint8_t)ssid_len;
-    memcpy(s_beacon + 38, ssid, ssid_len);
+    frame[37] = (uint8_t)ssid_len;
+    memcpy(frame + 38, ssid, ssid_len);
 
-    uint8_t *p = s_beacon + 38 + ssid_len;
+    uint8_t *p = frame + 38 + ssid_len;
     /* Supported rates */
     *p++ = 0x01; *p++ = 0x08;
     *p++ = 0x82; *p++ = 0x84; *p++ = 0x8B; *p++ = 0x96;
     *p++ = 0x24; *p++ = 0x30; *p++ = 0x48; *p++ = 0x6C;
     /* DS parameter set (current channel) */
     *p++ = 0x03; *p++ = 0x01; *p++ = ch;
-    return (int)(p - s_beacon);
+    return (int)(p - frame);
 }
 
 /* User-entered or selected list. */
@@ -83,6 +90,8 @@ static volatile uint32_t s_sent    = 0;
 static void spam_task(void *)
 {
     uint8_t bssid[6] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00 };
+    uint8_t frame[128];
+    memcpy(frame, s_beacon_tmpl, sizeof(frame));
     int i = 0;
     while (s_running) {
         const char *ssid = s_list_n > 0 ? s_list[i % s_list_n] :
@@ -92,8 +101,8 @@ static void spam_task(void *)
         bssid[5] = (uint8_t)(i & 0xFF);
         uint8_t ch = 1 + (i % 11);
         esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
-        int len = build_beacon(ssid, ch, bssid);
-        esp_wifi_80211_tx(WIFI_IF_STA, s_beacon, len, false);
+        int len = build_beacon(frame, ssid, ch, bssid);
+        esp_wifi_80211_tx(WIFI_IF_STA, frame, len, false);
         s_sent++;
         i++;
         delay(30);
