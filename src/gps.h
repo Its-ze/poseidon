@@ -60,6 +60,7 @@ struct gps_diag_t {
     uint32_t lines;
     uint32_t gga;
     uint32_t rmc;
+    uint32_t overflows;     /* gps-003: lines > 128 B truncated */
     char     last[96];
 };
 const gps_diag_t &gps_diag(void);

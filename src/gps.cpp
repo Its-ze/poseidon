@@ -186,10 +186,18 @@ static void process_line(char *line)
 void gps_poll(void)
 {
     if (s_pause_poll || !s_started) return;
-    while (s_uart.available()) {
+    /* POS-AUDIT-301 / gps-001: cap byte drain per call. At 115200 baud
+     * with 8 sentences/sec the UART backs ~1500 B/call, blocking ~10 ms.
+     * Triton calls every loop iteration and that throughput murdered
+     * the cooperative tick. Drain ≤256 B per invocation — the next
+     * call (within ms) picks up where this one stopped, total throughput
+     * unchanged but no single call blocks more than ~2 ms. */
+    int drained = 0;
+    while (s_uart.available() && drained < 256) {
         int c = s_uart.read();
         if (c < 0) break;
         s_diag.bytes++;
+        drained++;
         if (c == '\r') continue;
         if (c == '\n') {
             s_line[s_line_len] = '\0';
@@ -200,7 +208,11 @@ void gps_poll(void)
         if (s_line_len + 1 < (int)sizeof(s_line)) {
             s_line[s_line_len++] = (char)c;
         } else {
-            s_line_len = 0;  /* overflow, discard */
+            /* gps-003: surface the overflow so diag screen can show a
+             * GPS line that wedged longer than 127 bytes (typically a
+             * baud mismatch hammering garbage). */
+            s_diag.overflows++;
+            s_line_len = 0;
         }
     }
 
