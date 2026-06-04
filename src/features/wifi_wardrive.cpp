@@ -84,17 +84,31 @@ static const char *auth_to_wigle(uint8_t a)
 static void flush_dirty_rows(void)
 {
     if (!s_csv) return;
-    gps_fix_t g;
-    bool have_gps = gps_snapshot(&g);
     for (int i = 0; i < s_ap_count; ++i) {
         wdr_ap_t &a = s_aps[i];
         if (!a.dirty) continue;
         a.dirty = false;
-        s_csv.printf("%02X:%02X:%02X:%02X:%02X:%02X,%s,%s,%s,%u,%d,%.6f,%.6f,%.1f,5,WIFI\n",
+        /* POS-AUDIT-208 / wifi-016: skip rows that never had a GPS fix.
+         * The previous code would write lat=0.0,lon=0.0 placeholders
+         * which WiGLE silently accepts but which corrupt aggregate
+         * maps — Gulf of Guinea null-island clusters from missed
+         * fixes. Better to drop the row entirely; the AP stays in the
+         * in-RAM table for a later flush when GPS catches up.  */
+        if (a.lat == 0.0 && a.lon == 0.0) {
+            a.dirty = true;     /* retry on next flush after GPS fix */
+            continue;
+        }
+        /* POS-AUDIT-207 / wifi-020: FirstSeen field left empty rather
+         * than stamped with the CURRENT GPS snapshot's date — the per-AP
+         * first_seen is a millis() since boot which can't be converted
+         * to a wall-clock string without a stored RTC date, and we don't
+         * keep per-AP first-fix dates in the struct (would add ~5 KB
+         * BSS for negligible WiGLE benefit; their importer infers time
+         * from the upload telemetry header). Empty is honest. */
+        s_csv.printf("%02X:%02X:%02X:%02X:%02X:%02X,%s,%s,,%u,%d,%.6f,%.6f,%.1f,5,WIFI\n",
                      a.bssid[0], a.bssid[1], a.bssid[2],
                      a.bssid[3], a.bssid[4], a.bssid[5],
                      a.ssid, auth_to_wigle(a.auth),
-                     have_gps ? g.date : "",
                      a.channel, a.rssi, a.lat, a.lon, a.alt);
     }
     s_csv.flush();

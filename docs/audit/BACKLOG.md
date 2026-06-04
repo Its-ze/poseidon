@@ -1396,12 +1396,12 @@ PORKCHOP heap-policy adoption tracked under POS-AUDIT-118.
 - **Fix:** Gate GPS write on `g.valid` AND only set once when fix is real; emit empty fields for unfixed rows.
 - **Depends on:** none · **Verification:** Wardrive without GPS for stretch; CSV has empty (not 0.0) coords · **Release gate:** yes · **Source:** wifi-021
 
-### POS-AUDIT-209 — [MED][WiFi] wifi_ciw struct — SSID field 64B → 33B
+### POS-AUDIT-209 — [MED→RESOLVED-AS-INTENTIONAL][WiFi] wifi_ciw struct — SSID field 64B → 33B
 
-- **Severity:** MED · **Phase:** 2 · **File:** src/features/wifi_ciw.cpp:34 · **Effort:** S
-- **Problem:** 802.11 max SSID is 32; current 64B → 33B (32 + nul) saves ~5 KB BSS.
-- **Fix:** Change field width + update `memcpy_P` use; OR build longer into real 802.11 SSID tag (fuzz vector).
-- **Depends on:** POS-AUDIT-022 · **Verification:** Build size delta · **Release gate:** yes · **Source:** wifi-022
+- **Status:** RESOLVED (kept at 64; fuzz vector is the point)
+- **Severity:** MED (originally) · **Phase:** 2 · **File:** src/features/wifi_ciw.cpp:34 · **Effort:** S
+- **Resolution:** The CIW feature exists specifically to test driver / client bounds checking with oversized SSID payloads. One existing entry is a 33-char 'A' overflow targeting the off-by-one. Shrinking the field to 33 B would silently truncate the fuzz capability. ~2.3 KB BSS savings (75 entries × 31 B) is not worth dropping the test surface. Inline code comment documents the intent.
+- **Source:** wifi-022
 
 ### POS-AUDIT-210 — [MED][WiFi] wifi_deauth.cpp:44 — s_seq shared between resume cycles
 

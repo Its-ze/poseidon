@@ -36,6 +36,12 @@ static const char *const s_cat_names[] = {
 };
 
 struct CiwPayload {
+    /* POS-AUDIT-209 INTENTIONAL: kept at 64 — 802.11 max SSID is 32
+     * (+1 NUL) but CIW is specifically about feeding oversized payloads
+     * to test client / driver bounds checking. One existing entry is a
+     * 33-char 'A' string targeting the off-by-one. Shrinking the field
+     * to 33 would silently truncate fuzz vectors. ~2.3 KB BSS savings
+     * is not worth dropping the fuzz capability. */
     char     ssid[64];
     uint8_t  cat;
 };

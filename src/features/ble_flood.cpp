@@ -131,5 +131,21 @@ void feat_ble_flood(void)
         if (k == PK_ESC) break;
     }
     s_flood_alive = false;
-    ble_gap_conn_cancel();
+    /* POS-AUDIT-220 / ble-004: a single ble_gap_conn_cancel races
+     * BLE_GAP_EVENT_CONNECT — if the controller delivers a successful
+     * conn between our cancel and the function exit, we leak the
+     * connection (the peripheral stays joined, exhausts a slot, and
+     * the next BLE feature trips conn-table-full). Loop the cancel
+     * for up to 500 ms: each iteration cancels in-flight attempts
+     * AND races/closes any conn that landed in the last 50 ms gap.
+     * s_flood_last_rc tracks the most recent NimBLE return — once
+     * it's non-zero AND no new attempt has fired, the controller
+     * is idle. */
+    {
+        uint32_t deadline = millis() + 500;
+        do {
+            ble_gap_conn_cancel();
+            delay(50);
+        } while (s_flood_last_rc == 0 && millis() < deadline);
+    }
 }
