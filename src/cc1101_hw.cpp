@@ -15,8 +15,14 @@ void cc1101_park_others(void)
      * is running, the UART driver fights us for the pin — symptoms
      * range from "CS never asserts" to "garbage bytes on SPI". Tear
      * down GPS before reclaiming the pin, then drive CS HIGH manually
-     * so the chip ignores SPI until cc1101_begin actually addresses it. */
-    gps_end();
+     * so the chip ignores SPI until cc1101_begin actually addresses it.
+     *
+     * POS-AUDIT-244 / rf-015: only tear down if GPS is actually up.
+     * Previously we called s_uart.end() + pinMode INPUT unconditionally
+     * even when GPS was OFF (default per sys-015) — wasting the cycles
+     * and momentarily flipping pin 13 INPUT-then-OUTPUT-HIGH which
+     * could backdrive the GPS module's TX into us during the gap. */
+    if (gps_is_up()) gps_end();
     pinMode(13, OUTPUT); digitalWrite(13, HIGH);
 
     /* SD CS=12, nRF24 CS=6, LoRa NSS=5: hold HIGH so they ignore the

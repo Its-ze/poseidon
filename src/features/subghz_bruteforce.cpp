@@ -12,6 +12,7 @@
 #include "../cc1101_hw.h"
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 #include <RCSwitch.h>
+#include <esp_task_wdt.h>
 
 struct brute_proto_t {
     const char *name;
@@ -74,6 +75,11 @@ void feat_subghz_bruteforce(void)
     uint32_t code = 0;
     bool running = true;
     uint32_t last_draw = 0;
+    /* POS-AUDIT-240 / rf-009: full sweep at 16+ bits is hundreds of
+     * thousands of TXs; with a typical per-code period of ~380 µs that's
+     * minutes of nonstop TX with no yield. Feed the task watchdog once
+     * per second so loopTask's TWDT subscription doesn't trip. */
+    uint32_t last_wdt_reset = 0;
 
     while (running && code < total) {
         /* Transmit current code. */
@@ -83,6 +89,10 @@ void feat_subghz_bruteforce(void)
         code++;
 
         uint32_t now = millis();
+        if (now - last_wdt_reset > 1000) {
+            (void)esp_task_wdt_reset();
+            last_wdt_reset = now;
+        }
         if (now - last_draw > 200) {
             last_draw = now;
             ui_clear_body();

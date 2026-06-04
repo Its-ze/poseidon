@@ -299,12 +299,23 @@ static void run_scope(SX1262 &radio, float freq)
 
         ui_draw_footer("+-=freq  ESC=back");
 
+        /* POS-AUDIT-243 / rf-014: debounce freq-step input. Each
+         * retune costs ~10 ms (standby + setFrequency + startReceive)
+         * and can wedge the SX1262 BUSY line under back-to-back hits.
+         * Holding +/- previously mashed setFrequency dozens of times
+         * per second; gate to ≥100 ms between accepted +/- keypresses
+         * by tracking the last-step millis(). ESC is not debounced —
+         * we want the exit to be snappy. */
+        static uint32_t last_step_ms = 0;
         uint32_t t = millis();
         while (millis() - t < 40) {
             uint16_t k = input_poll();
             if (k == PK_ESC) return;
-            if (k == '+' || k == '=') freq += 0.1f;
-            if (k == '-') freq -= 0.1f;
+            if ((k == '+' || k == '=') && millis() - last_step_ms >= 100) {
+                freq += 0.1f; last_step_ms = millis();
+            } else if (k == '-' && millis() - last_step_ms >= 100) {
+                freq -= 0.1f; last_step_ms = millis();
+            }
         }
     }
 }

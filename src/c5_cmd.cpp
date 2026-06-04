@@ -377,7 +377,12 @@ static uint16_t send_simple_cmd(uint8_t type, const uint8_t *extra, int extra_le
     for (int i = 0; i < count; ++i) memcpy(macs[i], s_peers[i].mac, 6);
     portEXIT_CRITICAL(&s_mux);
 
-    /* Get current WiFi state for diag. */
+    /* POS-AUDIT-273 / net-013: production builds skip the per-tick
+     * Serial.printf storm. send_simple_cmd is on the hot path of every
+     * C5 command — emitting 3-4 USB-CDC lines per call buffer-stalls
+     * the WiFi event task on busy CDC consumers and spams the bring-up
+     * console. POSEIDON_DEBUG_C5 keeps the lines for development. */
+#ifdef POSEIDON_DEBUG_C5
     wifi_mode_t mode_now = WIFI_MODE_NULL;
     esp_wifi_get_mode(&mode_now);
     uint8_t prim_ch = 0; wifi_second_chan_t sec;
@@ -385,13 +390,22 @@ static uint16_t send_simple_cmd(uint8_t type, const uint8_t *extra, int extra_le
     Serial.printf("[c5-tx] type=%u seq=%u peers=%d started=%d mode=%d ch=%u\n",
                   (unsigned)type, (unsigned)seq, count, (int)s_started,
                   (int)mode_now, (unsigned)prim_ch);
+#endif
 
     for (int i = 0; i < count; ++i) {
         esp_err_t r = esp_now_send(macs[i], (const uint8_t *)&m, sizeof(m));
+#ifdef POSEIDON_DEBUG_C5
         Serial.printf("[c5-tx] unicast peer%d rc=%d (%s)\n", i, (int)r, esp_err_to_name(r));
+#else
+        (void)r;
+#endif
     }
     esp_err_t r = esp_now_send(BROADCAST_MAC, (const uint8_t *)&m, sizeof(m));
+#ifdef POSEIDON_DEBUG_C5
     Serial.printf("[c5-tx] broadcast rc=%d (%s)\n", (int)r, esp_err_to_name(r));
+#else
+    (void)r;
+#endif
     return seq;
 }
 

@@ -44,6 +44,8 @@ void gps_end(void)
 
 uint32_t gps_current_baud(void) { return s_baud; }
 
+bool gps_is_up(void) { return s_started; }
+
 /* sys-015 / OPSEC: GPS is OFF by default. NVS namespace "gps", key
  * "enabled" (uint8_t). Cached on first read so menu pages can poll
  * cheaply; gps_set_user_enabled invalidates and persists. */

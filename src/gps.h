@@ -37,6 +37,11 @@ bool gps_begin(void);
 void gps_end(void);
 void gps_poll(void);
 
+/* rf-015: cheap "is the UART up?" probe so callers that conditionally
+ * tear down GPS (cc1101_park_others) can skip the destructive
+ * s_uart.end()+pinMode dance when GPS isn't running anyway. */
+bool gps_is_up(void);
+
 /* OPSEC gate. GPS is OFF by default at boot — the user must
  * explicitly opt in via the menu before WiFi captures / wardrive logs
  * carry observer coordinates. Persisted in NVS namespace "gps", key
