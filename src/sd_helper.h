@@ -50,3 +50,20 @@ File sdlog_open(const char *stem,
                 const char *header_line = nullptr,
                 char *out_path = nullptr,
                 size_t out_path_sz = 0);
+
+/*
+ * sd_rotate_on_size — net-009 / POS-AUDIT-269.
+ *
+ * Rotation helper for APPEND-mode credential / capture logs that would
+ * otherwise grow unbounded across long sessions. Call BEFORE opening
+ * `path` for APPEND; if the existing file exceeds `max_bytes`, the
+ * current file is moved to `<path>.1` (overwriting any prior .1) and
+ * a fresh `path` is started on the next open.
+ *
+ * Single-generation rotation only — pre-existing .1 is overwritten.
+ * That's deliberate: the only legitimate reason a capture file got
+ * large is a long session in the field; the most recent rotation is
+ * the one the operator cares about. Multi-gen rotation would burn SD
+ * write cycles to no real benefit.
+ */
+void sd_rotate_on_size(const char *path, size_t max_bytes);

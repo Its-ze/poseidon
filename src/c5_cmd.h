@@ -28,7 +28,7 @@ enum {
     C5_TYPE_CMD_DEAUTH         = 14,
     C5_TYPE_CMD_STOP           = 15,
     C5_TYPE_CMD_PMKID          = 16,
-    C5_TYPE_CMD_HS             = 17,
+    C5_TYPE_CMD_HS             = 17,    /* matches POSEI_TYPE_CMD_HS_CAPTURE (c5_node/main/proto.h) — net-002 */
     C5_TYPE_CMD_CLIENTS_HUNT   = 18,
     C5_TYPE_CMD_CLIENTS_AP     = 19,
     C5_TYPE_CMD_BEACON_SPAM    = 20,

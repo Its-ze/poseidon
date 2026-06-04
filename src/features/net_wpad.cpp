@@ -159,6 +159,8 @@ static void save_ntlm_hash(const uint8_t *raw, size_t rawLen, const IPAddress &c
 
     if (sd_mount()) {
         SD.mkdir("/poseidon");
+        /* POS-AUDIT-269 / net-009: rotate at 64 KB. */
+        sd_rotate_on_size("/poseidon/ntlm_hashes.txt", 64 * 1024);
         File f = SD.open("/poseidon/ntlm_hashes.txt", FILE_APPEND);
         if (f) { f.println(line); f.close(); }
     }

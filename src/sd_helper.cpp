@@ -112,6 +112,24 @@ File sdlog_open(const char *stem, const char *header_line,
     return f;
 }
 
+void sd_rotate_on_size(const char *path, size_t max_bytes)
+{
+    if (!path || !*path) return;
+    if (!sd_mount()) return;
+    if (!SD.exists(path)) return;
+    File f = SD.open(path, FILE_READ);
+    if (!f) return;
+    size_t sz = f.size();
+    f.close();
+    if (sz < max_bytes) return;
+
+    /* Build "<path>.1" — single-generation rotation. */
+    char rolled[80];
+    snprintf(rolled, sizeof(rolled), "%s.1", path);
+    if (SD.exists(rolled)) SD.remove(rolled);
+    SD.rename(path, rolled);
+}
+
 bool sd_format(void)
 {
     /* Use try_mount with format-on-fail = true so we hit the same

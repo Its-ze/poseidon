@@ -182,6 +182,12 @@ void feat_net_responder(void)
     }
     if (!sd_mount()) { ui_toast("SD needed for log", T_BAD, 1500); return; }
     SD.mkdir("/poseidon");
+    /* POS-AUDIT-269 / net-009: roll the capture log once it crosses
+     * 64 KB. Previous behaviour appended forever across sessions and
+     * a long Responder run could fill the SD with a single multi-MB
+     * file. sd_rotate_on_size moves the old file to ntlm.log.1 (single
+     * generation; older rotations would just waste write cycles). */
+    sd_rotate_on_size("/poseidon/ntlm.log", 64 * 1024);
     s_log = SD.open("/poseidon/ntlm.log", FILE_APPEND);
 
     s_queries = s_replies = s_hashes = 0;

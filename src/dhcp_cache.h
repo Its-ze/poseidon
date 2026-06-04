@@ -13,9 +13,17 @@
 
 /* Learn a (mac, hostname) pair. mac is 6 bytes in the order they
  * appear in 802.11 headers (display / big-endian). hostname is
- * null-terminated but may be truncated. Safe to call from an ISR or
- * WiFi callback — data is stored in a fixed-size array with simple
- * replacement. */
+ * null-terminated but may be truncated.
+ *
+ * POS-AUDIT-265 / net-015: previous header text claimed this was
+ * "safe to call from an ISR or WiFi callback" — that's FALSE. find()
+ * + s_n++ in dhcp_learn are not atomic; concurrent learns from
+ * promisc_cb and DHCP server context can interleave and corrupt the
+ * table (lost entries, duplicated MACs). Callers today happen to be
+ * single-threaded by virtue of running from a single WiFi context at
+ * a time, but adding portMUX here is a Phase-2 followup (net-015
+ * extended ticket). For now: DO NOT call from an ISR; DO NOT call
+ * from two concurrent WiFi contexts. */
 void dhcp_learn(const uint8_t mac[6], const char *hostname);
 
 /* Look up a previously-seen hostname. Returns nullptr if not cached. */
