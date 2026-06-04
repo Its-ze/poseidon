@@ -13,6 +13,7 @@
 #include "../radio.h"
 #include "../cc1101_hw.h"
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
+#include <esp_heap_caps.h>
 
 struct freq_range_t { float start; float end; const char *name; };
 static const freq_range_t RANGES[] = {
@@ -159,30 +160,25 @@ static void run_bar_spectrum(const freq_range_t &range)
 
 /* ---- Waterfall / Spectrogram ---- */
 
-/* Static BSS ring. 100×240 (48 KB) was too big — it ate enough boot
- * heap that esp_wifi_init started failing with ESP_ERR_NO_MEM and
- * WiFi Scan crashed the device. 60 rows × 240 × 2 B = 28.8 KB leaves
- * enough heap for WiFi's default RX buffers. Still fills most of the
- * body under the title strip. */
+/* POS-AUDIT-246 / rf-017: ring buffer is now lazy-allocated on entry
+ * and freed on exit so the 28.8 KB doesn't sit in BSS for the lifetime
+ * of every session — only the user who opens the waterfall pays for
+ * it. 60 rows × 240 cols × 2 B = 28800 B; heap_caps_malloc with
+ * MALLOC_CAP_INTERNAL forces internal SRAM (we don't have PSRAM and
+ * the renderer's pushImage path expects internal-RAM pixels). */
 #define WF_MAX_ROWS 60
 #define WF_MAX_BINS SCR_W
-static uint16_t s_wf_ring[WF_MAX_ROWS * WF_MAX_BINS];
 
 static void run_waterfall(const freq_range_t &range)
 {
-    /* Full-screen waterfall. Sweeps freq bins across the whole 240 px
-     * width; each completed sweep scrolls the history up one row and
-     * renders a new bottom row. No borders / labels eat pixels — the
-     * few overlays (range name, start/end freq, ESC hint) are drawn
-     * translucently on top of the waterfall. 240x135 x 2 B = 64 KB
-     * ring buffer; fine on our 327 KB internal RAM budget. */
     auto &d = M5Cardputer.Display;
-    /* Center the 100-row waterfall vertically under a small title
-     * band. GY leaves ~15 px on top for title + range label. */
     const int GX = 0, GY = 15, GW = WF_MAX_BINS, GH = WF_MAX_ROWS;
     float step = (range.end - range.start) / GW;
 
-    uint16_t *ring = s_wf_ring;
+    uint16_t *ring = (uint16_t *)heap_caps_malloc(
+        WF_MAX_ROWS * WF_MAX_BINS * sizeof(uint16_t), MALLOC_CAP_INTERNAL);
+    if (!ring) { ui_toast("OOM", T_BAD, 1000); return; }
+    memset(ring, 0, WF_MAX_ROWS * WF_MAX_BINS * sizeof(uint16_t));
     int head = 0, count = 0;
 
     d.fillScreen(T_BG);
@@ -220,7 +216,7 @@ static void run_waterfall(const freq_range_t &range)
         d.printf("%.0f", range.end);
 
         uint16_t k = input_poll();
-        if (k == PK_ESC) { return; }
+        if (k == PK_ESC) { free(ring); return; }
     }
 }
 

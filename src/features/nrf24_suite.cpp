@@ -677,11 +677,16 @@ void feat_nrf24_jammer(void)
     while (true) {
         uint32_t now = millis();
         if (active && now - jam_start > JAM_MAX_MS) {
+            /* POS-AUDIT-242 / rf-011: drop the post-cap nrf24_begin().
+             * After powerDown the radio is intentionally off; restarting
+             * it immediately is wasteful because the next loop iter has
+             * active=false and the user must re-arm via PK_ENTER, which
+             * now re-runs the begin. ESC-while-inactive path skips the
+             * re-begin too — we're exiting the feature. */
             active = false;
             rf.stopConstCarrier();
             rf.powerDown();
             ui_toast("20s limit", T_WARN, 800);
-            nrf24_begin();
         }
 
         if (active) {
@@ -745,7 +750,10 @@ void feat_nrf24_jammer(void)
 
         uint16_t k = input_poll();
         if (k == PK_ESC) {
-            if (active) { active = false; rf.stopConstCarrier(); nrf24_begin(); }
+            /* POS-AUDIT-242: dropped the post-stop nrf24_begin — we're
+             * either heading into re-arm via PK_ENTER (handles begin)
+             * or out of the feature entirely (no point re-init). */
+            if (active) { active = false; rf.stopConstCarrier(); }
             else break;
         }
         if (!active) {
@@ -753,6 +761,9 @@ void feat_nrf24_jammer(void)
             if (k == '.' || k == PK_DOWN) sel = (sel + 1) % JAM_PRESET_COUNT;
             if (k == 'm' || k == 'M') jam_mode = 1 - jam_mode;
             if (k == PK_ENTER) {
+                /* POS-AUDIT-242: re-arm needs to wake the radio from
+                 * the prior powerDown (cap path) or post-stop state. */
+                nrf24_begin();
                 active = true;
                 jam_start = millis();
                 rf.setAutoAck(false);
