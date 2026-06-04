@@ -28,6 +28,7 @@
 #include "ui.h"
 #include "input.h"
 #include "radio.h"
+#include "wifi_pmf_warn.h"
 #include "sfx.h"
 #include "wifi_types.h"
 #include "wifi_deauth_frame.h"
@@ -193,29 +194,10 @@ static bool collect_target(uint8_t *auth_out)
 }
 
 /* Returns true if user wants to proceed despite PMF, false to abort. */
-static bool pmf_warning(void)
-{
-    auto &d = M5Cardputer.Display;
-    ui_clear_body();
-    d.setTextColor(T_WARN, T_BG);
-    d.setCursor(4, BODY_Y + 4); d.print("PMF / 802.11w warning");
-    d.drawFastHLine(4, BODY_Y + 14, SCR_W - 8, T_WARN);
-    d.setTextColor(T_FG, T_BG);
-    d.setCursor(4, BODY_Y + 20); d.print("target uses WPA3 or");
-    d.setCursor(4, BODY_Y + 30); d.print("WPA2-Enterprise.");
-    d.setCursor(4, BODY_Y + 44); d.print("deauth will be dropped");
-    d.setCursor(4, BODY_Y + 54); d.print("cryptographically.");
-    d.setTextColor(T_DIM, T_BG);
-    d.setCursor(4, BODY_Y + 70); d.print("ENTER = proceed anyway");
-    d.setCursor(4, BODY_Y + 80); d.print("ESC   = back");
-    ui_draw_footer("PMF warn");
-    while (true) {
-        uint16_t k = input_poll();
-        if (k == PK_ENTER) return true;
-        if (k == PK_ESC)   return false;
-        delay(20);
-    }
-}
+/* POS-AUDIT-213: pmf_warning helper extracted to wifi_pmf_warn.{h,cpp}
+ * so portal + apclone clone paths can reuse the same UI. Local alias
+ * kept to minimise diff in the deauth callsite below. */
+static inline bool pmf_warning(void) { return wifi_pmf_warning(); }
 
 void feat_wifi_deauth(void)
 {

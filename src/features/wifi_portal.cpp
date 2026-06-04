@@ -21,6 +21,8 @@
 #include "radio.h"
 #include "wifi_types.h"
 #include "../sfx.h"
+#include "wifi_pmf_warn.h"
+#include "wifi_deauth_frame.h"   /* wifi_auth_has_pmf */
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
@@ -616,6 +618,11 @@ void feat_wifi_portal(void)
             ui_toast("scan an AP first", T_WARN, 1200);
             return;
         }
+        /* POS-AUDIT-213 / wifi-041: PMF on the target AP makes the
+         * deauth-driven re-association lure ineffective. The portal
+         * will still come up but clients won't drift to it. Warn
+         * before committing. */
+        if (wifi_auth_has_pmf(g_last_selected_ap.auth) && !wifi_pmf_warning()) return;
         strncpy(s_portal_ssid, g_last_selected_ap.ssid, sizeof(s_portal_ssid) - 1);
         s_portal_ssid[sizeof(s_portal_ssid) - 1] = '\0';
         s_current_html = HTML_FREEWIFI;
@@ -679,6 +686,9 @@ void feat_wifi_apclone(void)
         ui_toast("scan + select AP first", T_WARN, 1500);
         return;
     }
+    /* POS-AUDIT-213 / wifi-041: same PMF caveat as portal quick-clone
+     * — deauth-driven lure won't work, surface the warning. */
+    if (wifi_auth_has_pmf(g_last_selected_ap.auth) && !wifi_pmf_warning()) return;
     strncpy(s_portal_ssid, g_last_selected_ap.ssid, sizeof(s_portal_ssid) - 1);
     s_portal_ssid[sizeof(s_portal_ssid) - 1] = '\0';
     s_current_html = HTML_FREEWIFI;
