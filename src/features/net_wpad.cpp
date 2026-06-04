@@ -162,7 +162,17 @@ static void save_ntlm_hash(const uint8_t *raw, size_t rawLen, const IPAddress &c
         File f = SD.open("/poseidon/ntlm_hashes.txt", FILE_APPEND);
         if (f) { f.println(line); f.close(); }
     }
+    /* POS-AUDIT-270 / net-010: do NOT leak the captured NTLMv2 hash
+     * to USB-CDC. The serial port is reachable by anything with
+     * physical access (HOST=POSEIDON sled, debug pogo, third-party
+     * cable) — putting the hash on the wire defeats the SD-only
+     * storage we deliberately chose. Behind a debug build flag so
+     * dev sessions can still tail captures over USB. */
+#ifdef POSEIDON_DEBUG_NTLM
     Serial.println("[+] NTLMv2: " + line);
+#else
+    Serial.println("[+] NTLMv2 captured (see SD)");
+#endif
 }
 
 /* ── HTTP line/header reader ──────────────────────────────────────── */

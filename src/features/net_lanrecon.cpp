@@ -254,11 +254,12 @@ static void phase_banner(void)
 
 static void export_csv(void)
 {
-    if (!sd_mount()) return;
-    SD.mkdir("/poseidon");
-    File f = SD.open("/poseidon/lan.csv", FILE_WRITE);
+    /* POS-AUDIT-271 / net-011: was SD.open("/poseidon/lan.csv", FILE_WRITE)
+     * which truncates — every recon run silently obliterated the previous
+     * one. Use the canonical sdlog_open helper instead which gives every
+     * run its own timestamped file (matches net_cctv pattern). */
+    File f = sdlog_open("lan", "ip,mac,vendor,open_ports,banner");
     if (!f) return;
-    f.println("ip,mac,vendor,open_ports,banner");
     for (int i = 0; i < s_host_count; ++i) {
         const host_t &h = s_hosts[i];
         f.printf("%s,", h.ip.toString().c_str());

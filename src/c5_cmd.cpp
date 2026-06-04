@@ -256,7 +256,16 @@ bool c5_begin(void)
      * A prior WiFi scan / attack can leave the driver on any channel 1-13;
      * without forcing the lock we'd silently miss HELLOs from the C5.
      * C5 also pins to channel 1 on boot. Always re-apply even if already
-     * started — entering the C5 menu from another WiFi feature needs this. */
+     * started — entering the C5 menu from another WiFi feature needs this.
+     *
+     * POS-AUDIT-263 / net-001 INVARIANT: c5_begin() is the only legal
+     * entry point into ch1-pinned mode. Concurrent mesh / wardrive /
+     * hop_task workers SHOULD NOT be running when this fires — the
+     * radio_switch(RADIO_WIFI) at the feature entry above is the
+     * agreed serialisation point. If a worker is mid-hop when c5_begin
+     * runs, it will miss the next 1-2 channel changes (cosmetic glitch
+     * in scan stats) but recover at its next iteration. Anyone adding
+     * a parallel channel-hopping path must read this comment first. */
     esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
 
     if (s_started) return true;
