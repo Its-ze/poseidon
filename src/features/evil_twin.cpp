@@ -401,11 +401,18 @@ void feat_evil_twin(void)
     }
     SD.mkdir("/poseidon");
 
-    /* POS-AUDIT-007: BTDM release one-way; gate on status. See
-     * wifi_portal.cpp for full rationale. */
+    /* POS-AUDIT-007 (revised after on-device repro 2026-06-06):
+     * force-shutdown BT before mem_release. See wifi_portal.cpp for
+     * full rationale. */
     esp_wifi_set_promiscuous(false);
-    if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE) {
-        esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+    bool bt_was_inited =
+        (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE);
+    if (bt_was_inited) {
+        esp_bt_controller_disable();
+        esp_bt_controller_deinit();
+    }
+    esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+    if (bt_was_inited) {
         ui_toast("BLE disabled until reboot", T_WARN, 1200);
     }
     esp_log_level_set("wifi",      ESP_LOG_INFO);

@@ -59,9 +59,24 @@ static bool ap_bring_up(uint8_t ch)
      * the session after this. Software reset (ESP.restart) does NOT
      * restore the BTDM controller. User must unplug + replug to recover
      * BLE. The AP-mode menu entries' = info text should warn about this. */
-    /* POS-AUDIT-007: gate on status — see wifi_portal.cpp. */
-    if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE) {
-        esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+    /* POS-AUDIT-007 (revised after on-device repro 2026-06-06):
+     * The original gate skipped the release if BT was already inited
+     * (preserving BLE for the session). On Bruce libs that path
+     * crashes in ieee80211_hostap_attach +0x2c during AP bring-up.
+     * Repro: BLE Scan → Defensive Monitor → AP Signal Test → reboot.
+     * The audit's own commit body called this risk "rare in practice
+     * with current builds" — it's not rare on the v0.7 build the user
+     * is testing. Force-shutdown BT before the release so AP-mode
+     * always works; sacrifice BLE for the rest of the session and
+     * toast so the user knows. */
+    bool bt_was_inited =
+        (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE);
+    if (bt_was_inited) {
+        esp_bt_controller_disable();
+        esp_bt_controller_deinit();
+    }
+    esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+    if (bt_was_inited) {
         ui_toast("BLE disabled until reboot", T_WARN, 1200);
     }
 

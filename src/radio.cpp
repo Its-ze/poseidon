@@ -33,8 +33,20 @@ void wifi_force_clean_sta(void)
 bool wifi_lean_sta_init(void)
 {
     /* If WiFi is already inited (we got here from another feature in
-     * the same session), just ensure mode is STA and return.
-     * esp_wifi_get_mode returns ESP_OK only after esp_wifi_init has run. */
+     * the same session), just ensure mode is STA + started.
+     * esp_wifi_get_mode returns ESP_OK only after esp_wifi_init has run.
+     *
+     * On-device repro fix 2026-06-06: after POS-AUDIT-008 the
+     * teardown(RADIO_WIFI) leaves the driver stopped-but-inited.
+     * Previous code here just returned true on the inited check —
+     * subsequent esp_wifi_set_promiscuous / esp_wifi_set_channel /
+     * esp_wifi_80211_tx then all failed with ESP_ERR_WIFI_NOT_STARTED
+     * and the WiFi task's coex path eventually panicked, freezing the
+     * device and forcing a reset. Symptom seen as "Deauth All freezes
+     * and restarts". Now we explicitly esp_wifi_start() — a second
+     * start on an already-started driver returns ESP_ERR_WIFI_STATE
+     * (harmless), but covers the stopped-but-inited case which is the
+     * only one POS-AUDIT-008 introduced. */
     wifi_mode_t cur = WIFI_MODE_NULL;
     if (esp_wifi_get_mode(&cur) == ESP_OK) {
         if (cur != WIFI_MODE_STA) {
@@ -43,6 +55,7 @@ bool wifi_lean_sta_init(void)
             esp_wifi_set_mode(WIFI_MODE_STA);
             delay(30);
         }
+        (void)esp_wifi_start();
         return true;
     }
     /* Fresh init — raw IDF with shrunk buffers to fit in fragmented

@@ -261,10 +261,18 @@ void feat_wifi_ciw(void)
     esp_netif_t *sta_if = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     if (sta_if) esp_netif_destroy_default_wifi(sta_if);
 
-    /* POS-AUDIT-007 pattern: only release BTDM if BT controller is IDLE.
-     * If BLE already inited it, mem_release is a no-op and we keep BLE. */
-    if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE) {
-        esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+    /* POS-AUDIT-007 (revised after on-device repro 2026-06-06):
+     * force-shutdown BT before mem_release. See wifi_portal.cpp
+     * for full rationale. */
+    bool bt_was_inited =
+        (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE);
+    if (bt_was_inited) {
+        esp_bt_controller_disable();
+        esp_bt_controller_deinit();
+    }
+    esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+    if (bt_was_inited) {
+        ui_toast("BLE disabled until reboot", T_WARN, 1200);
     }
 
     esp_log_level_set("wifi",      ESP_LOG_INFO);

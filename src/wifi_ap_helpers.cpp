@@ -31,12 +31,20 @@ bool wifi_raw_ap_up(const char *ssid, uint8_t channel,
     esp_netif_t *sta_if = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     if (sta_if) esp_netif_destroy_default_wifi(sta_if);
 
-    /* POS-AUDIT-007: only release BTDM if BT controller is IDLE — if
-     * BLE already inited it, mem_release is a no-op and we keep BLE
-     * intact. */
-    if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE) {
-        esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+    /* POS-AUDIT-007 (revised after on-device repro 2026-06-06):
+     * force-shutdown BT before mem_release. The original IDLE gate
+     * preserved BLE for the session but on Bruce libs the post-BLE
+     * path then crashed in ieee80211_hostap_attach +0x2c during AP
+     * bring-up. Sacrifice BLE for the session via explicit disable
+     * + deinit so AP-mode always works. Caller owns the toast (the
+     * 4 raw-IDF AP feature sites each have a UI gate above). */
+    bool bt_was_inited =
+        (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE);
+    if (bt_was_inited) {
+        esp_bt_controller_disable();
+        esp_bt_controller_deinit();
     }
+    esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
 
     esp_log_level_set("wifi",      ESP_LOG_INFO);
     esp_log_level_set("wifi_init", ESP_LOG_INFO);
