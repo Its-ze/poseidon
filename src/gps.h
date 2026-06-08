@@ -48,6 +48,12 @@ bool gps_is_up(void);
  * "enabled" (uint8_t, 0=off, 1=on). See sys-015 / POS-AUDIT entry. */
 bool gps_user_enabled(void);
 void gps_set_user_enabled(bool on);
+
+/* Treat "opening the GPS / Wardrive page" as opt-in: turns the user
+ * flag on (persists to NVS), calls gps_begin() if not already up, and
+ * spawns the background polling task if not already running. Idempotent
+ * — safe to call from any menu entry. Returns true if GPS is now live. */
+bool gps_ensure_running(void);
 /* Restart the UART at a different baud. Returns the new baud. The
  * cycle covers every rate the ATGM336H/AT6668 datasheets list. */
 uint32_t gps_cycle_baud(void);

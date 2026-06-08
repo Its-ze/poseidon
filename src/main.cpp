@@ -26,16 +26,11 @@
  * does NOT include it, so on our stack we must opt in manually. */
 extern "C" bool btInUse(void) { return true; }
 
-/* Background GPS poller — keeps NMEA parsed continuously so that by
- * the time the user opens Wardrive or GPS fix page the last fix is
- * already fresh. Low priority, tiny stack. */
-static void gps_task(void *_)
-{
-    while (1) {
-        gps_poll();
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-}
+/* Background GPS poller moved into gps.cpp as gps_ensure_running()
+ * so that menu features can spawn it lazily when the user opens
+ * GPS / Wardrive after boot. (See sys-015 OPSEC default-off + the
+ * post-refactor regression where opening the GPS page showed
+ * "bytes=0" because main.cpp's boot gate had skipped the task.) */
 
 /* IR LED watchdog. Periodically forces GPIO 44 HIGH to keep the
  * active-LOW IR LED OFF — defends against any code path that leaves
@@ -139,13 +134,13 @@ void setup()
     digitalWrite(44, HIGH);
 
     /* sys-015 / OPSEC: GPS is OFF by default. The user must opt in via
-     * Settings → GPS Enable before WiFi captures / wardrive logs carry
-     * observer coordinates. Without the gate, WhisperPair / drone RID /
+     * the menu before WiFi captures / wardrive logs carry observer
+     * coordinates. Without the gate, WhisperPair / drone RID /
      * surveillance JSONL would silently embed our position the moment
-     * a fix arrived. gps_user_enabled() reads NVS once and caches. */
+     * a fix arrived. gps_user_enabled() reads NVS once and caches;
+     * gps_ensure_running() does the begin + task spawn. */
     if (gps_user_enabled()) {
-        gps_begin();
-        xTaskCreate(gps_task, "gps", 3072, nullptr, 2, nullptr);
+        gps_ensure_running();
     }
 
     /* IR LED watchdog — keeps GPIO 44 forced HIGH whenever no IR feature

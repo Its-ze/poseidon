@@ -456,6 +456,12 @@ static void run_karma(void)
             break;
         case PK_ENTER:
             spam_on = !spam_on;
+            /* Bug 1 / repro 2026-06-06: previously ENTER toggled spam_on
+             * silently and the user had no way to tell anything fired.
+             * Toast surfaces the new state explicitly. */
+            ui_toast(spam_on ? "karma beacon spam ON"
+                             : "karma beacon spam OFF",
+                     spam_on ? T_GOOD : T_DIM, 700);
             break;
         }
     }

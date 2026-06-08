@@ -230,7 +230,27 @@ void ui_draw_footer(const char *hints)
     d.drawFastHLine(0, FOOTER_Y, SCR_W, COL_RULE);
     d.setTextColor(T_DIM, 0);
     d.setCursor(4, FOOTER_Y + 2);
-    if (hints) d.print(hints);
+    if (!hints) return;
+    /* Bug 6 / repro 2026-06-06: clip overflow so feature hint strings
+     * with 40+ chars (BLE scan, wifi scan, etc) don't run off the right
+     * edge. Default font glyph is 6 px wide; usable width is SCR_W - 8
+     * (4 px margin each side) ≈ 38 chars. Truncate with an ellipsis so
+     * the operator sees there's more rather than thinking the menu
+     * stops mid-hint. */
+    static const int MAX_CHARS = (SCR_W - 8) / 6;
+    size_t len = strlen(hints);
+    if ((int)len <= MAX_CHARS) {
+        d.print(hints);
+    } else {
+        char trunc[64];
+        int n = MAX_CHARS - 1;
+        if (n < 0) n = 0;
+        if (n > (int)sizeof(trunc) - 2) n = (int)sizeof(trunc) - 2;
+        memcpy(trunc, hints, n);
+        trunc[n]     = '>';
+        trunc[n + 1] = '\0';
+        d.print(trunc);
+    }
 }
 
 void ui_toast(const char *msg, uint16_t color, uint32_t ms)

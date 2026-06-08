@@ -203,7 +203,11 @@ void feat_wifi_wardrive(void)
 
     radio_switch(RADIO_WIFI);
     wifi_lean_sta_init();
-    gps_begin();  /* idempotent */
+    /* Wardrive is the canonical GPS-using feature; treat entry as the
+     * opt-in event (persists user_enabled to NVS so cold-boots also
+     * spawn the poller). gps_ensure_running internally calls gps_begin
+     * + spawns the polling task if not already running. */
+    gps_ensure_running();
     if (!wdr_open_csv()) {
         /* CSV open failed despite mount — try a remount and re-open once
          * more. Covers the case where mount thinks it's good but the

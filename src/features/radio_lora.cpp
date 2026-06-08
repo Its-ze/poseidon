@@ -311,7 +311,12 @@ void feat_lora_meshtastic(void)
 
 void feat_gps_fix(void)
 {
-    /* GPS task already running from boot, nothing to init. */
+    /* Opening this page opts the user into GPS. The OPSEC default-off
+     * gate (sys-015) is preserved for users who never explicitly enter
+     * the GPS or Wardrive menus — but anyone who DID open the page
+     * obviously wants GPS, so we begin + spawn the poller here and
+     * persist the user_enabled flag in NVS for future cold-boots. */
+    gps_ensure_running();
     auto &d = M5Cardputer.Display;
     uint32_t last_draw = 0;
     while (true) {

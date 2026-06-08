@@ -4,6 +4,8 @@
 #include "gps.h"
 #include <HardwareSerial.h>
 #include <Preferences.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 static HardwareSerial s_uart(1);
 static gps_fix_t s_fix = {};
@@ -74,6 +76,30 @@ void gps_set_user_enabled(bool on)
         p.putUChar("enabled", on ? 1 : 0);
         p.end();
     }
+}
+
+/* Polling task — same as the one previously spawned by main.cpp
+ * setup(), now owned by gps.cpp so gps_ensure_running can lazy-
+ * spawn it post-boot when the user opens the GPS / Wardrive menu. */
+static TaskHandle_t s_gps_task = nullptr;
+static void gps_task_fn(void *_)
+{
+    while (1) {
+        gps_poll();
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
+bool gps_ensure_running(void)
+{
+    /* Opening the GPS or Wardrive menu IS the opt-in event — record
+     * it so future cold-boots also have GPS up. */
+    gps_set_user_enabled(true);
+    if (!s_started) gps_begin();
+    if (!s_gps_task) {
+        xTaskCreate(gps_task_fn, "gps", 3072, nullptr, 2, &s_gps_task);
+    }
+    return s_started;
 }
 
 static volatile bool s_pause_poll = false;
