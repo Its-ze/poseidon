@@ -84,13 +84,16 @@ static bool ap_bring_up(uint8_t ch)
     esp_log_level_set("wifi_init", ESP_LOG_INFO);
     esp_netif_init();
     esp_event_loop_create_default();
-    /* Only create the AP netif the first time. If we created an STA
-     * netif earlier this session, it's still hanging around — that's
-     * fine, our AP netif coexists logically. */
-    static bool s_ap_netif_created = false;
-    if (!s_ap_netif_created) {
+    /* Destroy any leftover STA netif from a previous WiFi-STA feature.
+     * esp_netif_create_default_wifi_ap below will then succeed cleanly. */
+    esp_netif_t *sta_if = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (sta_if) esp_netif_destroy_default_wifi(sta_if);
+    /* Always create a fresh AP netif. ap_tear_down destroys it on exit
+     * so the next entry needs it back. (Old s_ap_netif_created static
+     * skipped recreation after first run, but ap_tear_down now nukes
+     * the netif so the cache went stale.) */
+    if (!esp_netif_get_handle_from_ifkey("WIFI_AP_DEF")) {
         esp_netif_create_default_wifi_ap();
-        s_ap_netif_created = true;
     }
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -141,6 +144,13 @@ static void ap_tear_down(void)
 {
     esp_wifi_stop();
     esp_wifi_deinit();
+    /* Repro fix 2026-06-06: destroy the AP netif this feature created.
+     * Previously it survived feature exit and the next WiFi-STA feature
+     * (Deauth All / Scan / Probe Sniff) tried to
+     * esp_netif_create_default_wifi_sta on top, conflicted, and the
+     * device froze or panic-rebooted. */
+    esp_netif_t *ap_if = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    if (ap_if) esp_netif_destroy_default_wifi(ap_if);
 }
 
 static void draw_static(uint8_t ch_idx)

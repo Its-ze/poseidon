@@ -63,10 +63,19 @@ bool wifi_lean_sta_init(void)
      * room for default 32-buffer Arduino init). */
     esp_netif_init();
     esp_event_loop_create_default();
-    static bool s_sta_netif_created = false;
-    if (!s_sta_netif_created) {
+    /* Repro fix 2026-06-06: a previous AP-mode feature (Portal,
+     * Evil Twin, CIW, AP Signal Test, SaltyJack rogue-DHCP) may have
+     * left a default AP netif resident. Creating a STA netif on top
+     * conflicts and panic-restarts during the next esp_wifi_init.
+     * Destroy any leftover AP netif first. */
+    esp_netif_t *ap_if = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    if (ap_if) esp_netif_destroy_default_wifi(ap_if);
+    /* The static cache below tracked "we already created the STA netif
+     * this boot". After the AP cleanup above, the STA netif may also
+     * have been collateral-destroyed by a prior call — always probe
+     * the handle directly instead of trusting the cache. */
+    if (!esp_netif_get_handle_from_ifkey("WIFI_STA_DEF")) {
         esp_netif_create_default_wifi_sta();
-        s_sta_netif_created = true;
     }
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     /* TIGHT buffer config. Cardputer-Adv has ~52 KB DMA-capable RAM

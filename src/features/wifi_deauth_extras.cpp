@@ -142,6 +142,15 @@ void feat_wifi_deauth_broadcast(void)
         return;
     }
 
+    /* Repro fix 2026-06-06: WiFi.scanNetworks can leave the driver in
+     * an inconsistent state — Arduino's scan internally toggles
+     * promisc / mode and on fresh-boot entries the post-scan state
+     * sometimes had WIFI_MODE_NULL by the time esp_wifi_set_promiscuous
+     * fires below. Re-assert MODE_STA + clear stale promisc before we
+     * arm our own. The wifi_lean_sta_init at the top already started
+     * the driver so a second set_mode is harmless. */
+    esp_wifi_set_promiscuous(false);
+    esp_wifi_set_mode(WIFI_MODE_STA);
     /* Explicit MASK_ALL — passing nullptr (or leaving default) silently
      * disables capture on IDF 5.5 which on some builds also gates the
      * raw 80211_tx hook. Match the wifi_deauth.cpp / triton.cpp pattern. */
