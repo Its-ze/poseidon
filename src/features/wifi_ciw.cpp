@@ -317,6 +317,9 @@ void feat_wifi_ciw(void)
         esp_wifi_deinit();
         return;
     }
+    /* Bug 11: max TX power so scanners pick up the fuzz beacons at
+     * realistic range. 78 = 19.5 dBm. */
+    esp_wifi_set_max_tx_power(78);
     /* Some builds ignore the channel in the config struct; force it. */
     esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
     delay(50);

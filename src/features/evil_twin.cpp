@@ -217,6 +217,10 @@ static bool et_ap_up(uint8_t channel)
     rc = esp_wifi_start();
     Serial.printf("[et] AP wifi_start rc=%d\n", (int)rc);
     if (rc != ESP_OK) { esp_wifi_deinit(); return false; }
+    /* Bug 11: bump TX power to 19.5 dBm (~89 mW). Default after fresh
+     * init is ~15 dBm which makes the twin look weaker than the victim.
+     * 78 = 19.5 dBm in 0.25 dBm units. Must follow esp_wifi_start. */
+    esp_wifi_set_max_tx_power(78);
     /* CRITICAL: force channel post-start; config-side channel is
      * ignored by the AP path on Bruce libs. */
     esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
