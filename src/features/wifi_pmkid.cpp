@@ -23,6 +23,7 @@
 #include "menu.h"
 #include "../wifi_wardrive.h"
 #include "../sfx.h"
+#include "wifi_deauth_frame.h"   /* wifi_auth_has_pmf */
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <SD.h>
@@ -45,7 +46,13 @@ static char                   s_notify_ssid[33] = {0};
 #define NOTIFY_DURATION_MS 2500
 
 /* BSSID → SSID cache. */
-struct bssid_ssid_t { uint8_t bssid[6]; char ssid[33]; };
+/* auth: WiFi.encryptionType() value when seeded from wardrive
+ * (g_wdr_aps[i].auth), or 0xFF for "unknown" (in-session beacon-
+ * derived entries — we don't parse the RSN IE deep enough to know
+ * PMF-required status). UI counts the known-PMF ones in the hunt
+ * status line so the operator knows their deauth is being
+ * cryptographically dropped before the M1 ever lands. */
+struct bssid_ssid_t { uint8_t bssid[6]; char ssid[33]; uint8_t auth; };
 #define BS_CACHE 32
 static bssid_ssid_t s_cache[BS_CACHE];
 static int          s_cache_n = 0;
@@ -83,6 +90,10 @@ static void cache_beacon(const uint8_t *bssid, const uint8_t *tags, int len)
         if (s_cache_n >= BS_CACHE) { portEXIT_CRITICAL(&s_pmkid_mux); return; }
         idx = s_cache_n++;
         memcpy(s_cache[idx].bssid, bssid, 6);
+        /* In-session beacon-derived entry — we don't parse the RSN IE
+         * deep enough to know PMF-required status, so mark unknown.
+         * Wardrive seed entries get the real auth from WiFi.encryptionType. */
+        s_cache[idx].auth = 0xFF;
     }
     memcpy(s_cache[idx].ssid, tags + 2, tags[1]);
     s_cache[idx].ssid[tags[1]] = '\0';
@@ -515,6 +526,7 @@ void feat_wifi_pmkid(void)
             memcpy(s_cache[i].bssid, g_wdr_aps[i].bssid, 6);
             strncpy(s_cache[i].ssid, g_wdr_aps[i].ssid, sizeof(s_cache[i].ssid) - 1);
             s_cache[i].ssid[sizeof(s_cache[i].ssid) - 1] = '\0';
+            s_cache[i].auth = g_wdr_aps[i].auth;
         }
         s_cache_n = limit;
         Serial.printf("[pmkid] seeded %d BSSID->SSID from wardrive\n", limit);
@@ -561,8 +573,29 @@ void feat_wifi_pmkid(void)
             d.setCursor(4, BODY_Y + 58); d.printf("Handshakes: %lu", (unsigned long)s_handshakes);
             d.setTextColor(s_hunt ? T_BAD : T_DIM, T_BG);
             d.setCursor(4, BODY_Y + 70); d.printf("HUNT:       %s", s_hunt ? "ON - deauthing" : "off");
+            /* PMF / WPA3 audit chrome — wardrive-seeded cache has real
+             * auth types so we can count how many cached BSSIDs will
+             * cryptographically drop our deauth. If the count is high
+             * relative to s_cache_n, the operator knows their target
+             * environment is hostile to PMKID capture and the
+             * "deauthing" status is a feature working as designed
+             * against networks that can't be PMKID'd. */
+            {
+                int pmf_locked = 0, unknown = 0;
+                for (int i = 0; i < s_cache_n; ++i) {
+                    if (s_cache[i].auth == 0xFF) unknown++;
+                    else if (wifi_auth_has_pmf(s_cache[i].auth)) pmf_locked++;
+                }
+                d.setTextColor(pmf_locked > 0 ? T_WARN : T_DIM, T_BG);
+                d.setCursor(4, BODY_Y + 80);
+                if (s_cache_n > 0) {
+                    d.printf("PMF lock:  %d/%d  ?%d", pmf_locked, s_cache_n, unknown);
+                } else {
+                    d.print("PMF lock:  --");
+                }
+            }
             d.setTextColor(T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 82); d.print("/poseidon/hashcat.22000");
+            d.setCursor(4, BODY_Y + 92); d.print("/poseidon/hashcat.22000");
             ui_draw_status(radio_name(), s_hunt ? "hunt" : "capture");
         }
         /* Radial wave pulse + matrix rain gutter. */
