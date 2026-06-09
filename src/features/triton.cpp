@@ -1109,7 +1109,7 @@ void feat_triton(void)
     /* Set TX power once at session entry — moved out of the per-burst
      * wifi_silent_ap_begin path. Evil-Cardputer never touches tx_power
      * mid-session and runs stably. */
-    esp_wifi_set_max_tx_power(78);
+    esp_wifi_set_max_tx_power(84);
 
     /* Promiscuous bring-up. Order: filter → enable → cb → channel.
      * WiFi is init'd by WiFi.mode(WIFI_STA) at feat_triton entry above,

@@ -101,7 +101,16 @@ bool wifi_lean_sta_init(void)
     esp_wifi_set_storage(WIFI_STORAGE_RAM);
     esp_wifi_set_mode(WIFI_MODE_STA);
     esp_err_t se = esp_wifi_start();
-    return (se == ESP_OK);
+    if (se != ESP_OK) return false;
+    /* #A5 / 2026-06-09: bump TX power once at session entry — 84 is
+     * the driver max in 0.25 dBm units (21 dBm ~126 mW). Per the
+     * wifi_probe.cpp comment, setting this per-burst destabilises the
+     * driver; setting it once after esp_wifi_start is the supported
+     * pattern. Benefits every STA-mode feature that goes through
+     * wifi_lean_sta_init: Deauth All, Scan, Probe, PMKID, Beacon
+     * Spam, Wardrive. */
+    esp_wifi_set_max_tx_power(84);
+    return true;
 }
 
 const char *radio_name(void)

@@ -503,7 +503,7 @@ static void run_portal(void)
      * RSSI of the victim. esp_wifi_set_max_tx_power takes 0.25 dBm
      * units (78 = 19.5 dBm). Must be called AFTER esp_wifi_start.
      * Matches Bruce's beacon_spam pattern. */
-    esp_wifi_set_max_tx_power(78);
+    esp_wifi_set_max_tx_power(84);
     /* Force the channel post-start. Some builds ignore the channel in
      * the config struct and default to 0 (silent no-beacon). Use the
      * same s_portal_channel-derived value as the config. */

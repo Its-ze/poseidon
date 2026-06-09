@@ -130,7 +130,7 @@ static bool ap_bring_up(uint8_t ch)
     }
     /* Bug 11: bump TX power so the diagnostic readout matches what other
      * AP-mode features achieve. 78 = 19.5 dBm in 0.25 dBm units. */
-    esp_wifi_set_max_tx_power(78);
+    esp_wifi_set_max_tx_power(84);
     /* CRITICAL: force channel post-start; config channel can be ignored. */
     esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
 

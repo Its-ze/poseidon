@@ -366,7 +366,7 @@ static esp_err_t karma_wifi_init(void)
     Serial.printf("[karma] wifi_start rc=%d\n", (int)err);
     delay(200);
     esp_wifi_disconnect();           /* park supplicant, free TX pool */
-    esp_wifi_set_max_tx_power(78);
+    esp_wifi_set_max_tx_power(84);
 
     /* Promiscuous mode + ALL filter. Required to enable raw 80211_tx
      * on WIFI_IF_STA per the wifi_deauth_frame.h investigation. */

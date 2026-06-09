@@ -191,29 +191,63 @@ static int build_beacon(const char *ssid, uint8_t ch, uint8_t bssid[6])
 /* ── Category selection submenu ───────────────────────────────────── */
 static uint16_t s_cat_mask = 0xFFFF; /* all enabled by default */
 
+/* Count active payloads per category — so the picker can show the
+ * operator that each entry has actual content, not appear "empty"
+ * as the bug report described. Scans the PAYLOADS flash table once. */
+static int category_payload_count(uint8_t cat)
+{
+    int n = 0;
+    for (size_t i = 0; i < PAYLOAD_COUNT; ++i) {
+        CiwPayload p;
+        memcpy_P(&p, &PAYLOADS[i], sizeof(CiwPayload));
+        if (p.cat == cat) n++;
+    }
+    return n;
+}
+
 static void cat_select_menu(void)
 {
     int cursor = 0;
+    int first  = 0;
+    /* 14 categories at 10 px row height in a ~90 px usable body —
+     * window 8 at a time and let the cursor scroll the window. */
+    static const int VISIBLE_ROWS = 8;
     bool redraw = true;
     while (true) {
         if (redraw) {
             ui_clear_body();
-            ui_draw_footer("ENTER=toggle  `=done");
-            ui_text(4, BODY_Y+2, T_ACCENT, "PAYLOAD CATEGORIES");
-            for (int i = 0; i < CIW_CAT_COUNT && i < 9; i++) {
+            ui_draw_footer(";/.=move  ENTER=toggle  `=done");
+            ui_text(4, BODY_Y+2, T_ACCENT,
+                    "PAYLOAD CATEGORIES  %d/%d",
+                    cursor + 1, (int)CIW_CAT_COUNT);
+
+            /* Keep cursor inside the window. */
+            if (cursor < first) first = cursor;
+            if (cursor >= first + VISIBLE_ROWS) first = cursor - VISIBLE_ROWS + 1;
+
+            for (int r = 0; r < VISIBLE_ROWS; ++r) {
+                int i = first + r;
+                if (i >= CIW_CAT_COUNT) break;
                 bool on = s_cat_mask & (1 << i);
                 uint16_t fg = (i == cursor) ? T_ACCENT : (on ? T_FG : T_DIM);
-                ui_text(4, BODY_Y + 14 + i*10, fg, "%c %s",
-                         on ? '+' : '-', s_cat_names[i]);
+                int pcount = category_payload_count(i);
+                ui_text(4, BODY_Y + 14 + r*10, fg, "%c %-7s (%d)",
+                         on ? '+' : '-', s_cat_names[i], pcount);
             }
+            /* Scroll indicators so the user knows there's more. */
+            if (first > 0)
+                ui_text(SCR_W - 12, BODY_Y + 14, T_DIM, "^");
+            if (first + VISIBLE_ROWS < CIW_CAT_COUNT)
+                ui_text(SCR_W - 12, BODY_Y + 14 + (VISIBLE_ROWS-1)*10, T_DIM, "v");
             redraw = false;
         }
 
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(30); continue; }
         if (k == PK_ESC) return;
-        if (k == PK_UP && cursor > 0) { cursor--; redraw = true; }
-        if (k == PK_DOWN && cursor < CIW_CAT_COUNT-1) { cursor++; redraw = true; }
+        /* Accept both ;/. (Cardputer idiomatic) and PK_UP/PK_DOWN. */
+        if ((k == PK_UP || k == ';') && cursor > 0) { cursor--; redraw = true; }
+        if ((k == PK_DOWN || k == '.') && cursor < CIW_CAT_COUNT-1) { cursor++; redraw = true; }
         if (k == PK_ENTER) { s_cat_mask ^= (1 << cursor); redraw = true; }
     }
 }
@@ -319,7 +353,7 @@ void feat_wifi_ciw(void)
     }
     /* Bug 11: max TX power so scanners pick up the fuzz beacons at
      * realistic range. 78 = 19.5 dBm. */
-    esp_wifi_set_max_tx_power(78);
+    esp_wifi_set_max_tx_power(84);
     /* Some builds ignore the channel in the config struct; force it. */
     esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
     delay(50);
