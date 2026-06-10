@@ -205,6 +205,60 @@ static int category_payload_count(uint8_t cat)
     return n;
 }
 
+/* #B5: drill-down viewer — list every payload string in one category.
+ * Read-only; lets the operator confirm WHAT is actually broadcast.
+ * Payloads can be up to 64 chars; truncated to fit the 240 px panel. */
+static void view_category_payloads(uint8_t cat)
+{
+    int cursor = 0, first = 0;
+    static const int VISIBLE_ROWS = 8;
+
+    /* Build the index list of payloads in this category. */
+    int idx[PAYLOAD_COUNT];
+    int n = 0;
+    for (size_t i = 0; i < PAYLOAD_COUNT; ++i) {
+        CiwPayload p;
+        memcpy_P(&p, &PAYLOADS[i], sizeof(CiwPayload));
+        if (p.cat == cat) idx[n++] = (int)i;
+    }
+
+    bool redraw = true;
+    while (true) {
+        if (redraw) {
+            ui_clear_body();
+            ui_draw_footer(";/.=scroll  `=back");
+            ui_text(4, BODY_Y+2, T_ACCENT, "%s  %d payloads",
+                    s_cat_names[cat], n);
+            if (cursor < first) first = cursor;
+            if (cursor >= first + VISIBLE_ROWS) first = cursor - VISIBLE_ROWS + 1;
+            for (int r = 0; r < VISIBLE_ROWS; ++r) {
+                int li = first + r;
+                if (li >= n) break;
+                CiwPayload p;
+                memcpy_P(&p, &PAYLOADS[idx[li]], sizeof(CiwPayload));
+                uint16_t fg = (li == cursor) ? T_ACCENT : T_FG;
+                /* Render empty / whitespace payloads visibly. */
+                const char *disp = p.ssid;
+                char tmp[40];
+                if (p.ssid[0] == '\0')      disp = "<empty>";
+                else if (p.ssid[0] == ' ' && p.ssid[1] == '\0') disp = "<space>";
+                else { snprintf(tmp, sizeof(tmp), "%.37s", p.ssid); disp = tmp; }
+                ui_text(4, BODY_Y + 14 + r*10, fg, "%s", disp);
+            }
+            if (first > 0)
+                ui_text(SCR_W - 12, BODY_Y + 14, T_DIM, "^");
+            if (first + VISIBLE_ROWS < n)
+                ui_text(SCR_W - 12, BODY_Y + 14 + (VISIBLE_ROWS-1)*10, T_DIM, "v");
+            redraw = false;
+        }
+        uint16_t k = input_poll();
+        if (k == PK_NONE) { delay(30); continue; }
+        if (k == PK_ESC) return;
+        if ((k == PK_UP || k == ';') && cursor > 0) { cursor--; redraw = true; }
+        if ((k == PK_DOWN || k == '.') && cursor < n-1) { cursor++; redraw = true; }
+    }
+}
+
 static void cat_select_menu(void)
 {
     int cursor = 0;
@@ -216,7 +270,7 @@ static void cat_select_menu(void)
     while (true) {
         if (redraw) {
             ui_clear_body();
-            ui_draw_footer(";/.=move  ENTER=toggle  `=done");
+            ui_draw_footer(";/.move ENTER=toggle V=view `=done");
             ui_text(4, BODY_Y+2, T_ACCENT,
                     "PAYLOAD CATEGORIES  %d/%d",
                     cursor + 1, (int)CIW_CAT_COUNT);
@@ -249,6 +303,8 @@ static void cat_select_menu(void)
         if ((k == PK_UP || k == ';') && cursor > 0) { cursor--; redraw = true; }
         if ((k == PK_DOWN || k == '.') && cursor < CIW_CAT_COUNT-1) { cursor++; redraw = true; }
         if (k == PK_ENTER) { s_cat_mask ^= (1 << cursor); redraw = true; }
+        /* #B5: V drills into the highlighted category's payload list. */
+        if (k == 'v' || k == 'V') { view_category_payloads(cursor); redraw = true; }
     }
 }
 

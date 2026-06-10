@@ -194,7 +194,13 @@ void feat_ble_hid(void)
     Serial.printf("[bad-kb] post-setup_hid heap=%u\n",
                   (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
 
-    ui_clear_body();
+    /* #B6: force a real clear on the picker -> HID-page transition.
+     * ui_clear_body has anti-strobe suppression that skips clears
+     * fired <80 ms apart; the picker's last clear was just now, so a
+     * plain ui_clear_body() here gets suppressed and the HID page
+     * paints over the picker frame. ui_force_clear_body bypasses the
+     * suppression (it's exactly for screen transitions). */
+    ui_force_clear_body();
     auto &d = M5Cardputer.Display;
     d.setTextColor(T_ACCENT, T_BG);
     d.setCursor(4, BODY_Y + 2); d.print("BAD-KB");
