@@ -476,12 +476,19 @@ void feat_ble_scan(void)
             int bar_w = 120;
             int pct = (x.rssi + 100) * 100 / 70;
             if (pct < 0) pct = 0; if (pct > 100) pct = 100;
-            d.setCursor(4, BODY_Y + 66); d.printf("RSSI : %d dBm", x.rssi);
-            d.drawRect(90, BODY_Y + 66, bar_w, 7, T_DIM);
+            d.setCursor(4, BODY_Y + 64); d.printf("RSSI : %d dBm", x.rssi);
+            d.drawRect(90, BODY_Y + 64, bar_w, 7, T_DIM);
             uint16_t col = (x.rssi > -60) ? T_GOOD : (x.rssi > -80) ? T_WARN : T_BAD;
-            d.fillRect(91, BODY_Y + 67, (bar_w - 2) * pct / 100, 5, col);
+            d.fillRect(91, BODY_Y + 65, (bar_w - 2) * pct / 100, 5, col);
 
-            ui_draw_footer("G=gatt C=clone H=hid X=flood P=spam W=whisper F=find `=back");
+            /* Action legend in the BODY (full width, 2 lines) so nothing
+             * clips off the footer. T=track is the RSSI hot/cold finder. */
+            d.setTextColor(T_ACCENT2, T_BG);
+            d.setCursor(4, BODY_Y + 78);
+            d.print("T=track  W=whisper  H=hid  G=gatt");
+            d.setCursor(4, BODY_Y + 88);
+            d.print("X=flood  P=spam  C=clone   `=back");
+            ui_draw_footer("pick an action");
             while (true) {
                 uint16_t k2 = input_poll();
                 if (k2 == PK_NONE) { delay(20); continue; }
@@ -493,10 +500,10 @@ void feat_ble_scan(void)
                 if (ch == 'x') { feat_ble_flood(); break; }
                 if (ch == 'p') { feat_ble_spam();  break; }
                 if (ch == 'w') { feat_ble_whisperpair_from_target(); break; }
-                if (ch == 'f') {
-                    /* Geiger hot/cold finder on the currently-selected
-                     * BLE device (not just trackers). Same hunt UI as
-                     * the tracker locator, sourced from live scan. */
+                if (ch == 't' || ch == 'f') {
+                    /* Track: Geiger hot/cold RSSI finder on the selected
+                     * device. Beeps faster + higher-pitched as you near
+                     * it. 'f' kept as a legacy alias. */
                     extern void feat_ble_finder_hunt_mac(const uint8_t mac[6], const char *label);
                     feat_ble_finder_hunt_mac(x.addr, x.name);
                     break;
