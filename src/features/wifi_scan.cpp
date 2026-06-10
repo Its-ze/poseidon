@@ -264,6 +264,7 @@ static void draw_list(int cursor)
  * can jump directly from the AP detail view into an attack. */
 extern void feat_wifi_deauth(void);
 extern void feat_wifi_deauth_broadcast(void);
+extern void feat_wifi_deauth_broadcast_ap(const ap_t &a);
 extern void feat_wifi_apclone(void);
 extern void feat_wifi_portal(void);
 extern void feat_wifi_clients(void);
@@ -321,7 +322,8 @@ void wifi_show_ap_details(const ap_t &a)
                 if (!c5_any_online()) { ui_toast("no C5 paired", T_BAD, 1200); break; }
                 c5_deauth_dashboard(a, true);   /* broadcast on the AP's ch */
             } else {
-                feat_wifi_deauth_broadcast();
+                /* Broadcast-deauth THIS AP only (not nuke-all). */
+                feat_wifi_deauth_broadcast_ap(a);
             }
             return;
         case 'l':
