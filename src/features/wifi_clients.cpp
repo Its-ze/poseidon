@@ -95,6 +95,92 @@ static void deauth_client(const uint8_t *client)
     wifi_silent_ap_end();
 }
 
+/* #B1: per-client detail + action screen. Shows full MAC, vendor
+ * (OUI lookup), hostname if DHCP-cached, signal, frame count, age,
+ * and the AP it's talking to. Actions: D=deauth this client. Returns
+ * to the list on ESC. Re-arms promisc on exit so the sniffer keeps
+ * populating. */
+static void client_detail(int idx)
+{
+    auto &d = M5Cardputer.Display;
+    bool redraw = true;
+    uint32_t last = 0;
+    while (true) {
+        uint32_t now = millis();
+        if (redraw || now - last > 500) {
+            redraw = false;
+            last = now;
+            /* snapshot the row (cb may still be updating fields). Plain
+             * copy — the cb only writes scalar fields, worst case is a
+             * stale rssi/frames for one frame, no torn pointer. */
+            cli_t c = s_clients[idx];
+
+            ui_force_clear_body();
+            d.setTextColor(T_ACCENT, T_BG);
+            d.setCursor(4, BODY_Y + 2); d.print("CLIENT DETAIL");
+            d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+
+            d.setTextColor(T_FG, T_BG);
+            d.setCursor(4, BODY_Y + 16);
+            d.printf("MAC %02X:%02X:%02X:%02X:%02X:%02X",
+                     c.mac[0], c.mac[1], c.mac[2], c.mac[3], c.mac[4], c.mac[5]);
+
+            /* Vendor via OUI (locally-administered MACs have no real OUI). */
+            uint32_t oui = ((uint32_t)c.mac[0] << 16) |
+                           ((uint32_t)c.mac[1] << 8)  | c.mac[2];
+            const char *vendor = (c.mac[0] & 0x02) ? "(randomized MAC)"
+                                                   : ble_db_oui(oui);
+            d.setTextColor(vendor ? T_GOOD : T_DIM, T_BG);
+            d.setCursor(4, BODY_Y + 28);
+            d.printf("VEN %.34s", vendor ? vendor : "unknown");
+
+            /* Hostname if DHCP option-12 caught it. */
+            const char *host = dhcp_hostname(c.mac);
+            if (host && host[0]) {
+                d.setTextColor(T_ACCENT2, T_BG);
+                d.setCursor(4, BODY_Y + 40);
+                d.printf("HOST %.32s", host);
+            }
+
+            d.setTextColor(T_FG, T_BG);
+            d.setCursor(4, BODY_Y + 52);
+            d.printf("RSSI %d   frames %lu", c.rssi, (unsigned long)c.frames);
+            d.setCursor(4, BODY_Y + 64);
+            uint32_t age = (now - c.last_seen) / 1000;
+            d.printf("seen %lus ago   ch %u", (unsigned long)age, s_target_ch);
+
+            /* Associated AP. */
+            d.setTextColor(T_DIM, T_BG);
+            d.setCursor(4, BODY_Y + 76);
+            d.printf("AP  %.20s", g_last_selected_ap.ssid[0]
+                                  ? g_last_selected_ap.ssid : "<hidden>");
+            d.setCursor(4, BODY_Y + 88);
+            d.printf("    %02X:%02X:%02X:%02X:%02X:%02X",
+                     s_target[0], s_target[1], s_target[2],
+                     s_target[3], s_target[4], s_target[5]);
+
+            ui_draw_footer("D=deauth this client   `=back");
+        }
+
+        uint16_t k = input_poll();
+        if (k == PK_NONE) { delay(20); continue; }
+        if (k == PK_ESC) break;
+        if (k == 'd' || k == 'D') {
+            deauth_client(s_clients[idx].mac);
+            /* deauth_client tears promisc down — re-arm. */
+            esp_wifi_set_promiscuous(true);
+            esp_wifi_set_promiscuous_rx_cb(client_cb);
+            esp_wifi_set_channel(s_target_ch, WIFI_SECOND_CHAN_NONE);
+            ui_toast("deauth sent", T_BAD, 700);
+            redraw = true;
+        }
+    }
+    /* Re-arm on exit so the list keeps updating. */
+    esp_wifi_set_promiscuous(true);
+    esp_wifi_set_promiscuous_rx_cb(client_cb);
+    esp_wifi_set_channel(s_target_ch, WIFI_SECOND_CHAN_NONE);
+}
+
 void feat_wifi_clients(void)
 {
     radio_switch(RADIO_WIFI);
@@ -130,7 +216,7 @@ void feat_wifi_clients(void)
                   s_target[3], s_target[4], s_target[5]);
 
     int cursor = s_saved_cursor;
-    ui_draw_footer(";/.=move  D=deauth one  `=back");
+    ui_draw_footer(";/.move ENTER=info D=deauth `=back");
     uint32_t last = 0;
     /* Only redraw when the client list or cursor actually changed. The
      * promiscuous callback bumps s_count as new MACs appear, so watching
@@ -212,6 +298,11 @@ void feat_wifi_clients(void)
         if (k == PK_ESC) break;
         if (k == ';' || k == PK_UP)   { if (cursor > 0) cursor--; }
         if (k == '.' || k == PK_DOWN) { if (cursor + 1 < s_count) cursor++; }
+        if (k == PK_ENTER && s_count > 0 && cursor < s_count) {
+            /* #B1: open the per-client detail + action screen. */
+            client_detail(cursor);
+            last_count = -1;  /* force list repaint on return */
+        }
         if ((k == 'd' || k == 'D') && s_count > 0 && cursor < s_count) {
             deauth_client(s_clients[cursor].mac);
             /* wifi_silent_ap_end() inside deauth_client tears WiFi down
