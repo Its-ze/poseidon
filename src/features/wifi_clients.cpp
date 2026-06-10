@@ -21,12 +21,17 @@
 #include <esp_wifi.h>
 
 #define MAX_CLIENTS 16
+#define CLI_SSID_MAX 5     /* probed SSIDs (broadcast names) kept per client */
 
 struct cli_t {
     uint8_t  mac[6];
     int8_t   rssi;
     uint32_t last_seen;
     uint32_t frames;
+    /* #B1b: SSIDs this client has broadcast probe-requests for — its
+     * preferred-network list. Reveals what networks it auto-joins. */
+    char     ssids[CLI_SSID_MAX][33];
+    uint8_t  ssid_n;
 };
 
 static cli_t    s_clients[MAX_CLIENTS];
@@ -34,13 +39,68 @@ static volatile int s_count = 0;
 static uint8_t  s_target[6];
 static uint8_t  s_target_ch = 1;
 
-/* Capture data frames going to/from our target BSSID, extract the
- * "other" MAC (the STA). */
+/* Find a tracked client by MAC, or add it. Returns index or -1 if full.
+ * Caller must already hold whatever serialization applies (this runs
+ * single-threaded in the WiFi RX task). */
+static int cli_find_or_add(const uint8_t *mac)
+{
+    for (int i = 0; i < s_count; ++i)
+        if (memcmp(s_clients[i].mac, mac, 6) == 0) return i;
+    if (s_count >= MAX_CLIENTS) return -1;
+    int idx = s_count++;
+    memset(&s_clients[idx], 0, sizeof(s_clients[idx]));
+    memcpy(s_clients[idx].mac, mac, 6);
+    return idx;
+}
+
+/* #B1b: record an SSID this client probed for, if not already stored. */
+static void cli_add_probed_ssid(int idx, const char *ssid)
+{
+    if (idx < 0 || !ssid[0]) return;
+    cli_t &c = s_clients[idx];
+    for (int i = 0; i < c.ssid_n; ++i)
+        if (strcmp(c.ssids[i], ssid) == 0) return;   /* dup */
+    if (c.ssid_n >= CLI_SSID_MAX) return;             /* list full */
+    strncpy(c.ssids[c.ssid_n], ssid, 32);
+    c.ssids[c.ssid_n][32] = '\0';
+    c.ssid_n++;
+}
+
+/* Capture data frames going to/from our target BSSID, AND probe-requests
+ * from any client (to harvest its preferred-network list). */
 static void client_cb(void *buf, wifi_promiscuous_pkt_type_t type)
 {
-    if (type != WIFI_PKT_DATA) return;
     const wifi_promiscuous_pkt_t *pkt = (const wifi_promiscuous_pkt_t *)buf;
     const uint8_t *p = pkt->payload;
+
+    /* #B1b: probe requests (MGMT subtype 0x4) reveal the SSIDs a client
+     * is looking for. Source MAC = p+10. Tagged SSID at offset 24. */
+    if (type == WIFI_PKT_MGMT && pkt->rx_ctrl.sig_len >= 26 &&
+        ((p[0] >> 4) & 0xF) == 0x4) {
+        const uint8_t *src = p + 10;
+        uint8_t tag_id  = p[24];
+        uint8_t tag_len = p[25];
+        if (tag_id == 0 && tag_len > 0 && tag_len <= 32 &&
+            pkt->rx_ctrl.sig_len >= 26U + tag_len) {
+            char ssid[33];
+            memcpy(ssid, p + 26, tag_len);
+            ssid[tag_len] = '\0';
+            bool ok = true;
+            for (uint8_t i = 0; i < tag_len; ++i)
+                if (ssid[i] < 0x20 || ssid[i] == 0x7F) { ok = false; break; }
+            if (ok) {
+                int idx = cli_find_or_add(src);
+                if (idx >= 0) {
+                    s_clients[idx].rssi      = pkt->rx_ctrl.rssi;
+                    s_clients[idx].last_seen = millis();
+                    cli_add_probed_ssid(idx, ssid);
+                }
+            }
+        }
+        return;
+    }
+
+    if (type != WIFI_PKT_DATA) return;
     if (pkt->rx_ctrl.sig_len < 24) return;
 
     uint8_t fc = p[1];
@@ -62,16 +122,8 @@ static void client_cb(void *buf, wifi_promiscuous_pkt_type_t type)
     /* Try to scoop a hostname from DHCP on this frame. */
     dhcp_try_parse_802_11(p, pkt->rx_ctrl.sig_len);
 
-    int idx = -1;
-    for (int i = 0; i < s_count; ++i) {
-        if (memcmp(s_clients[i].mac, sta, 6) == 0) { idx = i; break; }
-    }
-    if (idx < 0) {
-        if (s_count >= MAX_CLIENTS) return;
-        idx = s_count++;
-        memcpy(s_clients[idx].mac, sta, 6);
-        s_clients[idx].frames = 0;
-    }
+    int idx = cli_find_or_add(sta);
+    if (idx < 0) return;
     s_clients[idx].rssi      = pkt->rx_ctrl.rssi;
     s_clients[idx].last_seen = millis();
     s_clients[idx].frames++;
@@ -95,11 +147,40 @@ static void deauth_client(const uint8_t *client)
     wifi_silent_ap_end();
 }
 
-/* #B1: per-client detail + action screen. Shows full MAC, vendor
- * (OUI lookup), hostname if DHCP-cached, signal, frame count, age,
- * and the AP it's talking to. Actions: D=deauth this client. Returns
- * to the list on ESC. Re-arms promisc on exit so the sniffer keeps
- * populating. */
+/* #B1b: coarse device-type guess from the OUI vendor string + probed
+ * SSID hints. Not authoritative — WiFi gives little to go on — but
+ * enough to label "Apple phone" vs "printer" vs "IoT". */
+static const char *client_device_type(const cli_t &c, const char *vendor)
+{
+    /* SSID hints first — strongest signal. */
+    for (int i = 0; i < c.ssid_n; ++i) {
+        const char *s = c.ssids[i];
+        if (strncasecmp(s, "HP-Print", 8) == 0 ||
+            strcasestr(s, "ENVY") || strcasestr(s, "OfficeJet")) return "Printer";
+        if (strncasecmp(s, "DIRECT-", 7) == 0) return "Cast/Miracast";
+        if (strcasestr(s, "Chromecast")) return "Chromecast";
+        if (strcasestr(s, "Roku")) return "Roku TV";
+    }
+    if (!vendor) return "unknown";
+    if (strcasestr(vendor, "Apple"))     return "Apple (iPhone/Mac)";
+    if (strcasestr(vendor, "Samsung"))   return "Samsung phone/TV";
+    if (strcasestr(vendor, "Google"))    return "Google/Android";
+    if (strcasestr(vendor, "Amazon"))    return "Amazon (Echo/Fire)";
+    if (strcasestr(vendor, "Xiaomi"))    return "Xiaomi device";
+    if (strcasestr(vendor, "Espressif")) return "ESP IoT device";
+    if (strcasestr(vendor, "Raspberry")) return "Raspberry Pi";
+    if (strcasestr(vendor, "Intel"))     return "PC/laptop";
+    if (strcasestr(vendor, "HP") || strcasestr(vendor, "Hewlett") ||
+        strcasestr(vendor, "Canon") || strcasestr(vendor, "Epson") ||
+        strcasestr(vendor, "Brother")) return "Printer";
+    if (strcasestr(vendor, "Sony"))      return "Sony device";
+    if (strcasestr(vendor, "Microsoft")) return "Microsoft device";
+    return vendor;   /* fall back to raw vendor name */
+}
+
+/* #B1: per-client detail + action screen. Full MAC, device type,
+ * vendor (OUI), probed SSIDs (broadcast names), hostname, signal,
+ * frames, age, AP. D=deauth. ESC=back; re-arms promisc on exit. */
 static void client_detail(int idx)
 {
     auto &d = M5Cardputer.Display;
@@ -120,46 +201,54 @@ static void client_detail(int idx)
             d.setCursor(4, BODY_Y + 2); d.print("CLIENT DETAIL");
             d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
 
-            d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 16);
-            d.printf("MAC %02X:%02X:%02X:%02X:%02X:%02X",
-                     c.mac[0], c.mac[1], c.mac[2], c.mac[3], c.mac[4], c.mac[5]);
-
-            /* Vendor via OUI (locally-administered MACs have no real OUI). */
             uint32_t oui = ((uint32_t)c.mac[0] << 16) |
                            ((uint32_t)c.mac[1] << 8)  | c.mac[2];
-            const char *vendor = (c.mac[0] & 0x02) ? "(randomized MAC)"
-                                                   : ble_db_oui(oui);
-            d.setTextColor(vendor ? T_GOOD : T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 28);
-            d.printf("VEN %.34s", vendor ? vendor : "unknown");
-
-            /* Hostname if DHCP option-12 caught it. */
-            const char *host = dhcp_hostname(c.mac);
-            if (host && host[0]) {
-                d.setTextColor(T_ACCENT2, T_BG);
-                d.setCursor(4, BODY_Y + 40);
-                d.printf("HOST %.32s", host);
-            }
+            const char *vendor = (c.mac[0] & 0x02) ? nullptr : ble_db_oui(oui);
+            const char *dtype  = client_device_type(c, vendor);
 
             d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 52);
-            d.printf("RSSI %d   frames %lu", c.rssi, (unsigned long)c.frames);
-            d.setCursor(4, BODY_Y + 64);
-            uint32_t age = (now - c.last_seen) / 1000;
-            d.printf("seen %lus ago   ch %u", (unsigned long)age, s_target_ch);
+            d.setCursor(4, BODY_Y + 14);
+            d.printf("%02X:%02X:%02X:%02X:%02X:%02X",
+                     c.mac[0], c.mac[1], c.mac[2], c.mac[3], c.mac[4], c.mac[5]);
+            if (c.mac[0] & 0x02) {
+                d.setTextColor(T_DIM, T_BG); d.print(" (rnd)");
+            }
 
-            /* Associated AP. */
+            /* Device type — the headline read. */
+            d.setTextColor(T_ACCENT2, T_BG);
+            d.setCursor(4, BODY_Y + 25);
+            d.printf("TYPE %.33s", dtype);
+
+            /* Raw vendor (or hostname if DHCP caught one). */
+            const char *host = dhcp_hostname(c.mac);
+            d.setTextColor(host && host[0] ? T_GOOD : T_DIM, T_BG);
+            d.setCursor(4, BODY_Y + 36);
+            if (host && host[0]) d.printf("HOST %.33s", host);
+            else                 d.printf("VEN  %.33s", vendor ? vendor : "unknown");
+
             d.setTextColor(T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 76);
-            d.printf("AP  %.20s", g_last_selected_ap.ssid[0]
-                                  ? g_last_selected_ap.ssid : "<hidden>");
-            d.setCursor(4, BODY_Y + 88);
-            d.printf("    %02X:%02X:%02X:%02X:%02X:%02X",
-                     s_target[0], s_target[1], s_target[2],
-                     s_target[3], s_target[4], s_target[5]);
+            d.setCursor(4, BODY_Y + 47);
+            uint32_t age = (now - c.last_seen) / 1000;
+            d.printf("RSSI %d  frm %lu  %lus  ch%u",
+                     c.rssi, (unsigned long)c.frames,
+                     (unsigned long)age, s_target_ch);
 
-            ui_draw_footer("D=deauth this client   `=back");
+            /* Probed SSIDs — the broadcast names this client looks for. */
+            d.setTextColor(T_ACCENT, T_BG);
+            d.setCursor(4, BODY_Y + 60);
+            d.printf("PROBES (%u):", c.ssid_n);
+            d.setTextColor(T_FG, T_BG);
+            if (c.ssid_n == 0) {
+                d.setTextColor(T_DIM, T_BG);
+                d.setCursor(78, BODY_Y + 60);
+                d.print("none seen yet");
+            }
+            for (int i = 0; i < c.ssid_n && i < 4; ++i) {
+                d.setCursor(8, BODY_Y + 71 + i * 10);
+                d.printf("- %.36s", c.ssids[i][0] ? c.ssids[i] : "<broadcast>");
+            }
+
+            ui_draw_footer("D=deauth  `=back");
         }
 
         uint16_t k = input_poll();
