@@ -135,6 +135,39 @@ static const oui_t OUI[] = {
     { 0x988BAD, "Oculus" },  { 0x10B7F6, "Oculus" },
     { 0x24DF6A, "Amazfit" }, { 0x049226, "Amazfit" },
 
+    /* WiFi NIC silicon — very common as the OUI of laptops/phones/IoT
+     * because the radio chip vendor owns the MAC block (the device
+     * brand is often different). Added for WiFi client ID. */
+    { 0x00156D, "Ubiquiti" }, { 0x24A43C, "Ubiquiti" }, { 0xFCECDA, "Ubiquiti" },
+    { 0x001A11, "Google" },
+    { 0x18FE34, "Espressif" }, { 0x240AC4, "Espressif" }, { 0x3C7160, "Espressif" },
+    { 0x7CDFA1, "Espressif" }, { 0x8CAAB5, "Espressif" }, { 0xA4CF12, "Espressif" },
+    { 0xB4E62D, "Espressif" }, { 0xDC4F22, "Espressif" }, { 0xE868E7, "Espressif" },
+    { 0x000C43, "Realtek" }, { 0x52544C, "Realtek" }, { 0x00E04C, "Realtek" },
+    { 0x001E58, "TP-Link" }, { 0x14CC20, "TP-Link" }, { 0x50C7BF, "TP-Link" },
+    { 0x98DAC4, "TP-Link" }, { 0xA42BB0, "TP-Link" }, { 0xC006C3, "TP-Link" },
+    { 0x000FB5, "Netgear" }, { 0x20E52A, "Netgear" }, { 0x9C3DCF, "Netgear" },
+    { 0xA040A0, "Netgear" }, { 0x3894ED, "Netgear" },
+    { 0x001B11, "D-Link" }, { 0x1CBDB9, "D-Link" }, { 0x340804, "D-Link" },
+    { 0x001D0F, "ASUS" }, { 0x2C56DC, "ASUS" }, { 0x382C4A, "ASUS" },
+    { 0x50465D, "ASUS" }, { 0xAC220B, "ASUS" },
+    { 0x000423, "Intel" }, { 0x001500, "Intel" }, { 0x3C9863, "Intel" },
+    { 0x7CB27D, "Intel" }, { 0x8C1645, "Intel" }, { 0xA0A8CD, "Intel" },
+    { 0xE4A471, "Intel" }, { 0x9CB6D0, "Intel" },
+    { 0x000B86, "Aruba/HPE" }, { 0x6CF37F, "Aruba/HPE" },
+    { 0x00408C, "Axis Cam" }, { 0xACCC8E, "Axis Cam" },
+    { 0x001217, "Cisco" }, { 0x00D0BC, "Cisco" }, { 0xE0D173, "Cisco" },
+    { 0xB827EB, "Raspberry Pi" }, { 0xDCA632, "Raspberry Pi" },
+    { 0xE45F01, "Raspberry Pi" }, { 0x2CCF67, "Raspberry Pi" },
+    { 0x001132, "Synology" },
+    { 0x0024E4, "Withings" },
+    { 0x002586, "Roku" }, { 0xB0A737, "Roku" }, { 0xCC6DA0, "Roku" },
+    { 0x00BB3A, "Amazon" }, { 0x44650D, "Amazon" }, { 0xF0272D, "Amazon" },
+    { 0x68544C, "Honeywell" },
+    { 0x002722, "Ubee/Cable" },
+    { 0x001F90, "Actiontec" },
+    { 0x0026B8, "Belkin" }, { 0x944452, "Belkin" }, { 0xEC1A59, "Belkin" },
+
     { 0, nullptr }
 };
 

@@ -357,16 +357,23 @@ void feat_wifi_clients(void)
                     uint32_t oui = ((uint32_t)c.mac[0] << 16) |
                                    ((uint32_t)c.mac[1] << 8) |
                                     (uint32_t)c.mac[2];
-                    const char *vendor   = ble_db_oui(oui);
+                    bool randomized = (c.mac[0] & 0x02) != 0;
+                    /* Don't OUI-lookup randomized MACs — the bytes are
+                     * arbitrary so any "match" is a false positive. */
+                    const char *vendor   = randomized ? nullptr : ble_db_oui(oui);
                     const char *hostname = dhcp_hostname(c.mac);
 
-                    /* Hostname wins over vendor. */
+                    /* Hostname wins, then real-MAC vendor, then a
+                     * "random" tag for privacy MACs, then "?". */
                     if (hostname) {
                         d.setTextColor(sel ? T_ACCENT : T_GOOD, bg);
                         d.setCursor(4, y); d.printf("%-14.14s", hostname);
                     } else if (vendor) {
                         d.setTextColor(sel ? T_ACCENT : T_WARN, bg);
                         d.setCursor(4, y); d.printf("%-14.14s", vendor);
+                    } else if (randomized) {
+                        d.setTextColor(sel ? T_ACCENT : T_DIM, bg);
+                        d.setCursor(4, y); d.printf("%-14.14s", "~random");
                     } else {
                         d.setTextColor(T_DIM, bg);
                         d.setCursor(4, y); d.print("?");
