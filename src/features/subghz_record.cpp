@@ -88,42 +88,53 @@ void feat_subghz_record(void)
     float freq = 433.92f;
     s_raw_len = 0;
     bool recorded = false;
+    bool last_recorded = !recorded;
+    bool chrome_dirty = true;
+    float last_freq = -1.0f;
     ui_rssi_scope_reset();
 
     while (true) {
-        ui_clear_body();
-        ui_draw_status(radio_name(), "record");
+        if (chrome_dirty || recorded != last_recorded || freq != last_freq) {
+            chrome_dirty = false;
+            last_recorded = recorded;
+            last_freq = freq;
+            ui_force_clear_body();
+            ui_draw_status(radio_name(), "record");
 
-        /* Band picker across the top — shows which ISM band we're on. */
-        ui_draw_freq_band(4, BODY_Y + 2, SCR_W - 8, 10, freq);
+            /* Band picker across the top — shows which ISM band we're on. */
+            ui_draw_freq_band(4, BODY_Y + 2, SCR_W - 8, 10, freq);
 
-        if (recorded) {
-            d.setTextColor(T_GOOD, T_BG);
-            d.setCursor(4, BODY_Y + 26); d.printf("captured %d pulses", s_raw_len);
-            if (s_decoded.valid) {
-                d.setTextColor(T_ACCENT, T_BG);
-                d.setCursor(4, BODY_Y + 38);
-                d.printf("%s 0x%lX %ub",
-                         s_decoded.protocol,
-                         (unsigned long)s_decoded.value,
-                         (unsigned)s_decoded.bits);
+            if (recorded) {
+                d.setTextColor(T_GOOD, T_BG);
+                d.setCursor(4, BODY_Y + 26); d.printf("captured %d pulses", s_raw_len);
+                if (s_decoded.valid) {
+                    d.setTextColor(T_ACCENT, T_BG);
+                    d.setCursor(4, BODY_Y + 38);
+                    d.printf("%s 0x%lX %ub",
+                             s_decoded.protocol,
+                             (unsigned long)s_decoded.value,
+                             (unsigned)s_decoded.bits);
+                } else {
+                    d.setTextColor(T_DIM, T_BG);
+                    d.setCursor(4, BODY_Y + 38);
+                    d.print("RAW (no protocol match)");
+                }
+                /* Full-width pulse waveform. */
+                ui_draw_pulse_wave(4, BODY_Y + 52, SCR_W - 8, 32,
+                                   s_raw, s_raw_len, -1);
+                ui_draw_footer("S=save R=retry +-=freq ESC");
             } else {
-                d.setTextColor(T_DIM, T_BG);
-                d.setCursor(4, BODY_Y + 38);
-                d.print("RAW (no protocol match)");
+                d.setTextColor(T_WARN, T_BG);
+                d.setCursor(4, BODY_Y + 72); d.print("ENTER record  A scan  +- tune");
+                ui_draw_footer("ENTER=rec A=autoscan +-=freq ESC");
             }
-            /* Full-width pulse waveform. */
-            ui_draw_pulse_wave(4, BODY_Y + 52, SCR_W - 8, 32,
-                               s_raw, s_raw_len, -1);
-            ui_draw_footer("S=save R=retry +-=freq ESC");
-        } else {
-            /* Live scrolling RSSI scope — updated every frame. */
+        }
+
+        if (!recorded) {
+            /* Live scrolling RSSI scope — updated every frame. Self-clears
+             * its own rect, so no body clear needed. */
             int rssi = cc1101_get_rssi();
             ui_draw_rssi_scope(4, BODY_Y + 26, SCR_W - 8, 40, rssi);
-
-            d.setTextColor(T_WARN, T_BG);
-            d.setCursor(4, BODY_Y + 72); d.print("ENTER record  A scan  +- tune");
-            ui_draw_footer("ENTER=rec A=autoscan +-=freq ESC");
         }
 
         uint16_t k = input_poll();
@@ -134,7 +145,7 @@ void feat_subghz_record(void)
         if (k == '-')             { freq -= 0.5f; cc1101_set_freq(freq); recorded = false; }
         if ((k == 'a' || k == 'A') && !recorded) {
             /* Auto-scan: sweep all bands, find strongest RSSI, lock. */
-            ui_clear_body();
+            ui_force_clear_body();
             d.setTextColor(T_ACCENT, T_BG);
             d.setCursor(4, BODY_Y + 30); d.print("scanning all bands...");
             int best_rssi = -200;
@@ -164,6 +175,7 @@ void feat_subghz_record(void)
             char msg[48];
             snprintf(msg, sizeof(msg), "locked %.3f MHz (rssi %d)", freq, best_rssi);
             ui_toast(msg, T_GOOD, 1200);
+            chrome_dirty = true;
         }
 
         if (k == PK_ENTER && !recorded) {
@@ -191,6 +203,7 @@ void feat_subghz_record(void)
                 ui_toast(msg, T_GOOD, 1200);
             } else {
                 ui_toast("no signal", T_WARN, 900);
+                chrome_dirty = true;
             }
         }
         if (k == 'r' || k == 'R') { recorded = false; s_raw_len = 0; s_decoded.valid = false; }
@@ -223,6 +236,7 @@ void feat_subghz_record(void)
             cc1101_begin(freq);
             ELECHOUSE_cc1101.SetRx();
             pinMode(CC1101_GDO0, INPUT);
+            chrome_dirty = true;
         }
     }
 

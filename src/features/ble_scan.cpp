@@ -171,17 +171,20 @@ static int sort_fn(const void *a, const void *b)
     return ((const ble_dev_t *)b)->rssi - ((const ble_dev_t *)a)->rssi;
 }
 
+/* Repaints in place — no body clear. Header overwrites its own strip;
+ * every row (used or empty) owns its full-width background, so a cursor
+ * move or a new device lands without flashing the whole body. The caller
+ * does one ui_force_clear_body() at entry / after a modal. */
 static void draw_list(int cursor)
 {
     auto &d = M5Cardputer.Display;
-    ui_clear_body();
 
     d.setTextColor(T_ACCENT, T_BG);
     d.setCursor(4, BODY_Y + 2);
-    d.printf("BLE %d", s_count);
+    d.printf("BLE %d ", s_count);
     if (s_filter[0]) {
         d.setTextColor(T_WARN, T_BG);
-        d.printf("  filter:%s", s_filter);
+        d.printf(" filter:%s", s_filter);
     }
     d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
 
@@ -190,7 +193,11 @@ static void draw_list(int cursor)
     int n = 0;
     for (int i = 0; i < s_count; ++i)
         if (dev_matches_filter(s_devs[i])) idx[n++] = i;
+
+    const int rows = 9;
+
     if (n == 0) {
+        d.fillRect(0, BODY_Y + 14, SCR_W, BODY_H - 14, T_BG);
         d.setTextColor(T_DIM, T_BG);
         d.setCursor(4, BODY_Y + 24);
         d.print(s_scanning ? "scanning..." : "no devices");
@@ -199,18 +206,21 @@ static void draw_list(int cursor)
     if (cursor < 0) cursor = 0;
     if (cursor >= n) cursor = n - 1;
 
-    int rows = 9;
     int first = cursor - rows / 2;
     if (first < 0) first = 0;
     if (first + rows > n) first = max(0, n - rows);
 
-    for (int r = 0; r < rows && first + r < n; ++r) {
+    for (int r = 0; r < rows; ++r) {
+        int y = BODY_Y + 16 + r * 11;
+        if (first + r >= n) {
+            d.fillRect(0, y - 1, SCR_W, 11, T_BG);   /* blank stale slot */
+            continue;
+        }
         int i = idx[first + r];
         const ble_dev_t &x = s_devs[i];
-        int y = BODY_Y + 16 + r * 11;
         bool sel = (first + r == cursor);
         uint16_t bg = sel ? 0x18C7 : T_BG;
-        if (sel) d.fillRect(0, y - 1, SCR_W, 11, bg);
+        d.fillRect(0, y - 1, SCR_W, 11, bg);          /* row owns its bg */
 
         d.setTextColor(T_ACCENT, bg);
         d.setCursor(2, y);  d.printf("%4d", x.rssi);
@@ -354,6 +364,7 @@ void feat_ble_scan(void)
 
     ui_draw_status(radio_name(), "scan");
     ui_draw_footer("/=flt S=save R=rescan ENTER=info `=back");
+    ui_force_clear_body();
     draw_list(0);
 
     start_scan();
@@ -405,12 +416,14 @@ void feat_ble_scan(void)
             break;
         case '?':
             ui_show_current_help();
+            ui_force_clear_body();
             last_count = -1;     /* force redraw after help modal */
             ui_draw_footer("/=flt S=save R=rescan ENTER=info `=back");
             break;
         case '/':
             if (!input_line("Filter name/type:", s_filter, sizeof(s_filter)))
                 s_filter[0] = '\0';
+            ui_force_clear_body();
             last_count = -1;     /* filter changed — force redraw */
             break;
         case 's': case 'S': {
@@ -509,6 +522,7 @@ void feat_ble_scan(void)
                     break;
                 }
             }
+            ui_force_clear_body();
             last_count = -1;  /* returning from sub-feature — force fresh paint */
             ui_draw_footer("/=flt S=save R=rescan ENTER=info `=back");
             break;

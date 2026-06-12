@@ -962,7 +962,7 @@ static bool pick_mode(void)
             prev_sel = sel;
             ui_force_clear_body();
             d.setTextColor(T_ACCENT2, T_BG);
-            d.setCursor(4, BODY_Y + 2); d.print("TRITON MODE");
+            d.setCursor(4, BODY_Y + 2); d.print("ARGUS MODE");
             d.drawFastHLine(4, BODY_Y + 12, 100, T_ACCENT2);
             for (int i = 0; i < 4; ++i) {
                 int y = BODY_Y + 18 + i * 14;
@@ -1053,7 +1053,7 @@ void feat_triton(void)
     ui_clear_body();
     auto &dsp = M5Cardputer.Display;
     dsp.setTextColor(T_ACCENT, T_BG);
-    dsp.setCursor(4, BODY_Y + 6);  dsp.print("TRITON");
+    dsp.setCursor(4, BODY_Y + 6);  dsp.print("ARGUS");
     dsp.setTextColor(T_FG, T_BG);
     dsp.setCursor(4, BODY_Y + 22); dsp.print("waking up...");
     dsp.setTextColor(T_DIM, T_BG);
@@ -1100,11 +1100,11 @@ void feat_triton(void)
     s_born = millis();
     s_last_catch = s_born;
 
-    /* Try to open the GPS HAT. If the user's running on Hydra or no
-     * LoRa-1262 is attached, gps_begin() returns false and we just
-     * skip the wardrive CSV. Works without a fix too — emit_pmkid /
-     * emit_hs check sats > 0 before writing a wardrive row. */
-    gps_begin();
+    /* OPSEC: only power the GPS HAT if the user explicitly opted in (via
+     * the GPS Fix / Wardrive enable). Opening Triton must NOT start GPS or
+     * geo-tag captures on its own. With GPS off, emit_pmkid / emit_hs see
+     * sats == 0 and skip the wardrive coordinate row entirely. */
+    if (gps_user_enabled()) gps_begin();
 
     /* Set TX power once at session entry — moved out of the per-burst
      * wifi_silent_ap_begin path. Evil-Cardputer never touches tx_power
@@ -1124,10 +1124,12 @@ void feat_triton(void)
 
     /* Stop ESP-NOW for the Triton session. Any concurrent ESP-NOW
      * TX/RX path destabilises the softAP + promiscuous RX + active
-     * deauth combo we run here. C5 features still work standalone
-     * when user exits Triton and picks them from the C5 menu. */
-    c5_stop();
-    bool c5_online = false;   /* kept so existing branches compile */
+     * deauth combo we run here. RE-ENABLED 2026-06: the C5 link now stays
+     * up so Argus also hunts 5 GHz handshakes via the satellite during its
+     * 5G phase. The old c5_stop() here was a freeze mitigation — if Argus
+     * destabilises, gate the 5G window (s_phase_5g) back off. */
+    c5_begin();
+    bool c5_online = false;   /* set live from c5_any_online() in the loop */
     uint32_t last_c5_deauth = 0;
     int c5_target_idx = 0;
     (void)last_c5_deauth; (void)c5_target_idx;
@@ -1162,6 +1164,7 @@ void feat_triton(void)
 
     uint32_t last_overlay_at = 0;
     while (true) {
+        c5_online = c5_any_online();   /* live satellite presence */
         /* Cooperative tick — runs the hop+burst cycle inline. Gated
          * on the per-mode dwell so each channel gets its full window.
          * MUST come before input_poll which has a delay-and-continue
@@ -1275,9 +1278,9 @@ void feat_triton(void)
             /* ---- RIGHT ZONE: title + stats + sparkline ---- */
             int rx = 114;
 
-            /* Header: TRITON + mode + C5 dot. */
+            /* Header: ARGUS + mode + C5 dot. */
             d.setTextColor(T_ACCENT, T_BG);
-            d.setCursor(rx, BODY_Y + 4); d.print("TRITON");
+            d.setCursor(rx, BODY_Y + 4); d.print("ARGUS");
             d.setTextColor(T_ACCENT2, T_BG);
             d.setCursor(rx + 58, BODY_Y + 4); d.print(mode_name(s_mode));
             if (c5_online) d.fillCircle(236, BODY_Y + 7, 3, T_GOOD);

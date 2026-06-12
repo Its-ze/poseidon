@@ -181,6 +181,55 @@ static void run_broadcast_dashboard(const char *banner)
     uint32_t last_sent = 0;
     uint16_t color = T_ACCENT2;
 
+    const int hy = 22;
+    /* Glitch confined to a thin strip below the brackets so its per-tick
+     * clear no longer wipes the whole chrome band (that full-band fill
+     * every tick was the flash). */
+    const int glitch_y = hy + 32;
+    const int glitch_h = 12;
+
+    /* Static chrome painted ONCE on entry — scanlines, halo headline,
+     * brackets and the C5 indicator never change, so redrawing them every
+     * tick (over a full-band clear) was pure flicker. */
+    d.fillScreen(0x0000);
+    for (int y = 0; y < SCR_H - 50; y += 4) {
+        d.drawFastHLine(0, y, SCR_W, 0x0020);
+    }
+    {
+        const char *headline = banner;
+        d.setTextSize(3);
+        int hw = d.textWidth(headline) * 3;
+        int hx = (SCR_W - hw) / 2;
+        d.setTextColor(0xF81F, 0);
+        d.setCursor(hx - 2, hy); d.print(headline);
+        d.setCursor(hx + 2, hy); d.print(headline);
+        d.setCursor(hx, hy - 2); d.print(headline);
+        d.setCursor(hx, hy + 2); d.print(headline);
+        d.setTextColor(0xFFFF, 0);
+        d.setCursor(hx, hy); d.print(headline);
+        d.setTextSize(1);
+
+        int bl = 14;
+        d.drawFastHLine(4, hy - 6, bl, color);
+        d.drawFastVLine(4, hy - 6, 4, color);
+        d.drawFastHLine(4, hy + 28, bl, color);
+        d.drawFastVLine(4, hy + 25, 4, color);
+        d.drawFastHLine(SCR_W - 4 - bl, hy - 6, bl, color);
+        d.drawFastVLine(SCR_W - 5, hy - 6, 4, color);
+        d.drawFastHLine(SCR_W - 4 - bl, hy + 28, bl, color);
+        d.drawFastVLine(SCR_W - 5, hy + 25, 4, color);
+
+        if (c5_any_online()) {
+            d.fillCircle(7, 6, 2, 0x07E0);           /* green dot */
+            d.setTextColor(0x07E0, 0);
+            d.setCursor(13, 2); d.print("C5");
+        } else {
+            d.fillCircle(7, 6, 2, 0x528A);           /* dim gray */
+            d.setTextColor(0x528A, 0);
+            d.setCursor(13, 2); d.print("C5");
+        }
+    }
+
     while (true) {
         uint32_t now = millis();
 
@@ -188,50 +237,14 @@ static void run_broadcast_dashboard(const char *banner)
             last = now;
             int cur = s_b_target_n ? (s_b_cursor % s_b_target_n) : 0;
 
-            d.fillScreen(0x0000);
-            ui_glitch(0, 0, SCR_W, SCR_H);
-            for (int y = 0; y < SCR_H; y += 4) {
+            /* Glitch animation only — confined to its own strip, which is
+             * the only region cleared per tick. Restore the scanlines that
+             * cross the strip so it blends back into the static backdrop. */
+            d.fillRect(0, glitch_y, SCR_W, glitch_h, 0x0000);
+            for (int y = glitch_y; y < glitch_y + glitch_h; y += 4) {
                 d.drawFastHLine(0, y, SCR_W, 0x0020);
             }
-
-            /* Big halo headline — caller-supplied banner. */
-            const char *headline = banner;
-            d.setTextSize(3);
-            int hw = d.textWidth(headline) * 3;
-            int hx = (SCR_W - hw) / 2;
-            int hy = 22;
-            d.setTextColor(0xF81F, 0);
-            d.setCursor(hx - 2, hy); d.print(headline);
-            d.setCursor(hx + 2, hy); d.print(headline);
-            d.setCursor(hx, hy - 2); d.print(headline);
-            d.setCursor(hx, hy + 2); d.print(headline);
-            d.setTextColor(0xFFFF, 0);
-            d.setCursor(hx, hy); d.print(headline);
-            d.setTextSize(1);
-
-            /* Animated side brackets. */
-            int bl = 10 + (int)(sinf(now * 0.01f) * 4);
-            d.drawFastHLine(4, hy - 6, bl, color);
-            d.drawFastVLine(4, hy - 6, 4, color);
-            d.drawFastHLine(4, hy + 28, bl, color);
-            d.drawFastVLine(4, hy + 25, 4, color);
-            d.drawFastHLine(SCR_W - 4 - bl, hy - 6, bl, color);
-            d.drawFastVLine(SCR_W - 5, hy - 6, 4, color);
-            d.drawFastHLine(SCR_W - 4 - bl, hy + 28, bl, color);
-            d.drawFastVLine(SCR_W - 5, hy + 25, 4, color);
-
-            /* Top-left C5/TRIDENT connection indicator. Green when a
-             * satellite is paired — confirms our 5 GHz targets are
-             * going out via the C5 and not silently dropped. */
-            if (c5_any_online()) {
-                d.fillCircle(7, 6, 2, 0x07E0);           /* green dot */
-                d.setTextColor(0x07E0, 0);
-                d.setCursor(13, 2); d.print("C5");
-            } else {
-                d.fillCircle(7, 6, 2, 0x528A);           /* dim gray */
-                d.setTextColor(0x528A, 0);
-                d.setCursor(13, 2); d.print("C5");
-            }
+            ui_glitch(0, glitch_y, SCR_W, glitch_h);
 
             /* Live stats ribbon — bottom third of the screen. */
             uint32_t fps = (s_b_sent - last_sent) * 5;
@@ -239,11 +252,13 @@ static void run_broadcast_dashboard(const char *banner)
 
             /* Target line (big). */
             const db_target_t &t = s_b_targets[cur];
+            d.fillRect(0, SCR_H - 44, SCR_W, 10, 0x0000);
             d.setTextColor(T_ACCENT2, 0);
             d.setCursor(4, SCR_H - 44);
             d.printf("-> %.20s", t.ssid[0] ? t.ssid : "<hidden>");
 
             /* Target detail line (dim). */
+            d.fillRect(0, SCR_H - 34, SCR_W, 10, 0x0000);
             d.setTextColor(0x8410, 0);   /* mid gray, readable on glitch */
             d.setCursor(4, SCR_H - 34);
             d.printf("ch%u %02X:%02X:%02X:%02X:%02X:%02X",
@@ -255,6 +270,7 @@ static void run_broadcast_dashboard(const char *banner)
             char stats[48];
             snprintf(stats, sizeof(stats), "%lu frames  %lu/s",
                      (unsigned long)s_b_sent, (unsigned long)fps);
+            d.fillRect(0, SCR_H - 22, SCR_W, 10, 0x0000);
             d.setTextColor(fps > 40 ? 0x07E0 : 0xFFE0, 0);
             int sw = d.textWidth(stats);
             d.setCursor((SCR_W - sw) / 2, SCR_H - 22);
@@ -264,6 +280,7 @@ static void run_broadcast_dashboard(const char *banner)
             char meta[32];
             snprintf(meta, sizeof(meta), "%d APs  %lu drop",
                      s_b_target_n, (unsigned long)s_b_errs);
+            d.fillRect(0, SCR_H - 10, SCR_W, 10, 0x0000);
             d.setTextColor(0xFFFF, 0);
             int mw = d.textWidth(meta);
             d.setCursor((SCR_W - mw) / 2, SCR_H - 10);
@@ -373,9 +390,23 @@ void feat_wifi_deauth_detect(void)
 
     ui_clear_body();
     ui_draw_footer(";/.=ch  H=hop  `=stop");
+    /* Static chrome once on entry; per-tick we only overwrite the value
+     * fields that actually changed via ui_text_w, so an idle screen with
+     * no deauths in the air never blanks-and-repaints (the body flash). */
+    {
+        auto &d = M5Cardputer.Display;
+        d.setTextColor(T_ACCENT, T_BG);
+        d.setCursor(4, BODY_Y + 2); d.print("DEAUTH DETECT");
+        d.drawFastHLine(4, BODY_Y + 12, 100, T_ACCENT);
+    }
     uint32_t last = 0;
     uint32_t window_ms = millis();
     uint32_t window_count = 0;
+    uint8_t  last_ch    = 0xFF;
+    uint32_t last_rate  = 0xFFFFFFFF;
+    uint32_t last_total = 0xFFFFFFFF;
+    uint8_t  last_bssid[6] = {0};
+    bool     bssid_shown = false;
     while (true) {
         if (auto_hop && millis() - last_hop > 500) {
             last_hop = millis();
@@ -389,23 +420,26 @@ void feat_wifi_deauth_detect(void)
                 s_det_count = 0;
                 window_ms = millis();
             }
-            auto &d = M5Cardputer.Display;
-            ui_clear_body();
-            d.setTextColor(T_ACCENT, T_BG);
-            d.setCursor(4, BODY_Y + 2); d.print("DEAUTH DETECT");
-            d.drawFastHLine(4, BODY_Y + 12, 100, T_ACCENT);
-            d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 22); d.printf("channel : %u", ch);
-            d.setTextColor(window_count > 5 ? T_BAD : T_GOOD, T_BG);
-            d.setCursor(4, BODY_Y + 34); d.printf("rate    : %lu/s", (unsigned long)window_count);
-            d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 46); d.printf("total   : %lu", (unsigned long)s_det_total);
-            if (s_det_total > 0) {
-                d.setTextColor(T_DIM, T_BG);
-                d.setCursor(4, BODY_Y + 60);
-                d.printf("last BSSID %02X:%02X:%02X:%02X:%02X:%02X",
-                         s_det_last_bssid[0], s_det_last_bssid[1], s_det_last_bssid[2],
-                         s_det_last_bssid[3], s_det_last_bssid[4], s_det_last_bssid[5]);
+            if (ch != last_ch) {
+                last_ch = ch;
+                ui_text_w(4, BODY_Y + 22, SCR_W - 8, T_FG, "channel : %u", ch);
+            }
+            if (window_count != last_rate) {
+                last_rate = window_count;
+                ui_text_w(4, BODY_Y + 34, SCR_W - 8, window_count > 5 ? T_BAD : T_GOOD,
+                          "rate    : %lu/s", (unsigned long)window_count);
+            }
+            if (s_det_total != last_total) {
+                last_total = s_det_total;
+                ui_text_w(4, BODY_Y + 46, SCR_W - 8, T_FG, "total   : %lu", (unsigned long)s_det_total);
+            }
+            if (s_det_total > 0 && (!bssid_shown || memcmp(last_bssid, (const void *)s_det_last_bssid, 6) != 0)) {
+                bssid_shown = true;
+                memcpy(last_bssid, (const void *)s_det_last_bssid, 6);
+                ui_text_w(4, BODY_Y + 60, SCR_W - 8, T_DIM,
+                          "last BSSID %02X:%02X:%02X:%02X:%02X:%02X",
+                          s_det_last_bssid[0], s_det_last_bssid[1], s_det_last_bssid[2],
+                          s_det_last_bssid[3], s_det_last_bssid[4], s_det_last_bssid[5]);
             }
             ui_draw_status(radio_name(), "dauth-det");
         }

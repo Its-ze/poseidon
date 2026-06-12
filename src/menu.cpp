@@ -154,6 +154,7 @@ extern void feat_subghz_finder(void);
 extern void feat_surveillance_hunter(void);
 extern void feat_satcom(void);
 extern void feat_defensive_monitor(void);
+extern void feat_usb_guard(void);
 extern void feat_ir_clone(void);
 extern void feat_drone_remoteid(void);
 extern void feat_nrf52_scan(void);
@@ -185,6 +186,7 @@ extern void feat_saltyjack_responder(void);
 extern void feat_saltyjack_wpad(void);
 extern void feat_saltyjack_ntlm_crack(void);
 extern void feat_trident(void);
+extern void feat_mass_storage(void);
 extern void feat_uart_shell(void);
 extern void feat_tcp_tunnel(void);
 extern void feat_honeypot(void);
@@ -282,6 +284,14 @@ static const menu_node_t MENU_WIFI[] = {
       "beacon spam, WiFi Karma (probe-resp w/o beacon), BLE spoof (dup name/diff "
       "MAC), BLE flood. Time-slices WiFi promisc + NimBLE scan. Alerts → "
       "/poseidon/defmon-<ts>.jsonl with GPS coords. Audio cue on each new class." },
+    { 'u', "Cable Guard", "Detect malicious USB cable/charger RF implants", nullptr, feat_usb_guard,
+      "Two-phase RF delta scan. Baseline 2.4 GHz APs with the suspect cable "
+      "UNPLUGGED, then plug it in and re-scan: any radio that switched on with "
+      "the cable is flagged + scored against implant signatures (Espressif/ESP "
+      "OUIs, O.MG/WiFiDuck/EvilCrow SSIDs, hidden-AP-on-plug, spoofed MAC, open "
+      "auth). Verdict CLEAN/SUSPICIOUS/DANGEROUS. NOTE: catches active implants "
+      "& DIY ESP injectors; stealth/dormant cables can still hide — no hit is "
+      "NOT a safety guarantee." },
     { 'v', "Surveil", "Flock/Raven surveillance detector", nullptr, feat_surveillance_hunter,
       "Passive 2.4 GHz channel-hop scan that fingerprints Flock Safety "
       "ALPR cameras and ShotSpotter Raven gunshot sensors by OUI + SSID "
@@ -944,11 +954,12 @@ const menu_node_t MENU_ROOT_CHILDREN[] = {
     { 'i', "IR", "Infrared blaster + remote", MENU_IR, nullptr,
       "Drives the Cardputer's IR LED. TV-B-Gone cycles power-off codes, "
       "virtual Samsung remote for live TV control." },
-    { 't', "Triton", "gotchi pet that hunts handshakes", nullptr, feat_triton,
+    { 't', "Argus", "gotchi pet that hunts handshakes", nullptr, feat_triton,
       "Autonomous handshake-hunter companion. Channel-hops, sniffs EAPOLs, "
       "deauths seen APs to force reconnects, captures PMKIDs and full 4-ways. "
-      "Has a personality + mood face. Includes a simple RL layer that learns "
-      "which channels produce the most captures in your environment." },
+      "When a C5/TRIDENT satellite is online it also hunts 5 GHz handshakes "
+      "via the satellite. Has a personality + Argus mood face, plus a simple "
+      "RL layer that learns which channels produce the most captures." },
     { 'f', "Feather", "nRF52840 BLE5 / Zigbee / MITM", MENU_NRF52, nullptr,
       "Adafruit Bluefruit Feather nRF52840 via UART hat (G3 TX / G4 RX). "
       "Unlocks BLE 5 raw PHY sniffing (incl. Coded PHY long-range), "
@@ -998,6 +1009,12 @@ const menu_node_t MENU_ROOT_CHILDREN[] = {
     { 's', "System", "Files, clock, settings", MENU_SYS, nullptr,
       "Device utilities: SD browser, clock, settings (WiFi creds, prefs, "
       "reboot), about." },
+    { 'd', "Mass Storage", "microSD -> USB drive (card reader)", nullptr, feat_mass_storage,
+      "Exposes the microSD to a USB host as a removable drive over USB-C — "
+      "the Cardputer becomes a card reader. Plug into a PC and the card shows "
+      "up as a USB stick for drag-and-drop file transfer. While active the "
+      "host owns the card and POSEIDON's own SD logging pauses; ESC ejects "
+      "cleanly and hands the card back (no reboot). Serial console stays up." },
     { 0, nullptr, nullptr, nullptr, nullptr, nullptr },
 };
 
@@ -1078,15 +1095,37 @@ static void draw_menu_anim(const menu_node_t *parent, int cursor)
     }
 }
 
+static const menu_node_t *s_menu_prev_parent = nullptr;
+static int                s_menu_prev_cursor  = -1;
+static int                s_menu_prev_first   = -1;
+static bool               s_menu_force        = true;
+
 static void draw_menu(const menu_node_t *parent, int cursor)
 {
+    auto &d = M5Cardputer.Display;
+
+    int n = count_children(parent);
+
+    const int rows       = 7;
+    const int row_h      = 13;
+    const int first_y    = BODY_Y + 18;
+    int first = cursor - rows / 2;
+    if (first < 0) first = 0;
+    if (first + rows > n) first = max(0, n - rows);
+
+    if (!s_menu_force && parent == s_menu_prev_parent &&
+        cursor == s_menu_prev_cursor && first == s_menu_prev_first) return;
+    s_menu_force       = false;
+    s_menu_prev_parent = parent;
+    s_menu_prev_cursor = cursor;
+    s_menu_prev_first  = first;
+
     ui_force_clear_body();
     /* Paint theme-aware ambient motion BEFORE menu chrome — rows draw
      * over the top with their own opaque background so they remain
      * readable. No-op when the user has disabled ambient via
      * System -> Ambient. */
     ui_ambient_tick(0, BODY_Y, SCR_W, BODY_H);
-    auto &d = M5Cardputer.Display;
 
     /* Title with count + scroll indicator. Title underline is a strategic
      * magenta splash — full body width, 2 px thick — so the cyberpunk
@@ -1111,15 +1150,6 @@ static void draw_menu(const menu_node_t *parent, int cursor)
         if (n5 > 0) d.printf("C5 x%d ONLINE", n5);
         else        d.print("C5 not paired");
     }
-
-    int n = count_children(parent);
-
-    const int rows       = 7;
-    const int row_h      = 13;
-    const int first_y    = BODY_Y + 18;
-    int first = cursor - rows / 2;
-    if (first < 0) first = 0;
-    if (first + rows > n) first = max(0, n - rows);
 
     if (n > rows) {
         char pos[12];
@@ -1254,6 +1284,7 @@ static void slide_paint(void) { draw_menu(s_slide_parent, s_slide_cursor); }
 static void slide_to(const menu_node_t *p, int c, int dir) {
     s_slide_parent = p;
     s_slide_cursor = c;
+    s_menu_force = true;
     ui_slide_transition(slide_paint, dir);
 }
 
@@ -1287,6 +1318,7 @@ static void run_submenu(const menu_node_t *parent)
                 ui_status_invalidate();
                 ui_draw_status(radio_name(), "");
                 ui_draw_footer(FOOTER_HINTS);
+                s_menu_force = true;
                 draw_menu(parent, cursor);
             }
             /* Idle ambient tick — only repaints gutter strips between rows
@@ -1306,6 +1338,7 @@ static void run_submenu(const menu_node_t *parent)
         if (k == PK_ESC) return;
         if (k == '=' || k == '?') {
             show_info(&parent->children[cursor]);
+            s_menu_force = true;
             draw_menu(parent, cursor);
             ui_draw_footer(FOOTER_HINTS);
             continue;
@@ -1324,6 +1357,7 @@ static void run_submenu(const menu_node_t *parent)
                 Serial.printf("[FEAT_EXIT] %s\n", sel->label);
                 ui_draw_status(radio_name(), "");
                 ui_draw_footer(FOOTER_HINTS);
+                s_menu_force = true;
                 draw_menu(parent, cursor);
             } else if (sel->children) {
                 /* Slide into the child submenu. */
@@ -1358,6 +1392,7 @@ static void run_submenu(const menu_node_t *parent)
                         Serial.printf("[FEAT_EXIT] %s\n", ch->label);
                         ui_draw_status(radio_name(), "");
                         ui_draw_footer(FOOTER_HINTS);
+                        s_menu_force = true;
                         draw_menu(parent, cursor);
                     } else if (ch->children) {
                         slide_to(ch, 0, +1);

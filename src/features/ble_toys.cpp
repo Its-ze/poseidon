@@ -148,22 +148,37 @@ static void send_vibrate(int level)
     s_tx_char->writeValue((uint8_t *)cmd, strlen(cmd), false);
 }
 
-static void draw_picker(int cursor, bool scanning)
+/* Picker redraw state. Static chrome (title + rule) is painted once on
+ * `force`; the empty-state hint and each list row paint their own
+ * full-width background per draw, so the body never blanks-then-repaints
+ * on a scan tick or a cursor move. */
+static bool s_pk_init = false;
+static int  s_pk_last_shown = -1;
+
+static void draw_picker_force(int cursor, bool scanning, bool force)
 {
     auto &d = M5Cardputer.Display;
-    ui_clear_body();
-    d.setTextColor(0xF81F, T_BG);
-    d.setCursor(4, BODY_Y + 2);
-    d.print("THE SALTY DEEP");
-    d.drawFastHLine(4, BODY_Y + 12, 120, 0xF81F);
+    if (force || !s_pk_init) {
+        ui_clear_body();
+        d.setTextColor(0xF81F, T_BG);
+        d.setCursor(4, BODY_Y + 2);
+        d.print("THE SALTY DEEP");
+        d.drawFastHLine(4, BODY_Y + 12, 120, 0xF81F);
+        s_pk_init = true;
+        s_pk_last_shown = -1;
+    }
     if (s_toy_count == 0) {
-        d.setTextColor(T_DIM, T_BG);
-        d.setCursor(4, BODY_Y + 24);
-        d.print(scanning ? "searching the deep..." : "no toys found");
-        d.setCursor(4, BODY_Y + 36);
-        d.print("Lovense / WeVibe / Satisfyer");
-        d.setCursor(4, BODY_Y + 46);
-        d.print("Svakom / Kiiroo / Lelo");
+        if (s_pk_last_shown != 0) {
+            d.fillRect(0, BODY_Y + 16, SCR_W, 7 * 12, T_BG);
+            d.setTextColor(T_DIM, T_BG);
+            d.setCursor(4, BODY_Y + 24);
+            d.print(scanning ? "searching the deep..." : "no toys found");
+            d.setCursor(4, BODY_Y + 36);
+            d.print("Lovense / WeVibe / Satisfyer");
+            d.setCursor(4, BODY_Y + 46);
+            d.print("Svakom / Kiiroo / Lelo");
+            s_pk_last_shown = 0;
+        }
         return;
     }
     int rows = 7;
@@ -172,12 +187,21 @@ static void draw_picker(int cursor, bool scanning)
     int first = cursor - rows / 2;
     if (first < 0) first = 0;
     if (first + rows > s_toy_count) first = max(0, s_toy_count - rows);
-    for (int r = 0; r < rows && first + r < s_toy_count; ++r) {
-        const toy_t &t = s_toys[first + r];
+    /* Transition from empty-state hint -> list: clear the hint region once. */
+    if (s_pk_last_shown == 0) {
+        d.fillRect(0, BODY_Y + 16, SCR_W, 7 * 12, T_BG);
+    }
+    s_pk_last_shown = 1;
+    for (int r = 0; r < rows; ++r) {
         int y = BODY_Y + 18 + r * 12;
+        if (first + r >= s_toy_count) {
+            d.fillRect(0, y - 1, SCR_W, 12, T_BG);
+            continue;
+        }
+        const toy_t &t = s_toys[first + r];
         bool sel = (first + r == cursor);
         uint16_t bg = sel ? 0x3007 : T_BG;
-        if (sel) d.fillRect(0, y - 1, SCR_W, 12, bg);
+        d.fillRect(0, y - 1, SCR_W, 12, bg);
         d.setTextColor(sel ? 0xF81F : 0xFFFF, bg);
         d.setCursor(4, y);
         d.printf("[%s]", t.brand);
@@ -190,34 +214,64 @@ static void draw_picker(int cursor, bool scanning)
     }
 }
 
-static void draw_control(void)
+static void draw_picker(int cursor, bool scanning)
+{
+    draw_picker_force(cursor, scanning, false);
+}
+
+/* Control-screen redraw state. Static chrome + the big number's clear
+ * region are painted once on `force`; per-tick calls overwrite only the
+ * fields that changed (connection text, intensity number, bar) so the
+ * control area never blanks-then-repaints while sitting still. */
+static bool s_ctl_init = false;
+static bool s_ctl_last_conn = false;
+static int  s_ctl_last_intensity = -1;
+
+static void draw_control_force(bool force)
 {
     auto &d = M5Cardputer.Display;
-    ui_clear_body();
-    d.setTextColor(0xF81F, T_BG);
-    d.setCursor(4, BODY_Y + 2);  d.print("CONTROL");
-    d.drawFastHLine(4, BODY_Y + 12, 70, 0xF81F);
+    if (force || !s_ctl_init) {
+        ui_clear_body();
+        d.setTextColor(0xF81F, T_BG);
+        d.setCursor(4, BODY_Y + 2);  d.print("CONTROL");
+        d.drawFastHLine(4, BODY_Y + 12, 70, 0xF81F);
+        ui_draw_footer("; . or 0-9 = level   SPC=stop   `=disc");
+        s_ctl_init = true;
+        s_ctl_last_conn = !s_connected;   /* force conn text repaint */
+        s_ctl_last_intensity = -1;        /* force number + bar repaint */
+    }
 
-    d.setTextColor(s_connected ? T_GOOD : T_BAD, T_BG);
-    d.setCursor(4, BODY_Y + 22);
-    d.print(s_connected ? "CONNECTED" : "DISCONNECTED");
+    if (s_connected != s_ctl_last_conn) {
+        ui_text_w(4, BODY_Y + 22, 90, s_connected ? T_GOOD : T_BAD,
+                  s_connected ? "CONNECTED" : "DISCONNECTED");
+        s_ctl_last_conn = s_connected;
+    }
 
-    /* Big intensity number. */
-    d.setTextColor(0xFFFF, T_BG);
-    d.setTextSize(4);
-    char buf[4]; snprintf(buf, sizeof(buf), "%2d", s_intensity);
-    int w = d.textWidth(buf) * 4;
-    d.setCursor((SCR_W - w) / 2, BODY_Y + 34);
-    d.print(buf);
-    d.setTextSize(1);
+    if (s_intensity != s_ctl_last_intensity) {
+        /* Big intensity number — clear its own box, then redraw. */
+        d.fillRect(0, BODY_Y + 34, SCR_W, 32, T_BG);
+        d.setTextColor(0xFFFF, T_BG);
+        d.setTextSize(4);
+        char buf[4]; snprintf(buf, sizeof(buf), "%2d", s_intensity);
+        int w = d.textWidth(buf) * 4;
+        d.setCursor((SCR_W - w) / 2, BODY_Y + 34);
+        d.print(buf);
+        d.setTextSize(1);
 
-    /* Bar. */
-    int bx = 8, by = BODY_Y + 78, bw = SCR_W - 16, bh = 8;
-    d.drawRect(bx, by, bw, bh, T_DIM);
-    uint16_t fill = s_intensity > 15 ? 0xF800 : s_intensity > 8 ? 0xFD20 : 0xF81F;
-    d.fillRect(bx + 1, by + 1, (bw - 2) * s_intensity / 20, bh - 2, fill);
+        /* Bar. */
+        int bx = 8, by = BODY_Y + 78, bw = SCR_W - 16, bh = 8;
+        d.drawRect(bx, by, bw, bh, T_DIM);
+        d.fillRect(bx + 1, by + 1, bw - 2, bh - 2, T_BG);
+        uint16_t fill = s_intensity > 15 ? 0xF800 : s_intensity > 8 ? 0xFD20 : 0xF81F;
+        d.fillRect(bx + 1, by + 1, (bw - 2) * s_intensity / 20, bh - 2, fill);
 
-    ui_draw_footer("; . or 0-9 = level   SPC=stop   `=disc");
+        s_ctl_last_intensity = s_intensity;
+    }
+}
+
+static void draw_control(void)
+{
+    draw_control_force(false);
 }
 
 void feat_ble_toys(void)
@@ -236,6 +290,8 @@ void feat_ble_toys(void)
     ui_draw_footer(";/. = move  ENTER = connect  `=back");
     int cursor = 0;
     uint32_t last = 0;
+    s_pk_init = false;
+    draw_picker_force(cursor, true, true);
     while (true) {
         if (millis() - last > 300) { last = millis(); draw_picker(cursor, true); }
         uint16_t k = input_poll();
@@ -254,6 +310,8 @@ void feat_ble_toys(void)
             /* Enter control screen. */
             s_intensity = 0;
             send_vibrate(0);
+            s_ctl_init = false;
+            draw_control_force(true);
             while (true) {
                 draw_control();
                 uint16_t kk = input_poll();
@@ -280,6 +338,10 @@ void feat_ble_toys(void)
                 }
             }
             scan->start(0, false);
+            /* Back to the picker — repaint its chrome once. */
+            ui_draw_footer(";/. = move  ENTER = connect  `=back");
+            s_pk_init = false;
+            draw_picker_force(cursor, true, true);
         }
     }
 }

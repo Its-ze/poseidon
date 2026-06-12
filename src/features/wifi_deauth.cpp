@@ -252,34 +252,49 @@ void feat_wifi_deauth(void)
     ui_clear_body();  /* one-time entry clear; avoid per-frame wipe to
                          stop the body-region flash during the attack */
     bool state_changed = true;
+    /* Static target/channel drawn once; per-tick we only overwrite the
+     * value fields whose value moved (frames/rate every tick, drops/sta
+     * on change) via ui_text_w — no body-region wipe, no flash. */
+    bool chrome_drawn = false;
+    uint32_t last_frames = 0xFFFFFFFF;
+    uint32_t last_fps    = 0xFFFFFFFF;
+    bool     last_paused = !paused;
+    uint32_t last_errs   = 0xFFFFFFFF;
+    int      last_sta    = -1;
     while (true) {
         uint32_t now = millis();
         if (now - last > 250) {
             last = now;
             ui_dashboard_chrome(">> DEAUTH <<", state_changed);
+            bool repaint_static = state_changed || !chrome_drawn;
             state_changed = false;
-            /* Wipe only the status text region; hex stream is self-clearing. */
-            d.fillRect(0, BODY_Y + 14, SCR_W, BODY_H - 28, T_BG);
 
-            d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 16);
-            d.printf("%02X:%02X:%02X:%02X:%02X:%02X",
-                     s_target[0], s_target[1], s_target[2],
-                     s_target[3], s_target[4], s_target[5]);
-            d.setTextColor(T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 26); d.printf("channel %u", s_channel);
+            if (repaint_static) {
+                chrome_drawn = true;
+                ui_text_w(4, BODY_Y + 16, 120, T_FG,
+                          "%02X:%02X:%02X:%02X:%02X:%02X",
+                          s_target[0], s_target[1], s_target[2],
+                          s_target[3], s_target[4], s_target[5]);
+                ui_text_w(4, BODY_Y + 26, 120, T_DIM, "channel %u", s_channel);
+            }
 
             uint32_t fps = (s_sent - last_sent) * 4;
             last_sent = s_sent;
-            d.setTextColor(paused ? T_WARN : T_ACCENT, T_BG);
-            d.setCursor(4, BODY_Y + 40);
-            d.printf("frames: %lu", (unsigned long)s_sent);
-            d.setCursor(4, BODY_Y + 50);
-            d.printf("rate  : %lu/s%s", (unsigned long)fps, paused ? " (PAUSED)" : "");
-
-            d.setTextColor(s_errs > 0 ? T_BAD : T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 60);
-            d.printf("drops : %lu  sta:%d", (unsigned long)s_errs, s_learned_n);
+            if (repaint_static || s_sent != last_frames) {
+                last_frames = s_sent;
+                ui_text_w(4, BODY_Y + 40, 150, paused ? T_WARN : T_ACCENT,
+                          "frames: %lu", (unsigned long)s_sent);
+            }
+            if (repaint_static || fps != last_fps || paused != last_paused) {
+                last_fps = fps; last_paused = paused;
+                ui_text_w(4, BODY_Y + 50, 150, paused ? T_WARN : T_ACCENT,
+                          "rate  : %lu/s%s", (unsigned long)fps, paused ? " (PAUSED)" : "");
+            }
+            if (repaint_static || s_errs != last_errs || s_learned_n != last_sta) {
+                last_errs = s_errs; last_sta = s_learned_n;
+                ui_text_w(4, BODY_Y + 60, 150, s_errs > 0 ? T_BAD : T_DIM,
+                          "drops : %lu  sta:%d", (unsigned long)s_errs, s_learned_n);
+            }
 
             ui_freq_bars(SCR_W - 70, BODY_Y + 16, 4, 36);
             ui_draw_status(radio_name(), paused ? "paused" : "flooding");

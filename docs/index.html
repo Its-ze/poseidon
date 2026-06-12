@@ -4,13 +4,31 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>POSEIDON — Commander of the Deep</title>
-<meta name="description" content="150+ feature keyboard-first pentesting firmware for M5Stack Cardputer-Adv. WiFi / BLE / sub-GHz / LoRa / nRF24 / IR / BadUSB / RJ45. v0.6.0 shipped — Argus mood sprite, six themes, ambient procedural motion, raw-IDF AP path.">
+<meta name="description" content="163 feature keyboard-first pentesting firmware for M5Stack Cardputer-Adv. WiFi / BLE / sub-GHz / LoRa / nRF24 / IR / BadUSB / RJ45. v0.6.1 shipped — Argus mood sprite, six themes, ambient procedural motion, raw-IDF AP path.">
 <meta property="og:title" content="POSEIDON">
-<meta property="og:description" content="Commander of the Deep — 150+ pocket pentest tools across 6 radio bands plus wired. v0.6.0 shipped.">
+<meta property="og:description" content="Commander of the Deep — 163 pocket pentest tools across 6 radio bands plus wired. v0.6.1 shipped.">
 <meta property="og:type" content="website">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
+<style>
+/* ===== Glitch accordion for featured drops ===== */
+.acc-section .acc-head{cursor:pointer;-webkit-user-select:none;user-select:none}
+.acc-section .acc-head .section-title{transition:text-shadow .25s}
+.acc-section .acc-head:hover .section-title{text-shadow:2.5px 0 rgba(56,189,248,.8),-2.5px 0 rgba(240,171,252,.7)}
+.acc-ind{display:inline-flex;align-items:center;gap:.6rem;margin-top:1.4rem;font-family:var(--font-mono);font-size:.7rem;letter-spacing:.22em;text-transform:uppercase;color:var(--ocean-bright);background:rgba(6,10,22,.4);border:1px solid rgba(14,165,233,.45);border-radius:999px;padding:.45rem 1rem;cursor:pointer;transition:box-shadow .25s,background .25s,transform .15s}
+.acc-ind:hover{box-shadow:0 0 18px rgba(14,165,233,.35);background:rgba(14,165,233,.1);transform:translateY(-1px)}
+.acc-ind-chev{display:inline-block;transition:transform .35s var(--ease-spring)}
+.acc-section.open .acc-ind-chev{transform:rotate(90deg)}
+.acc-panel{overflow:hidden;max-height:0;opacity:0;transition:max-height .55s var(--ease-smooth),opacity .45s ease}
+.acc-section.open .acc-panel{opacity:1}
+.acc-panel .reveal{opacity:1 !important;transform:none !important}
+@keyframes accGlitch{0%,100%{clip-path:inset(0 0 0 0);transform:translate(0)}15%{clip-path:inset(15% 0 55% 0);transform:translate(-3px,0)}30%{clip-path:inset(55% 0 12% 0);transform:translate(3px,0)}45%{clip-path:inset(30% 0 45% 0);transform:translate(-2px,1px)}60%{clip-path:inset(8% 0 70% 0);transform:translate(2px,-1px)}75%{clip-path:inset(45% 0 20% 0);transform:translate(-1px,0)}}
+.acc-section.glitching .section-title{animation:accGlitch .45s steps(2,end) 1}
+.acc-section.glitching .acc-panel{animation:accFlash .5s ease 1}
+@keyframes accFlash{0%{box-shadow:inset 0 2px 0 rgba(56,189,248,0)}25%{box-shadow:inset 0 70px 50px -45px rgba(56,189,248,.3)}100%{box-shadow:inset 0 2px 0 rgba(56,189,248,0)}}
+@media(prefers-reduced-motion:reduce){.acc-section.glitching .section-title,.acc-section.glitching .acc-panel{animation:none}.acc-panel{transition:max-height .3s ease}}
+</style>
 </head>
 <body data-matrix>
 
@@ -27,7 +45,7 @@
 </div>
 
 <div id="scrollProgress"></div>
-<div id="hud"><div class="hud-row"><span class="hud-dot"></span>LIVE · v0.6.1 (40 baked sub-GHz signals + ON-AIR indicator + Hydra prep)</div></div>
+<div id="hud"><div class="hud-row"><span class="hud-dot"></span>LIVE · v0.6.1 · 163 tools · 6 radio bands · wired</div></div>
 
 <nav id="mainNav">
   <a href="index.html" class="nav-logo"><span class="icon">P</span><span>POSEIDON</span></a>
@@ -46,10 +64,10 @@
   <canvas id="heroCanvas"></canvas>
   <canvas id="causticLayer"></canvas>
   <div class="hero-content">
-    <div class="hero-badge"><span class="dot"></span> v0.6.1 SHIPPED &mdash; 40 BAKED SUB-GHZ SIGNALS &middot; ON-AIR TX INDICATOR &middot; HYDRA HAT PREP</div>
+    <div class="hero-badge"><span class="dot"></span> v0.6.1 SHIPPED &mdash; 163 TOOLS &middot; SIX RADIO BANDS &middot; ARGUS GOTCHI</div>
     <div class="hero-epithet">COMMANDER OF THE DEEP</div>
     <h1 class="hero-title">POSEIDON</h1>
-    <p class="hero-sub">Keyboard-first pentesting firmware for the M5Stack <span class="hl">Cardputer-Adv</span>. 150+ features across <span class="hl">six radio bands</span> plus wired Ethernet. Sub-GHz. 2.4 GHz. LoRa. WiFi. BLE. Zigbee. RJ45. All from your pocket.</p>
+    <p class="hero-sub">Keyboard-first pentesting firmware for the M5Stack <span class="hl">Cardputer-Adv</span>. 163 features across <span class="hl">six radio bands</span> plus wired Ethernet. Sub-GHz. 2.4 GHz. LoRa. WiFi. BLE. Zigbee. RJ45. All from your pocket.</p>
     <div class="hero-prompt">
       <span class="prompt-dollar">poseidon ▸</span>
       <span class="prompt-cmd">saltyjack</span>
@@ -64,7 +82,7 @@
       <a href="arsenal.html" class="btn btn-secondary">⎇ See Arsenal</a>
     </div>
     <div class="hero-stats">
-      <div class="hero-stat"><div class="num" data-count="150" data-suffix="+">150+</div><div class="label">Features</div></div>
+      <div class="hero-stat"><div class="num" data-count="163" data-suffix="">163</div><div class="label">Features</div></div>
       <div class="hero-stat"><div class="num" data-count="6">6</div><div class="label">RF + Wired</div></div>
       <div class="hero-stat"><div class="num" data-count="6">6</div><div class="label">Themes</div></div>
       <div class="hero-stat"><div class="num" data-count="3190" data-suffix="+">3190+</div><div class="label">.sub Signals</div></div>
@@ -120,15 +138,15 @@
 </div>
 
 <!-- FEATURED DROP — v0.6.0 Argus mood sprite + visual overhaul + raw-IDF AP path -->
-<section id="argus-drop" style="padding:clamp(4rem,8vw,7rem) 1.5rem;position:relative;overflow:hidden;background:radial-gradient(ellipse at top,rgba(217,70,239,0.10) 0%,rgba(6,10,22,0) 55%),linear-gradient(180deg,rgba(6,182,212,0.04) 0%,rgba(6,10,22,1) 85%);border-top:1px solid rgba(217,70,239,0.18);border-bottom:1px solid rgba(217,70,239,0.18);">
+<section id="argus-drop" class="acc-section" data-open="1" style="padding:clamp(4rem,8vw,7rem) 1.5rem;position:relative;overflow:hidden;background:radial-gradient(ellipse at top,rgba(217,70,239,0.10) 0%,rgba(6,10,22,0) 55%),linear-gradient(180deg,rgba(6,182,212,0.04) 0%,rgba(6,10,22,1) 85%);border-top:1px solid rgba(217,70,239,0.18);border-bottom:1px solid rgba(217,70,239,0.18);">
   <div style="max-width:1150px;margin:0 auto;">
-    <div class="section-label reveal" style="color:#d946ef;letter-spacing:.18em;">★ FEATURED DROP · v0.6.0</div>
+    <div class="section-label reveal" style="color:#d946ef;letter-spacing:.18em;">★ FEATURED DROP · v0.6.1</div>
     <h2 class="section-title reveal" style="font-size:clamp(2.4rem,5.5vw,4.2rem);background:linear-gradient(135deg,#d946ef 0%,#f0abfc 40%,var(--ocean-bright) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Argus &amp; the visual overhaul</h2>
-    <p class="section-desc reveal" style="max-width:880px;font-size:clamp(1rem,1.4vw,1.2rem);">The biggest single drop since 0.5.0. Triton finally has a real character — a 96x96 Argus mood sprite that watches every handshake and shifts mood live. Six full themes (POSEIDON / MATRIX / E-INK / SYNTHWAVE / PHANTOM / BLOOD). Seven idle screensavers keyed off the active theme. Carousel menu style with cyberpunk pictographs. Ambient procedural motion painted behind every menu draw. The whole device feels alive.</p>
+    <p class="section-desc reveal" style="max-width:880px;font-size:clamp(1rem,1.4vw,1.2rem);">The biggest single drop since 0.5.0. Argus finally has a real character — a 96x96 mood sprite that watches every handshake and shifts mood live. Six full themes (POSEIDON / MATRIX / E-INK / SYNTHWAVE / PHANTOM / BLOOD). Seven idle screensavers keyed off the active theme. Carousel menu style with cyberpunk pictographs. Ambient procedural motion painted behind every menu draw. The whole device feels alive.</p>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-top:2.5rem;">
       <div class="feature-card reveal" style="border-color:rgba(217,70,239,0.35);">
-        <div class="fc-head"><span class="fc-glyph" style="color:#d946ef;border-color:rgba(217,70,239,.4);"><svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 0 0 16a8 8 0 0 0 0-16z M9 10v.5 M15 10v.5 M9 14c1 1.5 5 1.5 6 0"/></svg></span><h3 style="color:#f0abfc;">Argus — Triton's mood sprite</h3></div>
+        <div class="fc-head"><span class="fc-glyph" style="color:#d946ef;border-color:rgba(217,70,239,.4);"><svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 0 0 16a8 8 0 0 0 0-16z M9 10v.5 M15 10v.5 M9 14c1 1.5 5 1.5 6 0"/></svg></span><h3 style="color:#f0abfc;">Argus — the watchful gotchi</h3></div>
         <p>Twelve mood portraits (Watching, Pleased, Annoyed, Resigned, Calculating, Old Fury, Sleeping, Reflective…). Mood-mapped to hunt state — Argus sleeps when idle, gets pleased on catch, fully unhinged on Feral burst. Sprite is cached to internal SRAM to dodge MMU stalls during raw-TX.</p>
         <div class="count" style="color:#d946ef;">v0.6 · CHARACTER</div>
       </div>
@@ -169,7 +187,7 @@
 </section>
 
 <!-- FEATURED DROP — v0.4 SaltyJack with big homage to @7h30th3r0n3 -->
-<section id="saltyjack" style="padding:clamp(4rem,8vw,7rem) 1.5rem;position:relative;overflow:hidden;background:radial-gradient(ellipse at top,rgba(245,158,11,0.09) 0%,rgba(6,10,22,0) 55%),linear-gradient(180deg,rgba(14,165,233,0.04) 0%,rgba(6,10,22,1) 85%);border-top:1px solid rgba(245,158,11,0.15);border-bottom:1px solid rgba(245,158,11,0.15);">
+<section id="saltyjack" class="acc-section" style="padding:clamp(4rem,8vw,7rem) 1.5rem;position:relative;overflow:hidden;background:radial-gradient(ellipse at top,rgba(245,158,11,0.09) 0%,rgba(6,10,22,0) 55%),linear-gradient(180deg,rgba(14,165,233,0.04) 0%,rgba(6,10,22,1) 85%);border-top:1px solid rgba(245,158,11,0.15);border-bottom:1px solid rgba(245,158,11,0.15);">
   <div style="max-width:1150px;margin:0 auto;">
     <div class="section-label reveal" style="color:#f59e0b;letter-spacing:.18em;">★ FEATURED DROP · v0.4</div>
     <h2 class="section-title reveal" style="font-size:clamp(2.4rem,5.5vw,4.2rem);background:linear-gradient(135deg,#f59e0b 0%,#fbbf24 40%,var(--ocean-bright) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">SaltyJack — the LAN arsenal</h2>
@@ -198,7 +216,7 @@
     </div>
 
     <h3 class="reveal" style="margin-top:3rem;font-family:var(--font-display);font-size:1.75rem;color:#fbbf24;letter-spacing:.04em;">What's inside</h3>
-    <p class="reveal" style="max-width:720px;color:#94a3b8;font-size:.95rem;margin:.4rem 0 1.5rem;">Six modules behind one menu key. Phase 1 shipped in v0.3; phase 2 lands with v0.4.</p>
+    <p class="reveal" style="max-width:720px;color:#94a3b8;font-size:.95rem;margin:.4rem 0 1.5rem;">Six modules behind one menu key. Phase 1 shipped in v0.3, phase 2 in v0.4.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:1rem;">
       <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph" style="color:#f59e0b;"><svg viewBox="0 0 24 24"><path d="M4 4h16v3H4z M5 8v11h14V8 M8 12h3v3H8z M13 12h3v3h-3z"/></svg></span><h3>DHCP Starvation</h3></div><p>Floods the network's DHCP server with random-MAC Discover/Request cycles until the pool exhausts. Live counters. Auto-detects exhaustion on NAK ≥ 20.</p><div class="count">PHASE 1</div></div>
       <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph" style="color:#f59e0b;"><svg viewBox="0 0 24 24"><path d="M3 8l9-5 9 5v8l-9 5-9-5z M12 3v18 M3 8l9 5 9-5"/></svg></span><h3>Rogue DHCP (STA + AP)</h3></div><p>Races the real server with our own Offer/Ack (STA mode) or <em>is</em> the DHCP server for clients on our SoftAP (AP mode). Gateway + DNS poisoning for chained MitM.</p><div class="count">PHASE 2</div></div>
@@ -213,7 +231,7 @@
 </section>
 
 <!-- FEATURED DROP — v0.4.1 WhisperPair CVE-2025-36911 probe -->
-<section id="whisperpair" style="padding:clamp(4rem,8vw,7rem) 1.5rem;position:relative;overflow:hidden;background:radial-gradient(ellipse at top,rgba(220,38,38,0.09) 0%,rgba(6,10,22,0) 55%),linear-gradient(180deg,rgba(6,10,22,1) 0%,rgba(6,10,22,1) 85%);border-top:1px solid rgba(220,38,38,0.18);border-bottom:1px solid rgba(220,38,38,0.18);">
+<section id="whisperpair" class="acc-section" style="padding:clamp(4rem,8vw,7rem) 1.5rem;position:relative;overflow:hidden;background:radial-gradient(ellipse at top,rgba(220,38,38,0.09) 0%,rgba(6,10,22,0) 55%),linear-gradient(180deg,rgba(6,10,22,1) 0%,rgba(6,10,22,1) 85%);border-top:1px solid rgba(220,38,38,0.18);border-bottom:1px solid rgba(220,38,38,0.18);">
   <div style="max-width:1150px;margin:0 auto;">
     <div class="section-label reveal" style="color:#f87171;letter-spacing:.18em;">★ FEATURED DROP · v0.4.1</div>
     <h2 class="section-title reveal" style="font-size:clamp(2.4rem,5.5vw,4.2rem);background:linear-gradient(135deg,#ef4444 0%,#fb7185 40%,var(--ocean-bright) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">WhisperPair — CVE probe for hundreds of millions of devices</h2>
@@ -246,7 +264,23 @@
   <div style="max-width:1150px;margin:0 auto;">
     <div class="section-label reveal" style="color:#a78bfa;letter-spacing:.18em;">◆ COMING NEXT · v0.7 queued</div>
     <h2 class="section-title reveal" style="font-size:clamp(2.2rem,4.8vw,3.4rem);background:linear-gradient(135deg,#a78bfa 0%,#c4b5fd 40%,var(--ocean-bright) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">What's landing next</h2>
-    <p class="section-desc reveal" style="max-width:880px;">v0.6.0 shipped Argus mood sprite, six themes, ambient motion, the cooperative BLE refactor, the STA-mode raw-TX path, and the C5 protocol v3 with 5G scan terminator. v0.7 closes the BLE gap with a real nRF52840 companion dongle. Everything below is planned, not promised.</p>
+    <p class="section-desc reveal" style="max-width:880px;">The flagship in the pipeline turns the TRIDENT C5 into a <b>through-wall sensing radar</b>. Beyond it: a real nRF52840 BLE dongle, Thread/Matter recon, and the Hydra RF hat sweep. Everything below is planned, not promised.</p>
+
+    <!-- FLAGSHIP — Full C5 CSI integration -->
+    <div class="reveal frame" style="margin-top:2.5rem;padding:clamp(1.6rem,3vw,2.6rem);border:1px solid rgba(217,70,239,0.45);border-radius:20px;background:linear-gradient(135deg,rgba(217,70,239,0.12) 0%,rgba(34,211,238,0.05) 100%);position:relative;overflow:hidden;">
+      <div style="position:absolute;top:-60px;right:-60px;width:240px;height:240px;background:radial-gradient(circle,rgba(217,70,239,0.3) 0%,transparent 70%);pointer-events:none;"></div>
+      <div style="position:absolute;bottom:-70px;left:-40px;width:200px;height:200px;background:radial-gradient(circle,rgba(34,211,238,0.18) 0%,transparent 70%);pointer-events:none;"></div>
+      <div style="position:relative;">
+        <div style="font-family:var(--font-mono);font-size:.72rem;letter-spacing:.26em;text-transform:uppercase;color:#22d3ee;margin-bottom:.7rem;">★ FLAGSHIP · IN R&amp;D · TRIDENT C5</div>
+        <h3 style="font-family:var(--font-display);font-size:clamp(1.9rem,4vw,3rem);margin:0 0 .7rem;background:linear-gradient(135deg,#e833c0 0%,#f0abfc 45%,#22d3ee 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:.02em;line-height:1.05;">Full C5 CSI Integration — see through walls</h3>
+        <p style="font-size:clamp(1rem,1.4vw,1.18rem);line-height:1.62;color:#e2e8f0;max-width:840px;margin:0 0 1.6rem;">WiFi <b>Channel State Information</b> sensing on the ESP32-C5 turns the TRIDENT satellite into a passive radar. Ambient WiFi becomes a live <b>presence + motion map</b> — count bodies, track movement, even pick up <b>breathing</b> — through drywall, no camera, no contact. The C5 captures and processes CSI on-chip and streams a real-time heatmap to POSEIDON over ESP-NOW. This is the endgame for the satellite.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1rem;">
+          <div class="feature-card" style="border-color:rgba(217,70,239,0.3);"><div class="fc-head"><span class="fc-glyph" style="color:#e833c0;border-color:rgba(217,70,239,.4);"><svg viewBox="0 0 24 24"><path d="M3 21h18 M5 21V8l7-5 7 5v13 M9 21v-6h6v6"/></svg></span><h3 style="color:#f0abfc;">Through-wall presence</h3></div><p>Subcarrier amplitude + phase shifts reveal bodies behind drywall — occupancy count, room-by-room, entry/exit events.</p></div>
+          <div class="feature-card" style="border-color:rgba(217,70,239,0.3);"><div class="fc-head"><span class="fc-glyph" style="color:#e833c0;border-color:rgba(217,70,239,.4);"><svg viewBox="0 0 24 24"><path d="M2 12h4l2-7 4 14 2-7h6"/></svg></span><h3 style="color:#f0abfc;">Motion + breathing</h3></div><p>Micro-Doppler on the CSI stream catches movement and chest-rise — vital-sign sensing with nothing worn on the target.</p></div>
+          <div class="feature-card" style="border-color:rgba(34,211,238,0.3);"><div class="fc-head"><span class="fc-glyph" style="color:#22d3ee;border-color:rgba(34,211,238,.4);"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H4z M8 20h8 M12 16v4 M7 9l3 3 4-5"/></svg></span><h3 style="color:#7dd3fc;">Live on the Cardputer</h3></div><p>The C5 does the DSP and streams a presence/motion heatmap to POSEIDON over ESP-NOW. No PC, no cloud — pocket radar.</p></div>
+        </div>
+      </div>
+    </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:1rem;margin-top:2rem;">
 
@@ -263,8 +297,8 @@
       </div>
 
       <div class="feature-card reveal" style="border-color:rgba(124,58,237,0.35);">
-        <div class="fc-head"><span class="fc-glyph" style="color:#a78bfa;border-color:rgba(124,58,237,.4);"><svg viewBox="0 0 24 24"><path d="M3 12h4l2-8 4 16 2-8h6"/></svg></span><h3 style="color:#c4b5fd;">Sub-GHz on Hydra hat (arriving tomorrow)</h3></div>
-        <p>Hydra RF hat lands on the bench tomorrow — any sub-GHz bugs surfaced during v0.6 testing get fixed the moment the hardware is here. CC1101 RF / nRF24 mousejack / sub-GHz replay / Pocket SDR all queued for the regression sweep.</p>
+        <div class="fc-head"><span class="fc-glyph" style="color:#a78bfa;border-color:rgba(124,58,237,.4);"><svg viewBox="0 0 24 24"><path d="M3 12h4l2-8 4 16 2-8h6"/></svg></span><h3 style="color:#c4b5fd;">Sub-GHz on the Hydra hat</h3></div>
+        <p>Dedicated Hydra RF hat regression sweep — CC1101 RF / nRF24 mousejack / sub-GHz replay / Pocket SDR all queued for hardening once the hat is on the bench.</p>
         <div class="count" style="color:#a78bfa;">v0.6.1 · SUB-GHZ</div>
       </div>
 
@@ -296,7 +330,7 @@
     <a class="teaser reveal" href="arsenal.html">
       <div class="t-num">01 · ARSENAL</div>
       <h3>Every Radio. Every Attack.</h3>
-      <p>150+ tools across WiFi, BLE, sub-GHz, 2.4 GHz, LoRa, IR, and network. The full feature grid with per-domain counts.</p>
+      <p>163 tools across WiFi, BLE, sub-GHz, 2.4 GHz, LoRa, IR, and network. The full feature grid with per-domain counts.</p>
       <div class="t-arrow">Browse arsenal →</div>
     </a>
     <a class="teaser reveal" href="hardware.html">
@@ -314,7 +348,7 @@
     <a class="teaser reveal" href="testers.html">
       <div class="t-num">04 · TESTERS</div>
       <h3>Help us harden v0.6.</h3>
-      <p>v0.6.0 just shipped — regression sweep on Triton, Portal, BLE Spam, Argus sprite. Hydra hat sub-GHz fixes land when the hardware arrives tomorrow.</p>
+      <p>v0.6.1 just shipped — Hydra RF hat sub-GHz regression sweep, on top of the v0.6.0 Argus mood sprite and six-theme visual overhaul.</p>
       <div class="t-arrow">Join the field team →</div>
     </a>
     <a class="teaser reveal" href="credits.html">
@@ -368,5 +402,51 @@
 
 <canvas id="particles" style="position:fixed;inset:0;z-index:-1;pointer-events:none"></canvas>
 <script src="assets/site.js"></script>
+<script>
+/* Glitch accordion: collapse each .acc-section's body (everything after the
+   .section-desc) into an expandable panel with a glitchy reveal. */
+(function(){
+  function ready(fn){document.readyState!=='loading'?fn():document.addEventListener('DOMContentLoaded',fn);}
+  ready(function(){
+    document.querySelectorAll('.acc-section').forEach(function(sec){
+      var wrap=sec.querySelector(':scope > div'); if(!wrap) return;
+      var desc=wrap.querySelector('.section-desc'); if(!desc) return;
+      var label=wrap.querySelector('.section-label');
+      var accent=label?getComputedStyle(label).color:'';
+      var panel=document.createElement('div'); panel.className='acc-panel';
+      var n=desc.nextElementSibling;
+      while(n){var nx=n.nextElementSibling;panel.appendChild(n);n=nx;}
+      var head=document.createElement('div'); head.className='acc-head';
+      var c=wrap.firstElementChild, nodes=[];
+      while(c){var nx2=c.nextElementSibling;nodes.push(c);if(c===desc)break;c=nx2;}
+      nodes.forEach(function(el){head.appendChild(el);});
+      var ind=document.createElement('button'); ind.type='button'; ind.className='acc-ind';
+      var txt=document.createElement('span'); txt.className='acc-ind-txt'; txt.textContent='EXPAND';
+      var chev=document.createElement('span'); chev.className='acc-ind-chev'; chev.textContent='▸';
+      ind.appendChild(txt); ind.appendChild(chev);
+      if(accent){ind.style.color=accent;ind.style.borderColor=accent;}
+      head.appendChild(ind);
+      wrap.insertBefore(head,wrap.firstChild);
+      wrap.appendChild(panel);
+      var isOpen=false;
+      function expand(glitch){
+        isOpen=true; sec.classList.add('open'); txt.textContent='COLLAPSE'; ind.setAttribute('aria-expanded','true');
+        panel.style.maxHeight=panel.scrollHeight+'px';
+        var te=function(){if(isOpen)panel.style.maxHeight='none';panel.removeEventListener('transitionend',te);};
+        panel.addEventListener('transitionend',te);
+        if(glitch){sec.classList.add('glitching');setTimeout(function(){sec.classList.remove('glitching');},480);}
+      }
+      function collapse(){
+        isOpen=false; sec.classList.remove('open'); txt.textContent='EXPAND'; ind.setAttribute('aria-expanded','false');
+        panel.style.maxHeight=panel.scrollHeight+'px';
+        requestAnimationFrame(function(){requestAnimationFrame(function(){panel.style.maxHeight='0px';});});
+      }
+      head.addEventListener('click',function(e){if(e.target.closest('a'))return;isOpen?collapse():expand(true);});
+      if(sec.dataset.open==='1'){isOpen=true;sec.classList.add('open');txt.textContent='COLLAPSE';ind.setAttribute('aria-expanded','true');panel.style.maxHeight='none';}
+      else{ind.setAttribute('aria-expanded','false');}
+    });
+  });
+})();
+</script>
 </body>
 </html>

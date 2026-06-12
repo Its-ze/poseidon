@@ -83,23 +83,31 @@ static bool pick_sub_file(char *out_path, int max_len)
     if (count == 0) { ui_toast("no .sub files", T_WARN, 1000); return false; }
 
     int sel = 0;
+    int last_sel = -1;
+
+    /* Static chrome painted once. */
+    ui_force_clear_body();
+    d.setTextColor(T_ACCENT, T_BG);
+    d.setCursor(4, BODY_Y + 2); d.printf("SELECT .sub (%d)", count);
+    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+    ui_draw_footer(";/.=move  ENTER=sel  ESC=back");
+
     while (true) {
-        ui_clear_body();
-        d.setTextColor(T_ACCENT, T_BG);
-        d.setCursor(4, BODY_Y + 2); d.printf("SELECT .sub (%d)", count);
-        d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
-        for (int i = 0; i < count && i < 7; ++i) {
-            int di = (sel < 4) ? i : sel - 3 + i;
-            if (di >= count) break;
-            int y = BODY_Y + 18 + i * 13;
-            bool s = (di == sel);
-            if (s) d.fillRoundRect(2, y - 1, SCR_W - 4, 12, 2, 0x3007);
-            d.setTextColor(s ? T_ACCENT2 : T_FG, s ? 0x3007 : T_BG);
-            d.setCursor(6, y);
-            const char *base = strrchr(names[di], '/');
-            d.printf("%s", base ? base + 1 : names[di]);
+        if (sel != last_sel) {
+            last_sel = sel;
+            for (int i = 0; i < 7; ++i) {
+                int y = BODY_Y + 18 + i * 13;
+                d.fillRect(0, y - 1, SCR_W, 12, T_BG);
+                int di = (sel < 4) ? i : sel - 3 + i;
+                if (di >= count) continue;
+                bool s = (di == sel);
+                if (s) d.fillRoundRect(2, y - 1, SCR_W - 4, 12, 2, 0x3007);
+                d.setTextColor(s ? T_ACCENT2 : T_FG, s ? 0x3007 : T_BG);
+                d.setCursor(6, y);
+                const char *base = strrchr(names[di], '/');
+                d.printf("%s", base ? base + 1 : names[di]);
+            }
         }
-        ui_draw_footer(";/.=move  ENTER=sel  ESC=back");
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(20); continue; }
         if (k == PK_ESC) return false;
@@ -133,25 +141,33 @@ void feat_subghz_replay(void)
 
     auto &d = M5Cardputer.Display;
     uint32_t plays = 0;
+    uint32_t last_plays = (uint32_t)-1;
+    bool chrome_dirty = true;
     while (true) {
-        ui_clear_body();
-        ui_draw_status(radio_name(), "replay");
+        if (chrome_dirty) {
+            chrome_dirty = false;
+            ui_force_clear_body();
+            ui_draw_status(radio_name(), "replay");
 
-        /* Band widget — same as record so user knows band at a glance. */
-        ui_draw_freq_band(4, BODY_Y + 2, SCR_W - 8, 10, sub.freq_mhz);
+            /* Band widget — same as record so user knows band at a glance. */
+            ui_draw_freq_band(4, BODY_Y + 2, SCR_W - 8, 10, sub.freq_mhz);
 
-        const char *base = strrchr(path, '/');
-        d.setTextColor(T_FG, T_BG);
-        d.setCursor(4, BODY_Y + 26); d.printf("%.32s", base ? base + 1 : path);
-        d.setTextColor(T_DIM, T_BG);
-        d.setCursor(4, BODY_Y + 38); d.printf("%d pulses  plays %lu",
-                                              sub.raw_len, (unsigned long)plays);
+            const char *base = strrchr(path, '/');
+            d.setTextColor(T_FG, T_BG);
+            d.setCursor(4, BODY_Y + 26); d.printf("%.32s", base ? base + 1 : path);
 
-        /* Waveform preview — no playhead, static full-signal view. */
-        ui_draw_pulse_wave(4, BODY_Y + 52, SCR_W - 8, 32,
-                           sub.raw, sub.raw_len, -1);
+            /* Waveform preview — no playhead, static full-signal view. */
+            ui_draw_pulse_wave(4, BODY_Y + 52, SCR_W - 8, 32,
+                               sub.raw, sub.raw_len, -1);
 
-        ui_draw_footer("ENTER=tx ESC=stop");
+            ui_draw_footer("ENTER=tx ESC=stop");
+        }
+
+        if (plays != last_plays) {
+            last_plays = plays;
+            ui_text_w(4, BODY_Y + 38, SCR_W - 8, T_DIM, "%d pulses  plays %lu",
+                      sub.raw_len, (unsigned long)plays);
+        }
 
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(20); continue; }
@@ -180,6 +196,9 @@ void feat_subghz_replay(void)
             }
             ui_subghz_live_tx_splash(sub.freq_mhz, "RAW REPLAY",
                                      payload, 900);
+            /* Splash took over the body — repaint static chrome. */
+            chrome_dirty = true;
+            last_plays = (uint32_t)-1;
         }
     }
 

@@ -4,11 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PHANTOM Flasher</title>
-<!-- esp-web-tools 10.2.1 — jsdelivr serves the live build reliably.
-     unpkg was edge-caching an older 10.0-era bundle that lacked
-     ESP32-C5 support (esptool-js 0.5.6 added it in 10.2.0), making
-     users see a false "Browser not supported" message. Same fix as
-     docs/install.html (commit 307f6b5). -->
+<!-- esp-web-tools 10.2.1 (latest as of 2026-06-11) loaded via jsdelivr.
+     IMPORTANT: 10.2.1 bundles esptool-js 0.5.7, which has a confirmed
+     ESP32-C5 flashId()/flash-detection bug — the one-click button reaches
+     the port picker then fails ("Flash ID: 0 / Failed to initialize").
+     The fix landed in esptool-js 0.6.0 (2026-03-26: "Fix being unable to
+     flash certain C5 chips", "Fix ESP32C5 chip can not use usb", updated
+     C5 stubs) but NO esp-web-tools release has bundled >=0.6.0 yet
+     (10.2.1 still pins esptool-js ^0.5.7). Tracking: esp-web-tools #687.
+     The button below is left in place so it lights up automatically once
+     upstream rebuilds, but until then the PRIMARY tester path is the
+     official Espressif esptool-js web flasher (also browser/WebSerial,
+     but already on esptool-js 0.6.x so C5 works). See the C5 card. -->
 <script type="module"
         src="https://cdn.jsdelivr.net/npm/esp-web-tools@10.2.1/dist/web/install-button.js"></script>
 <style>
@@ -129,24 +136,49 @@
     <h2>TRIDENT — C5 Satellite</h2>
     <p>POSEIDON's wireless drop-node. 5 GHz WiFi scan / deauth / PMKID + 802.15.4 Zigbee sniffer. ESP-NOW link to the Cardputer mothership.</p>
     <esp-web-install-button manifest="manifest-trident-c5.json">
-      <button slot="activate">Install TRIDENT</button>
+      <button slot="activate">Install TRIDENT (one-click)</button>
     </esp-web-install-button>
-    <div style="margin-top:12px;padding:10px;background:rgba(255,0,255,0.08);border:1px solid var(--accent2);border-radius:4px;font-size:11px;line-height:1.5;color:var(--fg);">
-      <b style="color:var(--accent2);">Known upstream bug:</b> esp-web-tools 10.2.1 bundles
-      <code>esptool-js 0.5.7</code> which has a documented ESP32-C5
-      <code>flashId()</code> failure — clicks return "Failed to initialize"
-      after the port picker. Fix is merged in <code>esptool-js 0.6.0</code> but
-      no esp-web-tools release has shipped with it yet
-      (<a href="https://github.com/esphome/esp-web-tools/issues/687" target="_blank" style="color:var(--accent2);">issue #687</a>).
-      <br><br>
-      <b>Workaround until upstream rebuilds:</b> use Python esptool directly. From the repo run
-      <code>c5_node\_flash.bat</code> (Windows) or:
-      <pre style="margin:6px 0 0 0;padding:6px;background:rgba(0,0,0,0.4);border-radius:3px;overflow-x:auto;">esptool.py --chip esp32c5 -p COM&lt;n&gt; --baud 460800 write_flash \
+
+    <div style="margin-top:12px;padding:10px;background:rgba(255,0,255,0.08);border:1px solid var(--accent2);border-radius:4px;font-size:11px;line-height:1.55;color:var(--fg);">
+      <b style="color:var(--accent2);">Heads-up — the one-click button may not work yet.</b>
+      esp-web-tools 10.2.1 (the newest release) still bundles
+      <code>esptool-js 0.5.7</code>, which has a confirmed ESP32-C5 flash-detection
+      bug: it reaches the port picker, then fails with <i>"Flash ID: 0 / Failed to
+      initialize."</i> The fix shipped in <code>esptool-js 0.6.0</code> but no
+      esp-web-tools build has bundled it yet
+      (<a href="https://github.com/esphome/esp-web-tools/issues/687" target="_blank" style="color:var(--accent2);">issue&nbsp;#687</a>).
+      Try the button first — if it errors, use the browser flasher below.
+
+      <hr style="border:none;border-top:1px solid var(--accent2);opacity:0.4;margin:10px 0;">
+
+      <b style="color:var(--accent);">✅ Recommended: Espressif Web Flasher (browser, no install)</b>
+      <ol style="margin:6px 0 0 16px;padding:0;">
+        <li>Download the 3 firmware files from
+          <a href="bin/trident-c5/" style="color:var(--accent2);">bin/trident-c5/</a>:
+          <code>bootloader.bin</code>, <code>partition-table.bin</code>,
+          <code>poseidon_c5_node.bin</code>.</li>
+        <li>Open
+          <a href="https://espressif.github.io/esptool-js/" target="_blank" style="color:var(--accent2);">espressif.github.io/esptool-js</a>
+          in Chrome or Edge (this tool is already on esptool-js 0.6.x, so the C5 works).</li>
+        <li>Plug in TRIDENT, click <b>Connect</b>, pick its serial port.</li>
+        <li>Add three flash rows and set each <b>Flash Address</b> + file:
+          <pre style="margin:6px 0 0 0;padding:6px;background:rgba(0,0,0,0.4);border-radius:3px;overflow-x:auto;">0x2000   bootloader.bin
+0x8000   partition-table.bin
+0x10000  poseidon_c5_node.bin</pre></li>
+        <li>Leave flash mode <code>dio</code>, size <code>4MB</code> (or Keep), then click
+          <b>Program</b>. Done — unplug and re-plug to boot.</li>
+      </ol>
+
+      <hr style="border:none;border-top:1px solid var(--accent2);opacity:0.4;margin:10px 0;">
+
+      <b style="color:var(--accent);">Alternative: command line (if you have Python esptool)</b>
+      <pre style="margin:6px 0 0 0;padding:6px;background:rgba(0,0,0,0.4);border-radius:3px;overflow-x:auto;">pip install esptool
+esptool --chip esp32c5 -p COM&lt;n&gt; --baud 460800 write_flash \
   --flash_mode dio --flash_freq 80m --flash_size 4MB \
-  0x2000  bootloader.bin \
-  0x8000  partition-table.bin \
-  0x10000 poseidon_c5_node.bin</pre>
-      Bins are in <a href="bin/trident-c5/" style="color:var(--accent2);">bin/trident-c5/</a>.
+  0x2000   bootloader.bin \
+  0x8000   partition-table.bin \
+  0x10000  poseidon_c5_node.bin</pre>
+      <span style="color:var(--dim);">(On Linux/macOS the port looks like <code>/dev/ttyACM0</code> or <code>/dev/ttyUSB0</code>.)</span>
     </div>
   </div>
 

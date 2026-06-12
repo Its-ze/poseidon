@@ -54,6 +54,21 @@ static volatile int s_pmkid_n = 0;
 static c5_hs_t s_hss[MAX_HSS];
 static volatile int s_hs_n = 0;
 
+/* v3 result buffers. Kept small/bounded like the others; the UI drains
+ * these via the c5_stas/c5_probes/c5_deauth_hits accessors. SPECTRUM is
+ * a single latest-batch snapshot, not a ring. */
+#define MAX_STAS    32
+#define MAX_PROBES  32
+#define MAX_DHITS   32
+static c5_sta_t s_stas[MAX_STAS];
+static volatile int s_sta_n = 0;
+static c5_probe_t s_probes[MAX_PROBES];
+static volatile int s_probe_n = 0;
+static c5_deauth_hit_t s_dhits[MAX_DHITS];
+static volatile int s_dhit_n = 0;
+static c5_spectrum_t s_spectrum = {};
+static volatile bool s_spectrum_valid = false;
+
 static volatile uint32_t s_last_status_frames  = 0;
 static volatile uint8_t  s_last_status_channel = 0;
 
@@ -194,6 +209,72 @@ static void handle_resp_hs(const c5_msg_t *m)
                   (unsigned)h->eapol_m2_len);
 }
 
+static void handle_resp_sta(const c5_msg_t *m)
+{
+    if (m->payload_len < (int)sizeof(c5_sta_t)) return;
+    const c5_sta_t *s = (const c5_sta_t *)m->payload;
+    portENTER_CRITICAL(&s_mux);
+    /* Dedup by (sta, bssid). */
+    for (int i = 0; i < s_sta_n; ++i) {
+        if (memcmp(s_stas[i].sta,   s->sta,   6) == 0 &&
+            memcmp(s_stas[i].bssid, s->bssid, 6) == 0) {
+            portEXIT_CRITICAL(&s_mux);
+            return;
+        }
+    }
+    if (s_sta_n >= MAX_STAS) {
+        memmove(s_stas, s_stas + 1, sizeof(c5_sta_t) * (MAX_STAS - 1));
+        s_sta_n = MAX_STAS - 1;
+    }
+    memcpy(&s_stas[s_sta_n++], s, sizeof(c5_sta_t));
+    portEXIT_CRITICAL(&s_mux);
+}
+
+static void handle_resp_probe(const c5_msg_t *m)
+{
+    if (m->payload_len < (int)sizeof(c5_probe_t)) return;
+    const c5_probe_t *p = (const c5_probe_t *)m->payload;
+    portENTER_CRITICAL(&s_mux);
+    /* Dedup by (src, ssid). */
+    for (int i = 0; i < s_probe_n; ++i) {
+        if (memcmp(s_probes[i].src, p->src, 6) == 0 &&
+            s_probes[i].ssid_len == p->ssid_len &&
+            memcmp(s_probes[i].ssid, p->ssid, p->ssid_len) == 0) {
+            portEXIT_CRITICAL(&s_mux);
+            return;
+        }
+    }
+    if (s_probe_n >= MAX_PROBES) {
+        memmove(s_probes, s_probes + 1, sizeof(c5_probe_t) * (MAX_PROBES - 1));
+        s_probe_n = MAX_PROBES - 1;
+    }
+    memcpy(&s_probes[s_probe_n++], p, sizeof(c5_probe_t));
+    portEXIT_CRITICAL(&s_mux);
+}
+
+static void handle_resp_deauth_hit(const c5_msg_t *m)
+{
+    if (m->payload_len < (int)sizeof(c5_deauth_hit_t)) return;
+    const c5_deauth_hit_t *d = (const c5_deauth_hit_t *)m->payload;
+    portENTER_CRITICAL(&s_mux);
+    if (s_dhit_n >= MAX_DHITS) {
+        memmove(s_dhits, s_dhits + 1, sizeof(c5_deauth_hit_t) * (MAX_DHITS - 1));
+        s_dhit_n = MAX_DHITS - 1;
+    }
+    memcpy(&s_dhits[s_dhit_n++], d, sizeof(c5_deauth_hit_t));
+    portEXIT_CRITICAL(&s_mux);
+}
+
+static void handle_resp_spectrum(const c5_msg_t *m)
+{
+    if (m->payload_len < (int)sizeof(c5_spectrum_t)) return;
+    portENTER_CRITICAL(&s_mux);
+    /* Latest-batch snapshot, not a ring. */
+    memcpy(&s_spectrum, m->payload, sizeof(c5_spectrum_t));
+    s_spectrum_valid = true;
+    portEXIT_CRITICAL(&s_mux);
+}
+
 /* ESP-NOW recv callback signature differs by ESP-IDF major version.
  *   IDF 4.x (stock espressif32@6.7.0): void(const uint8_t *mac, data, len)
  *   IDF 5.x (pioarduino 55.x):         void(const esp_now_recv_info_t*, ...)
@@ -220,8 +301,12 @@ static void on_recv(const uint8_t *mac, const uint8_t *data, int len)
     case C5_TYPE_RESP_AP:    handle_resp_ap(m);    break;
     case C5_TYPE_RESP_ZB:    handle_resp_zb(m);    break;
     case C5_TYPE_RESP_PONG: {
+        /* find_peer + last_seen write must be atomic vs evict_locked's
+         * array compaction, or idx goes stale and we clobber a neighbour. */
+        portENTER_CRITICAL(&s_mux);
         int idx = find_peer(mac);
         if (idx >= 0) s_peers[idx].last_seen = millis();
+        portEXIT_CRITICAL(&s_mux);
         break;
     }
     case C5_TYPE_RESP_STATUS: {
@@ -237,6 +322,10 @@ static void on_recv(const uint8_t *mac, const uint8_t *data, int len)
     }
     case C5_TYPE_RESP_PMKID: handle_resp_pmkid(m); break;
     case C5_TYPE_RESP_HS:    handle_resp_hs(m);    break;
+    case C5_TYPE_RESP_STA:        handle_resp_sta(m);        break;
+    case C5_TYPE_RESP_PROBE:      handle_resp_probe(m);      break;
+    case C5_TYPE_RESP_DEAUTH_HIT: handle_resp_deauth_hit(m); break;
+    case C5_TYPE_RESP_SPECTRUM:   handle_resp_spectrum(m);   break;
     }
 }
 
@@ -538,14 +627,43 @@ uint16_t c5_cmd_ciw(uint8_t channel, uint16_t duration_ms,
     return send_simple_cmd(C5_TYPE_CMD_CIW, (uint8_t *)&r, sizeof(r));
 }
 
-/* ---- v3 result accessors (no storage yet — return 0/empty until
- * the C5 firmware sends RESP_STA/PROBE/DEAUTH_HIT/SPECTRUM and the
- * S3-side handler + buffers are implemented). */
+/* ---- v3 result accessors ---- */
 
-int c5_stas(c5_sta_t *out, int max)              { (void)out; (void)max; return 0; }
-int c5_probes(c5_probe_t *out, int max)          { (void)out; (void)max; return 0; }
-int c5_deauth_hits(c5_deauth_hit_t *out, int max){ (void)out; (void)max; return 0; }
-bool c5_spectrum_get(c5_spectrum_t *out)         { (void)out; return false; }
+int c5_stas(c5_sta_t *out, int max)
+{
+    portENTER_CRITICAL(&s_mux);
+    int n = s_sta_n < max ? s_sta_n : max;
+    if (out && n > 0) memcpy(out, s_stas, n * sizeof(c5_sta_t));
+    int total = s_sta_n;
+    portEXIT_CRITICAL(&s_mux);
+    return out ? n : total;
+}
+int c5_probes(c5_probe_t *out, int max)
+{
+    portENTER_CRITICAL(&s_mux);
+    int n = s_probe_n < max ? s_probe_n : max;
+    if (out && n > 0) memcpy(out, s_probes, n * sizeof(c5_probe_t));
+    int total = s_probe_n;
+    portEXIT_CRITICAL(&s_mux);
+    return out ? n : total;
+}
+int c5_deauth_hits(c5_deauth_hit_t *out, int max)
+{
+    portENTER_CRITICAL(&s_mux);
+    int n = s_dhit_n < max ? s_dhit_n : max;
+    if (out && n > 0) memcpy(out, s_dhits, n * sizeof(c5_deauth_hit_t));
+    int total = s_dhit_n;
+    portEXIT_CRITICAL(&s_mux);
+    return out ? n : total;
+}
+bool c5_spectrum_get(c5_spectrum_t *out)
+{
+    portENTER_CRITICAL(&s_mux);
+    bool valid = s_spectrum_valid;
+    if (valid && out) *out = s_spectrum;
+    portEXIT_CRITICAL(&s_mux);
+    return valid;
+}
 
 int c5_aps(c5_ap_t *out, int max)
 {
@@ -587,6 +705,8 @@ void c5_clear_results(void)
 {
     portENTER_CRITICAL(&s_mux);
     s_ap_n = 0; s_zb_n = 0; s_pmkid_n = 0; s_hs_n = 0;
+    s_sta_n = 0; s_probe_n = 0; s_dhit_n = 0;
+    s_spectrum_valid = false;
     s_dbg_resp_ap_frames = 0;
     s_dbg_raw_ap_records = 0;
     portEXIT_CRITICAL(&s_mux);

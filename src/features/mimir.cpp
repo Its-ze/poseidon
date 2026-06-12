@@ -301,48 +301,41 @@ static bool ap_matches_filter(const APRow &a)
 
 /* ---- screen drawers ---- */
 
-static void draw_main(void)
+static void draw_main(bool full)
 {
-    ui_clear_body();
     auto &d = M5Cardputer.Display;
 
-    d.setTextColor(T_ACCENT2, T_BG);
-    d.setCursor(4, BODY_Y + 2);
-    d.print("MIMIR");
-    d.drawFastHLine(4, BODY_Y + 12, 50, T_ACCENT2);
-
-    /* Connection status. */
-    d.setTextColor(s_connected ? T_GOOD : T_BAD, T_BG);
-    d.setCursor(60, BODY_Y + 2);
-    d.print(s_connected ? "CONNECTED" : "DISCONNECTED");
-
-    /* Status fields. */
-    d.setTextColor(T_FG, T_BG);
-    d.setCursor(4, BODY_Y + 20);
-    d.printf("State: %s", s_status.state[0] ? s_status.state : "---");
-    d.setCursor(4, BODY_Y + 32);
-    d.printf("Bat: %d%%  GPS: %d sats", s_status.battery, s_status.gps_sats);
-    d.setCursor(4, BODY_Y + 44);
-    d.printf("HS: %d  Cracked: %d", s_status.handshakes, s_status.cracked);
-
-    /* Pocket mode. */
-    d.setTextColor(s_status.pocket_mode ? T_WARN : T_DIM, T_BG);
-    d.setCursor(4, BODY_Y + 56);
-    d.printf("Pocket: %s", s_status.pocket_mode ? "ON" : "off");
-
-    /* Live message. */
-    if (s_live_msg[0]) {
-        d.setTextColor(s_live_color, T_BG);
-        d.setCursor(4, BODY_Y + 72);
-        d.printf("%.38s", s_live_msg);
+    if (full) {
+        ui_clear_body();
+        d.setTextColor(T_ACCENT2, T_BG);
+        d.setCursor(4, BODY_Y + 2);
+        d.print("MIMIR");
+        d.drawFastHLine(4, BODY_Y + 12, 50, T_ACCENT2);
+        ui_draw_footer("S=scan T=tgt A=atk L=loot Q=pkt I=stat `=exit");
     }
 
-    ui_draw_footer("S=scan T=tgt A=atk L=loot Q=pkt I=stat `=exit");
+    /* Connection status. */
+    ui_text_w(60, BODY_Y + 2, SCR_W - 64, s_connected ? T_GOOD : T_BAD,
+              s_connected ? "CONNECTED" : "DISCONNECTED");
+
+    /* Status fields. */
+    ui_text_w(4, BODY_Y + 20, SCR_W - 8, T_FG,
+              "State: %s", s_status.state[0] ? s_status.state : "---");
+    ui_text_w(4, BODY_Y + 32, SCR_W - 8, T_FG,
+              "Bat: %d%%  GPS: %d sats", s_status.battery, s_status.gps_sats);
+    ui_text_w(4, BODY_Y + 44, SCR_W - 8, T_FG,
+              "HS: %d  Cracked: %d", s_status.handshakes, s_status.cracked);
+
+    /* Pocket mode. */
+    ui_text_w(4, BODY_Y + 56, SCR_W - 8, s_status.pocket_mode ? T_WARN : T_DIM,
+              "Pocket: %s", s_status.pocket_mode ? "ON" : "off");
+
+    /* Live message. */
+    ui_text_w(4, BODY_Y + 72, SCR_W - 8, s_live_color, "%.38s", s_live_msg);
 }
 
-static void draw_targets(void)
+static void draw_targets(bool full)
 {
-    ui_clear_body();
     auto &d = M5Cardputer.Display;
 
     /* Build filtered index. */
@@ -351,6 +344,21 @@ static void draw_targets(void)
     for (int i = 0; i < s_target_count; ++i) {
         if (ap_matches_filter(s_targets[i])) idx[n++] = i;
     }
+
+    /* Repaint only when the selection or list content changed. */
+    static int  last_sel = -1, last_n = -1, last_count = -1;
+    static char last_filter[33] = "";
+    if (!full && s_target_sel == last_sel && n == last_n &&
+        s_target_count == last_count &&
+        strcmp(s_filter, last_filter) == 0) {
+        return;
+    }
+    last_sel   = s_target_sel;
+    last_n     = n;
+    last_count = s_target_count;
+    strncpy(last_filter, s_filter, sizeof(last_filter));
+
+    ui_clear_body();
 
     /* Title. */
     d.setTextColor(T_ACCENT, T_BG);
@@ -439,10 +447,19 @@ static void draw_targets(void)
     ui_draw_footer(";/.=move ENTER=sel F=filter S=scan `=back");
 }
 
-static void draw_attack(void)
+static void draw_attack(bool full)
 {
-    ui_clear_body();
     auto &d = M5Cardputer.Display;
+
+    /* Target can only change underneath us via incoming scan events —
+     * repaint when that happens, otherwise the screen is static. */
+    static int last_count = -1, last_sel = -1;
+    if (!full && s_target_count == last_count && s_target_sel == last_sel)
+        return;
+    last_count = s_target_count;
+    last_sel   = s_target_sel;
+
+    ui_clear_body();
 
     /* Build filtered index to find selected AP. */
     int idx[MIMIR_MAX_APS];
@@ -488,22 +505,24 @@ static void draw_attack(void)
     ui_draw_footer("D=dth H=hs P=pmkid E=evil B=beacon `=back");
 }
 
-static void draw_live(void)
+static void draw_live(bool full)
 {
-    ui_clear_body();
     auto &d = M5Cardputer.Display;
 
-    d.setTextColor(T_BAD, T_BG);
-    d.setCursor(4, BODY_Y + 2);
-    d.printf("LIVE: %s", s_attack_mode);
-    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_BAD);
+    if (full) {
+        ui_clear_body();
+        d.setTextColor(T_BAD, T_BG);
+        d.setCursor(4, BODY_Y + 2);
+        d.printf("LIVE: %s", s_attack_mode);
+        d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_BAD);
+        ui_draw_footer("X=stop `=minimize");
+    }
 
     /* Live message. */
-    d.setTextColor(s_live_color, T_BG);
-    d.setCursor(4, BODY_Y + 22);
-    d.printf("%.38s", s_live_msg);
+    ui_text_w(4, BODY_Y + 22, SCR_W - 8, s_live_color, "%.38s", s_live_msg);
 
     /* Animated TX indicator bars (like jammer). */
+    d.fillRect(10, BODY_Y + 62, 8 * 28, 29, T_BG);
     for (int i = 0; i < 8; ++i) {
         int h = (esp_random() % 24) + 4;
         int x = 10 + i * 28;
@@ -513,37 +532,35 @@ static void draw_live(void)
 
     /* Hex stream backdrop for that attack vibe. */
     ui_hexstream(4, BODY_Y + 40, SCR_W - 8, 20, T_DIM);
-
-    ui_draw_footer("X=stop `=minimize");
 }
 
-static void draw_status_screen(void)
+static void draw_status_screen(bool full)
 {
-    ui_clear_body();
     auto &d = M5Cardputer.Display;
 
-    d.setTextColor(T_ACCENT, T_BG);
-    d.setCursor(4, BODY_Y + 2);
-    d.print("MIMIR STATUS");
-    d.drawFastHLine(4, BODY_Y + 12, 110, T_ACCENT);
+    if (full) {
+        ui_clear_body();
+        d.setTextColor(T_ACCENT, T_BG);
+        d.setCursor(4, BODY_Y + 2);
+        d.print("MIMIR STATUS");
+        d.drawFastHLine(4, BODY_Y + 12, 110, T_ACCENT);
+        ui_draw_footer("auto-refresh 2s  `=back");
+    }
 
-    d.setTextColor(T_FG, T_BG);
-    d.setCursor(4, BODY_Y + 20);
-    d.printf("Connected: %s", s_connected ? "YES" : "NO");
-    d.setCursor(4, BODY_Y + 32);
-    d.printf("State    : %s", s_status.state[0] ? s_status.state : "---");
-    d.setCursor(4, BODY_Y + 44);
-    d.printf("Battery  : %d%%", s_status.battery);
-    d.setCursor(4, BODY_Y + 56);
-    d.printf("GPS sats : %d", s_status.gps_sats);
-    d.setCursor(4, BODY_Y + 68);
-    d.printf("Handshake: %d", s_status.handshakes);
-    d.setCursor(4, BODY_Y + 80);
-    d.printf("Cracked  : %d", s_status.cracked);
-    d.setCursor(4, BODY_Y + 92);
-    d.printf("Pocket   : %s", s_status.pocket_mode ? "ON" : "off");
-
-    ui_draw_footer("auto-refresh 2s  `=back");
+    ui_text_w(4, BODY_Y + 20, SCR_W - 8, T_FG,
+              "Connected: %s", s_connected ? "YES" : "NO");
+    ui_text_w(4, BODY_Y + 32, SCR_W - 8, T_FG,
+              "State    : %s", s_status.state[0] ? s_status.state : "---");
+    ui_text_w(4, BODY_Y + 44, SCR_W - 8, T_FG,
+              "Battery  : %d%%", s_status.battery);
+    ui_text_w(4, BODY_Y + 56, SCR_W - 8, T_FG,
+              "GPS sats : %d", s_status.gps_sats);
+    ui_text_w(4, BODY_Y + 68, SCR_W - 8, T_FG,
+              "Handshake: %d", s_status.handshakes);
+    ui_text_w(4, BODY_Y + 80, SCR_W - 8, T_FG,
+              "Cracked  : %d", s_status.cracked);
+    ui_text_w(4, BODY_Y + 92, SCR_W - 8, T_FG,
+              "Pocket   : %s", s_status.pocket_mode ? "ON" : "off");
 }
 
 /* ---- main feature entry point ---- */
@@ -567,6 +584,7 @@ void feat_mimir(void)
 
     MimirScreen screen = MS_MAIN;
     MimirScreen prev   = MS_MAIN;
+    int         drawn  = -1;   /* last screen painted; -1 forces full draw */
     send_hello();
     uint32_t last_draw   = 0;
     uint32_t last_status = 0;
@@ -658,6 +676,7 @@ void feat_mimir(void)
                 } else {
                     s_filter[0] = '\0';
                 }
+                drawn = -1;  /* input_line painted over the body */
                 last_draw = 0;
             }
             else if (k == 's' || k == 'S') {
@@ -717,16 +736,19 @@ void feat_mimir(void)
             break;
         }
 
-        /* Throttled redraw. */
+        /* Throttled redraw. Full clear + static chrome only on screen
+         * transition; per-tick passes repaint dynamic fields in place. */
         uint32_t now = millis();
         if (now - last_draw > 100) {
+            bool full = ((int)screen != drawn);
             switch (screen) {
-            case MS_MAIN:    draw_main();          break;
-            case MS_TARGETS: draw_targets();       break;
-            case MS_ATTACK:  draw_attack();        break;
-            case MS_LIVE:    draw_live();           break;
-            case MS_STATUS:  draw_status_screen(); break;
+            case MS_MAIN:    draw_main(full);          break;
+            case MS_TARGETS: draw_targets(full);       break;
+            case MS_ATTACK:  draw_attack(full);        break;
+            case MS_LIVE:    draw_live(full);          break;
+            case MS_STATUS:  draw_status_screen(full); break;
             }
+            drawn = (int)screen;
             ui_draw_status("mimir", s_connected ? "ok" : "---");
             last_draw = now;
         }

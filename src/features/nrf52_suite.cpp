@@ -177,6 +177,7 @@ void feat_nrf52_sniff(void)
 
     uint32_t pkt_count = 0;
     uint32_t last_draw = 0;
+    uint32_t last_pkt_drawn = 0;
 
     while (true) {
         while (NRF52Hardware::available()) {
@@ -184,8 +185,9 @@ void feat_nrf52_sniff(void)
             if (line.startsWith("PKT:")) {
                 pkt_count++;
 
-                if (millis() - last_draw > 100) {
+                if (millis() - last_draw > 100 && pkt_count != last_pkt_drawn) {
                     last_draw = millis();
+                    last_pkt_drawn = pkt_count;
 
                     d.fillRect(0, BODY_Y + 16, SCR_W, 10, T_BG);
                     d.setTextColor(T_GOOD, T_BG);

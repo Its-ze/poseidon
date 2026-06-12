@@ -17,6 +17,7 @@
 #include "menu.h"
 #include "gps.h"
 #include "../wifi_wardrive.h"
+#include "../c5_cmd.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <SD.h>
@@ -36,6 +37,7 @@ int      g_wdr_ap_count = 0;
 static volatile bool s_running = false;
 static volatile uint32_t s_beacons = 0;
 static volatile uint8_t  s_current_ch = 1;
+static volatile int      s_5g_count = 0;   /* distinct 5 GHz APs from the C5 */
 static File       s_csv;
 static char       s_csv_path[64] = {0};
 
@@ -191,6 +193,50 @@ static void hop_task(void *)
     vTaskDelete(nullptr);
 }
 
+/* Fold the C5 satellite's collected 5 GHz APs into the shared wardrive
+ * table so they land in the same WiGLE CSV — deduped by BSSID, tagged
+ * with the current GPS fix (same null-island guard as 2.4 GHz rows).
+ * Best-effort: the C5 talks ESP-NOW on ch1 but wardrive channel-hops
+ * 1-13, so 5 GHz sightings are harvested on the hop's ch1 passes. Runs
+ * from the UI task — shares s_wdr_mux with the promisc ISR. */
+static void merge_c5_5g(void)
+{
+    c5_ap_t buf[32];
+    int n = c5_aps(buf, 32);
+    if (n <= 0) return;
+
+    gps_fix_t g;
+    bool have_gps = gps_snapshot(&g);
+
+    for (int i = 0; i < n; ++i) {
+        if (!buf[i].is_5g) continue;
+        bool is_new = false;
+        portENTER_CRITICAL(&s_wdr_mux);
+        int idx = find_ap(buf[i].bssid);
+        if (idx < 0) {
+            if (s_ap_count >= WARDRIVE_MAX_APS) { portEXIT_CRITICAL(&s_wdr_mux); break; }
+            idx = s_ap_count++;
+            is_new = true;
+            memset(&s_aps[idx], 0, sizeof(wdr_ap_t));
+            memcpy(s_aps[idx].bssid, buf[i].bssid, 6);
+            s_aps[idx].first_seen = millis();
+        }
+        wdr_ap_t &a = s_aps[idx];
+        a.last_seen = millis();
+        a.channel   = buf[i].channel;
+        a.auth      = buf[i].auth;
+        strncpy(a.ssid, buf[i].ssid, sizeof(a.ssid) - 1);
+        a.ssid[sizeof(a.ssid) - 1] = '\0';
+        if (buf[i].rssi > a.rssi || a.rssi == 0) {
+            a.rssi = buf[i].rssi;
+            if (have_gps) { a.lat = g.lat_deg; a.lon = g.lon_deg; a.alt = g.alt_m; }
+            a.dirty = true;
+        }
+        portEXIT_CRITICAL(&s_wdr_mux);
+        if (is_new) s_5g_count++;
+    }
+}
+
 void feat_wifi_wardrive(void)
 {
     /* SD mount BEFORE radio_switch — WiFi init grabs ~30 KB of heap and
@@ -223,6 +269,7 @@ void feat_wifi_wardrive(void)
      * a fresh CSV; only new sightings flip dirty=true for the new file. */
     s_beacons  = 0;
     s_current_ch = 1;
+    s_5g_count = 0;
 
     /* Explicit MASK_ALL filter. On IDF 5.5, NOT setting a filter (or
      * passing nullptr) silently disables capture for some frame types
@@ -238,15 +285,40 @@ void feat_wifi_wardrive(void)
     s_running = true;
     xTaskCreate(hop_task, "wdr_hop", 3072, nullptr, 4, nullptr);
 
+    /* Bring up the C5 ESP-NOW link AFTER the hop task has its stack — ESP-NOW
+     * init eats internal SRAM, and doing it first starved xTaskCreate(hop_task)
+     * (silent fail → wardrive froze on channel 1). Idempotent; if a satellite
+     * is present it feeds us 5 GHz APs. Note: c5_begin re-pins ch1 once, but
+     * the hop task immediately resumes sweeping. */
+    c5_begin();
+
     ui_clear_body();
     ui_draw_footer("ESC=stop  F=flush  any=ignored");
 
     uint32_t last_redraw = 0;
     uint32_t last_flush  = 0;
+    uint32_t last_c5_scan = 0;
+    uint32_t last_c5_merge = 0;
     bool dirty = true;
     while (true) {
         gps_poll();
         uint32_t now = millis();
+
+        /* C5 5 GHz augmentation — opportunistic over the channel hop. The
+         * scan command only reaches the satellite while we're parked on
+         * its ESP-NOW channel (1); merge whatever streams back. */
+        if (c5_any_online()) {
+            if (s_current_ch == 1 && now - last_c5_scan > 6000) {
+                last_c5_scan = now;
+                merge_c5_5g();          /* harvest the prior batch first */
+                c5_clear_results();
+                c5_cmd_scan_5g(2000);
+            }
+            if (now - last_c5_merge > 1000) {
+                last_c5_merge = now;
+                merge_c5_5g();
+            }
+        }
 
         if (now - last_flush > 3000) {
             last_flush = now;
@@ -266,9 +338,10 @@ void feat_wifi_wardrive(void)
                 dirty = false;
             }
             d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 18); d.printf("APs:     %-5d",   s_ap_count);
+            d.setCursor(4, BODY_Y + 18); d.printf("APs: %-5d  5G: %-4d", s_ap_count, s_5g_count);
             d.setCursor(4, BODY_Y + 30); d.printf("Beacons: %-7lu",  (unsigned long)s_beacons);
-            d.setCursor(4, BODY_Y + 42); d.printf("Channel: %-2u",   s_current_ch);
+            d.setCursor(4, BODY_Y + 42); d.printf("Channel: %-2u  C5:%-3s",
+                                                   s_current_ch, c5_any_online() ? "on" : "off");
             const gps_fix_t &g = gps_get();
             d.setTextColor(g.valid ? T_GOOD : T_DIM, T_BG);
             d.setCursor(4, BODY_Y + 54);

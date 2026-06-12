@@ -147,7 +147,6 @@ void feat_uart_shell(void)
     constexpr int ROWS = (BODY_H) / 10;
 
     auto render = [&]() {
-        ui_clear_body();
         int total = (int)lines.size() + 1;      /* +1 for cur */
         int top = total > ROWS ? total - ROWS : 0;
         int y = BODY_Y + 2;
@@ -163,6 +162,7 @@ void feat_uart_shell(void)
     render();
 
     /* Main loop. */
+    bool dirty = false;
     for (;;) {
         /* Drain UART RX. */
         while (uart1.available()) {
@@ -179,6 +179,7 @@ void feat_uart_shell(void)
                 char hex[6]; snprintf(hex, sizeof(hex), "<%02X>", (uint8_t)c);
                 cur += hex;
             }
+            dirty = true;
         }
 
         uint16_t k = input_poll();
@@ -206,9 +207,10 @@ void feat_uart_shell(void)
 
         /* Periodic re-render if incoming data arrived. */
         static uint32_t last_render = 0;
-        if (millis() - last_render > 50) {
+        if (dirty && millis() - last_render > 50) {
             render();
             last_render = millis();
+            dirty = false;
         }
         delay(1);
     }

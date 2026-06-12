@@ -171,13 +171,25 @@ int lora_begin(const lora_config_t &cfg)
         delete s_radio; s_radio = nullptr;
         delete s_mod;   s_mod   = nullptr;
         lora_rf_switch(false);
+        /* Release GPIOs claimed for this aborted bring-up so the next
+         * radio domain (nRF24 shares G4+G6) doesn't fight an output-
+         * driven pin on the HSPI bus. RST is parked LOW (chip held in
+         * reset), BUSY/DIO1 back to high-Z; NSS released to INPUT since
+         * the next begin() reclaims it. */
+        pinMode(LORA_RST, OUTPUT); digitalWrite(LORA_RST, LOW);
+        pinMode(LORA_BUSY, INPUT);
+        pinMode(LORA_DIO1, INPUT);
+        pinMode(LORA_NSS, INPUT);
+        s_up = false;
         return st;
     }
     /* SX1262 errata 0x8B5: enable the "RX sensitivity improvement"
      * register write. Worth ~3 dBm at the antenna. Meshtastic does this
      * in SX126xInterface.cpp:113. RadioLib doesn't expose a helper so
      * we go through the Module's SPI register-write directly. */
-    s_mod->SPIsetRegValue(0x8B5, 0x01, 0, 0);
+    int errata_st = s_mod->SPIsetRegValue(0x8B5, 0x01, 0, 0);
+    if (errata_st != RADIOLIB_ERR_NONE)
+        Serial.printf("[lora] errata 0x8B5 -> %d\n", errata_st);
     /* Boosted RX gain — SX1262 default is power-saving (low gain).
      * Boosted costs a few mA but adds ~3 dB sensitivity. POSEIDON is
      * not a battery-leaf node; we always want the better hearing. */

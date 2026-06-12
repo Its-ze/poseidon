@@ -563,7 +563,18 @@ void feat_saltyjack_responder(void)
     auto &d = M5Cardputer.Display;
     sj_frame("RESPONDER");
 
+    /* IP line, info-style */
+    d.setTextColor(SJ_FG_DIM, SJ_BG);
+    d.setCursor(SJ_CONTENT_X, SJ_CONTENT_Y);
+    d.print("ip ");
+    d.setTextColor(SJ_ACCENT, SJ_BG);
+    d.print(our_ip().toString().c_str());
+    sj_footer("`=stop");
+
     uint32_t last_draw = 0;
+    bool first = true;
+    uint32_t p_llmnr = 0, p_nbns = 0, p_smb = 0, p_hash = 0;
+    char p_sig[176] = "";
     while (true) {
         handle_llmnr();
         handle_nbns();
@@ -571,39 +582,44 @@ void feat_saltyjack_responder(void)
 
         if (millis() - last_draw > 250) {
             last_draw = millis();
-            sj_frame("RESPONDER");
-
-            /* IP line, info-style */
-            d.setTextColor(SJ_FG_DIM, SJ_BG);
-            d.setCursor(SJ_CONTENT_X, SJ_CONTENT_Y);
-            d.print("ip ");
-            d.setTextColor(SJ_ACCENT, SJ_BG);
-            d.print(our_ip().toString().c_str());
 
             /* Counters */
-            sj_row             (SJ_CONTENT_Y + 11, "llmnr   ", s_llmnr_ct);
-            sj_row             (SJ_CONTENT_Y + 20, "nbns    ", s_nbns_ct);
-            sj_row             (SJ_CONTENT_Y + 29, "smb conn", s_smb_conn_ct);
-            sj_row_highlight   (SJ_CONTENT_Y + 38, "HASHES  ", s_hash_ct);
-
-            /* Last capture in a labeled info box */
-            if (s_last_user[0]) {
-                int by = SJ_CONTENT_Y + 55;
-                sj_info_box(SJ_FRAME_X + 4, by, SJ_FRAME_W - 8, 28, "LAST CAPTURE");
-                char ud[48];
-                snprintf(ud, sizeof(ud), "%.18s\\%.12s", s_last_domain, s_last_user);
-                sj_info_row(SJ_FRAME_X + 4, by, 0, "user", ud);
-                sj_info_row(SJ_FRAME_X + 4, by, 1, "ws  ", s_last_workstation);
-            } else if (s_last_query[0]) {
-                sj_print_info(SJ_CONTENT_Y + 58, "waiting for auth...");
-                d.setTextColor(SJ_FG_DIM, SJ_BG);
-                d.setCursor(SJ_CONTENT_X, SJ_CONTENT_Y + 68);
-                d.printf("q: %.22s", s_last_query);
-            } else {
-                sj_print_info(SJ_CONTENT_Y + 58, "listening on LAN");
+            if (first || s_llmnr_ct != p_llmnr || s_nbns_ct != p_nbns ||
+                s_smb_conn_ct != p_smb || s_hash_ct != p_hash) {
+                sj_row             (SJ_CONTENT_Y + 11, "llmnr   ", s_llmnr_ct);
+                sj_row             (SJ_CONTENT_Y + 20, "nbns    ", s_nbns_ct);
+                sj_row             (SJ_CONTENT_Y + 29, "smb conn", s_smb_conn_ct);
+                sj_row_highlight   (SJ_CONTENT_Y + 38, "HASHES  ", s_hash_ct);
+                p_llmnr = s_llmnr_ct; p_nbns = s_nbns_ct;
+                p_smb = s_smb_conn_ct; p_hash = s_hash_ct;
             }
 
-            sj_footer("`=stop");
+            /* Last capture in a labeled info box */
+            char sig[176];
+            snprintf(sig, sizeof(sig), "%s|%s|%s|%s",
+                     s_last_user, s_last_domain, s_last_workstation, s_last_query);
+            if (first || strcmp(sig, p_sig) != 0) {
+                d.fillRect(SJ_FRAME_X + SJ_FRAME_TH, SJ_CONTENT_Y + 52,
+                           SJ_FRAME_W - 2 * SJ_FRAME_TH, 34, SJ_BG);
+                if (s_last_user[0]) {
+                    int by = SJ_CONTENT_Y + 55;
+                    sj_info_box(SJ_FRAME_X + 4, by, SJ_FRAME_W - 8, 28, "LAST CAPTURE");
+                    char ud[48];
+                    snprintf(ud, sizeof(ud), "%.18s\\%.12s", s_last_domain, s_last_user);
+                    sj_info_row(SJ_FRAME_X + 4, by, 0, "user", ud);
+                    sj_info_row(SJ_FRAME_X + 4, by, 1, "ws  ", s_last_workstation);
+                } else if (s_last_query[0]) {
+                    sj_print_info(SJ_CONTENT_Y + 58, "waiting for auth...");
+                    d.setTextColor(SJ_FG_DIM, SJ_BG);
+                    d.setCursor(SJ_CONTENT_X, SJ_CONTENT_Y + 68);
+                    d.printf("q: %.22s", s_last_query);
+                } else {
+                    sj_print_info(SJ_CONTENT_Y + 58, "listening on LAN");
+                }
+                strncpy(p_sig, sig, sizeof(p_sig) - 1);
+            }
+
+            first = false;
         }
 
         uint16_t k = input_poll();

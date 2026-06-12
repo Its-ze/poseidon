@@ -320,13 +320,18 @@ static int bd_pick_list(const char *title,
         if (cursor >= top + rows) top = cursor - rows + 1;
 
         if (top != last_top || cursor != last_cursor) {
-            d.fillRect(0, BODY_Y + 16, SCR_W, rows * row_h + 2, T_BG);
-            for (int i = 0; i < rows && (top + i) < count; ++i) {
+            for (int i = 0; i < rows; ++i) {
                 int idx = top + i;
                 int y = BODY_Y + 18 + i * row_h;
+                if (idx >= count) {
+                    d.fillRect(0, y - 1, SCR_W, row_h, T_BG);
+                    continue;
+                }
                 if (idx == cursor) {
-                    d.fillRect(2, y - 1, SCR_W - 4, row_h, T_SEL_BG);
+                    d.fillRect(0, y - 1, SCR_W, row_h, T_SEL_BG);
                     d.drawRect(2, y - 1, SCR_W - 4, row_h, T_SEL_BD);
+                } else {
+                    d.fillRect(0, y - 1, SCR_W, row_h, T_BG);
                 }
                 d.setTextColor(idx == cursor ? T_FG : T_DIM, idx == cursor ? T_SEL_BG : T_BG);
                 d.setCursor(6, y);
@@ -434,25 +439,60 @@ static void bd_setup_hid(const char *name)
 }
 
 /* ===== Status panel ===== */
-static void bd_draw_status(const char *payload_name, const char *state, uint16_t color)
+/* Static chrome (title + rule + payload name) is painted once on the
+ * first call / on `force`. Subsequent calls overwrite only the live
+ * fields (peer, counters, state) padded over their own background, so
+ * the panel never blanks-then-repaints. */
+static bool     s_bd_status_init = false;
+static char     s_bd_last_peer[24] = {0};
+static char     s_bd_last_state[40] = {0};
+static int      s_bd_last_lines = -1;
+static uint32_t s_bd_last_keys = 0xFFFFFFFF;
+static uint16_t s_bd_last_color = 0;
+
+static void bd_draw_status_force(const char *payload_name, const char *state,
+                                 uint16_t color, bool force)
 {
     auto &d = M5Cardputer.Display;
-    d.fillRect(0, BODY_Y, SCR_W, 80, T_BG);
-    d.setTextColor(T_ACCENT, T_BG);
-    d.setCursor(4, BODY_Y + 2); d.print("BLUEDUCKY");
-    d.drawFastHLine(4, BODY_Y + 12, 110, T_ACCENT);
-    d.setTextColor(T_FG, T_BG);
-    d.setCursor(4, BODY_Y + 18);
-    d.printf("pld: %.22s", payload_name);
-    d.setTextColor(s_connected ? T_GOOD : T_WARN, T_BG);
-    d.setCursor(4, BODY_Y + 30);
-    d.printf("peer: %s", s_connected && s_peer_mac[0] ? s_peer_mac : "(none)");
-    d.setTextColor(T_DIM, T_BG);
-    d.setCursor(4, BODY_Y + 42);
-    d.printf("lines:%d  keys:%lu", s_lines_sent, (unsigned long)s_keys_sent);
-    d.setTextColor(color, T_BG);
-    d.setCursor(4, BODY_Y + 54);
-    d.print(state);
+    if (force || !s_bd_status_init) {
+        d.fillRect(0, BODY_Y, SCR_W, 80, T_BG);
+        d.setTextColor(T_ACCENT, T_BG);
+        d.setCursor(4, BODY_Y + 2); d.print("BLUEDUCKY");
+        d.drawFastHLine(4, BODY_Y + 12, 110, T_ACCENT);
+        d.setTextColor(T_FG, T_BG);
+        d.setCursor(4, BODY_Y + 18);
+        d.printf("pld: %.22s", payload_name);
+        s_bd_status_init = true;
+        s_bd_last_peer[0] = '\0';
+        s_bd_last_state[0] = '\0';
+        s_bd_last_lines = -1;
+        s_bd_last_keys = 0xFFFFFFFF;
+        s_bd_last_color = 0;
+    }
+
+    const char *peer = s_connected && s_peer_mac[0] ? s_peer_mac : "(none)";
+    if (strncmp(peer, s_bd_last_peer, sizeof(s_bd_last_peer)) != 0) {
+        ui_text_w(4, BODY_Y + 30, SCR_W - 8, s_connected ? T_GOOD : T_WARN, "peer: %s", peer);
+        strncpy(s_bd_last_peer, peer, sizeof(s_bd_last_peer) - 1);
+        s_bd_last_peer[sizeof(s_bd_last_peer) - 1] = '\0';
+    }
+    if (s_lines_sent != s_bd_last_lines || s_keys_sent != s_bd_last_keys) {
+        ui_text_w(4, BODY_Y + 42, SCR_W - 8, T_DIM, "lines:%d  keys:%lu",
+                  s_lines_sent, (unsigned long)s_keys_sent);
+        s_bd_last_lines = s_lines_sent;
+        s_bd_last_keys = s_keys_sent;
+    }
+    if (color != s_bd_last_color || strncmp(state, s_bd_last_state, sizeof(s_bd_last_state)) != 0) {
+        ui_text_w(4, BODY_Y + 54, SCR_W - 8, color, "%s", state);
+        s_bd_last_color = color;
+        strncpy(s_bd_last_state, state, sizeof(s_bd_last_state) - 1);
+        s_bd_last_state[sizeof(s_bd_last_state) - 1] = '\0';
+    }
+}
+
+static void bd_draw_status(const char *payload_name, const char *state, uint16_t color)
+{
+    bd_draw_status_force(payload_name, state, color, false);
 }
 
 /* Wait for the target to accept the advertisement / Just-Works bond.
@@ -577,7 +617,8 @@ void feat_ble_blueducky(void)
 
     /* Bring up advertising. */
     bd_setup_hid(s_disguises[disg]);
-    bd_draw_status(pname, "advertising...", T_WARN);
+    s_bd_status_init = false;
+    bd_draw_status_force(pname, "advertising...", T_WARN, true);
 
     /* Wait up to 30s for the target to bond. */
     if (!bd_wait_connect(pname, 30000)) {

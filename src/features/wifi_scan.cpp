@@ -189,28 +189,81 @@ static bool ap_matches_filter(const ap_t &a)
     return false;
 }
 
-/* Render a 10-row window into the filtered list, centered on cursor. */
-static void draw_list(int cursor)
+#define SCAN_ROWS 9
+
+/* Build the filtered index list (visible items). Returns count. */
+static int build_filtered(int *idx)
 {
-    ui_clear_body();
-    auto &d = M5Cardputer.Display;
-
-    /* Header row with filter status. */
-    d.setTextColor(T_ACCENT, T_BG);
-    d.setCursor(4, BODY_Y + 2);
-    d.printf("APs %d", s_ap_count);
-    if (s_filter[0] || s_filter_open_only) {
-        d.setTextColor(T_WARN, T_BG);
-        d.printf("  filter:%s%s", s_filter, s_filter_open_only ? "+open" : "");
-    }
-
-    /* Build filtered index list so cursor navigates visible items. */
-    int idx[MAX_APS];
     int n = 0;
     for (int i = 0; i < s_ap_count; ++i) {
         if (ap_matches_filter(s_aps[i])) idx[n++] = i;
     }
+    return n;
+}
+
+/* Header row with AP count + filter status. Overwritten in place. */
+static void draw_list_header(void)
+{
+    char buf[40];
+    if (s_filter[0] || s_filter_open_only) {
+        snprintf(buf, sizeof(buf), "APs %d  filter:%s%s", s_ap_count,
+                 s_filter, s_filter_open_only ? "+open" : "");
+    } else {
+        snprintf(buf, sizeof(buf), "APs %d", s_ap_count);
+    }
+    ui_text_w(4, BODY_Y + 2, SCR_W - 8,
+              (s_filter[0] || s_filter_open_only) ? T_WARN : T_ACCENT, "%s", buf);
+}
+
+/* Paint one AP row in full over its own background (no body clear). */
+static void draw_ap_row(int r, const int *idx, int first, int cursor)
+{
+    auto &d = M5Cardputer.Display;
+    int ai = idx[first + r];
+    const ap_t &a = s_aps[ai];
+    int y = BODY_Y + 14 + r * 11;
+    bool sel = (first + r == cursor);
+    uint16_t bg = sel ? 0x18A3 : T_BG;
+    uint16_t fg = sel ? T_ACCENT : T_FG;
+    d.fillRect(0, y - 1, SCR_W, 11, bg);
+
+    /* band tag | ch | rssi | auth | ssid */
+    d.setTextColor(a.is_5g ? T_ACCENT : T_DIM, bg);
+    d.setCursor(2, y);
+    d.print(a.is_5g ? "5G" : "2G");
+    d.setTextColor(T_DIM, bg);
+    d.setCursor(16, y);
+    d.printf("%3u", a.channel);
+    d.setTextColor(fg, bg);
+    d.setCursor(32, y);
+    d.printf("%4d", a.rssi);
+    d.setTextColor(a.auth == WIFI_AUTH_OPEN ? T_BAD : T_GOOD, bg);
+    d.setCursor(58, y);
+    d.printf("%-5s", auth_str(a.auth));
+    /* WPS marker — "W" in warn color tells operator the AP exposes
+     * WPS IE in its beacon and is a PIN-attack candidate (Pixie Dust
+     * / Reaver). Slot it between auth and SSID at col 88. */
+    if (a.wps) {
+        d.setTextColor(T_WARN, bg);
+        d.setCursor(88, y);
+        d.print("W");
+    }
+    d.setTextColor(fg, bg);
+    d.setCursor(94, y);
+    d.print(a.ssid);
+}
+
+/* Full window repaint over a one-time body clear. Used at entry and after
+ * any full-screen event (detail view, help modal) overwrites the body. */
+static void draw_list(int cursor)
+{
+    ui_clear_body();
+    draw_list_header();
+
+    int idx[MAX_APS];
+    int n = build_filtered(idx);
     if (n == 0) {
+        auto &d = M5Cardputer.Display;
         d.setTextColor(T_DIM, T_BG);
         d.setCursor(4, BODY_Y + 18);
         d.print(s_scan_running ? "scanning..." : "no matches");
@@ -219,45 +272,12 @@ static void draw_list(int cursor)
     if (cursor >= n) cursor = n - 1;
     if (cursor < 0) cursor = 0;
 
-    int rows = 9;
-    int first = cursor - rows / 2;
+    int first = cursor - SCAN_ROWS / 2;
     if (first < 0) first = 0;
-    if (first + rows > n) first = max(0, n - rows);
+    if (first + SCAN_ROWS > n) first = max(0, n - SCAN_ROWS);
 
-    for (int r = 0; r < rows && first + r < n; ++r) {
-        int ai = idx[first + r];
-        const ap_t &a = s_aps[ai];
-        int y = BODY_Y + 14 + r * 11;
-        bool sel = (first + r == cursor);
-        uint16_t bg = sel ? 0x18A3 : T_BG;
-        uint16_t fg = sel ? T_ACCENT : T_FG;
-        if (sel) d.fillRect(0, y - 1, SCR_W, 11, bg);
-
-        /* band tag | ch | rssi | auth | ssid */
-        d.setTextColor(a.is_5g ? T_ACCENT : T_DIM, bg);
-        d.setCursor(2, y);
-        d.print(a.is_5g ? "5G" : "2G");
-        d.setTextColor(T_DIM, bg);
-        d.setCursor(16, y);
-        d.printf("%3u", a.channel);
-        d.setTextColor(fg, bg);
-        d.setCursor(32, y);
-        d.printf("%4d", a.rssi);
-        d.setTextColor(a.auth == WIFI_AUTH_OPEN ? T_BAD : T_GOOD, bg);
-        d.setCursor(58, y);
-        d.printf("%-5s", auth_str(a.auth));
-        /* WPS marker — "W" in warn color tells operator the AP exposes
-         * WPS IE in its beacon and is a PIN-attack candidate (Pixie Dust
-         * / Reaver). Slot it between auth and SSID at col 88. */
-        if (a.wps) {
-            d.setTextColor(T_WARN, bg);
-            d.setCursor(88, y);
-            d.print("W");
-        }
-        d.setTextColor(fg, bg);
-        d.setCursor(94, y);
-        d.print(a.ssid);
-    }
+    for (int r = 0; r < SCAN_ROWS && first + r < n; ++r)
+        draw_ap_row(r, idx, first, cursor);
 }
 
 /* Other features use g_last_selected_ap. We set it here so the user
@@ -481,27 +501,67 @@ void feat_wifi_scan(void)
     }
 
     int cursor = s_saved_cursor;
-    uint32_t last_redraw = 0;
-    /* Track the last-painted state so we only redraw the list when
-     * something actually changed. Redrawing 9 identical rows every 400ms
-     * was the visible flicker on this screen. */
+    /* Track the last-painted state so we only redraw incrementally. The
+     * async scan task bumps s_ap_count as new APs land. A full draw_list
+     * (body clear) runs only at entry / after a modal; steady-state moves
+     * and new-AP arrivals repaint just the affected rows + header. */
     int  last_count   = -1;
     int  last_cursor  = -1;
+    int  last_first   = -1;
     bool last_running = !s_scan_running;      /* force first paint */
     while (true) {
-        bool state_changed = (s_ap_count != last_count)
-                          || (cursor != last_cursor)
-                          || (s_scan_running != last_running);
+        int idx[MAX_APS];
+        int n = build_filtered(idx);
+        int first = 0;
+        if (n > 0) {
+            if (cursor >= n) cursor = n - 1;
+            if (cursor < 0) cursor = 0;
+            first = cursor - SCAN_ROWS / 2;
+            if (first < 0) first = 0;
+            if (first + SCAN_ROWS > n) first = max(0, n - SCAN_ROWS);
+        } else {
+            cursor = 0;
+        }
 
-        /* Status bar updates itself (cached). Redraw the list only on
-         * actual state change, or every 2 s as a cheap refresh while
-         * the scan task is still discovering new APs. */
-        if (state_changed || (s_scan_running && millis() - last_redraw > 2000)) {
+        bool count_changed   = (s_ap_count != last_count);
+        bool cursor_changed  = (cursor != last_cursor);
+        bool first_changed   = (first != last_first);
+        bool running_changed = (s_scan_running != last_running);
+        bool state_changed = count_changed || cursor_changed ||
+                             first_changed || running_changed;
+
+        if (state_changed) {
             ui_draw_status(radio_name(), s_scan_running ? "..." : "done");
-            draw_list(cursor);
-            last_redraw = millis();
+            auto &d = M5Cardputer.Display;
+            /* last_count == -1 is the "force full rebuild" sentinel set by
+             * the filter/help key handlers — body changed wholesale. */
+            if (last_count < 0) {
+                draw_list(cursor);
+            } else if (n == 0) {
+                if (count_changed || running_changed) {
+                    d.fillRect(0, BODY_Y + 14, SCR_W, BODY_H - 14, T_BG);
+                    draw_list_header();
+                    d.setTextColor(T_DIM, T_BG);
+                    d.setCursor(4, BODY_Y + 18);
+                    d.print(s_scan_running ? "scanning..." : "no matches");
+                }
+            } else {
+                if (count_changed || running_changed) draw_list_header();
+                if (count_changed || first_changed) {
+                    for (int r = 0; r < SCAN_ROWS && first + r < n; ++r)
+                        draw_ap_row(r, idx, first, cursor);
+                } else {
+                    int old_r = last_cursor - first;
+                    int new_r = cursor - first;
+                    if (old_r >= 0 && old_r < SCAN_ROWS && first + old_r < n)
+                        draw_ap_row(old_r, idx, first, cursor);
+                    if (new_r >= 0 && new_r < SCAN_ROWS && first + new_r < n)
+                        draw_ap_row(new_r, idx, first, cursor);
+                }
+            }
             last_count   = s_ap_count;
             last_cursor  = cursor;
+            last_first   = first;
             last_running = s_scan_running;
         }
         /* Radar sweep in top-right while scanning. */
@@ -549,11 +609,11 @@ void feat_wifi_scan(void)
             last_count = -1;    /* filter changed — force redraw */
             break;
         case 's': case 'S': {
-            if (s_ap_count == 0) { ui_toast("no results", T_WARN, 800); break; }
+            if (s_ap_count == 0) { ui_toast("no results", T_WARN, 800); last_count = -1; break; }
             char path[64];
             File f = sdlog_open("wifiscan", "ssid,bssid,channel,rssi,auth",
                                 path, sizeof(path));
-            if (!f) { ui_toast("SD open failed", T_BAD, 1000); break; }
+            if (!f) { ui_toast("SD open failed", T_BAD, 1000); last_count = -1; break; }
             int wrote = 0;
             for (int i = 0; i < s_ap_count; ++i) {
                 if (!ap_matches_filter(s_aps[i])) continue;
@@ -569,6 +629,7 @@ void feat_wifi_scan(void)
             char msg[32];
             snprintf(msg, sizeof(msg), "saved %d APs", wrote);
             ui_toast(msg, T_GOOD, 1000);
+            last_count = -1;    /* toast overwrote body — full rebuild */
             Serial.printf("[wifi_scan] saved %s (%d rows)\n", path, wrote);
             break;
         }
@@ -582,7 +643,7 @@ void feat_wifi_scan(void)
                 g_last_selected_ap    = s_aps[idx[cursor]];
                 g_last_selected_valid = true;
                 wifi_show_ap_details(g_last_selected_ap);
-                draw_list(cursor);
+                last_count = -1;    /* detail view overwrote body — full rebuild */
                 ui_draw_footer("/=flt O=open S=save R=rescan ENTER=info `=back");
             }
             break;

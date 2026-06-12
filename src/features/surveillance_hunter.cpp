@@ -127,25 +127,37 @@ static void log_hit(surv_class_t cls, const uint8_t bssid[6],
     bool have_gps = gps_snapshot(&g);
     const char *kind = surv_class_name(cls);
 
-    s_csv.printf("%02X:%02X:%02X:%02X:%02X:%02X,%s,[FLOCK],%s,%u,%d,%.6f,%.6f,%.1f,10,SURV-%s\n",
+    /* Coordinates only with an actual fix — empty CSV fields / JSON null
+     * otherwise, so "location unknown" is never confused with a real
+     * reading at 0,0 (null island). */
+    char lat[16] = "", lon[16] = "", alt[16] = "";
+    if (have_gps) {
+        snprintf(lat, sizeof(lat), "%.6f", g.lat_deg);
+        snprintf(lon, sizeof(lon), "%.6f", g.lon_deg);
+        snprintf(alt, sizeof(alt), "%.1f", g.alt_m);
+    }
+
+    s_csv.printf("%02X:%02X:%02X:%02X:%02X:%02X,%s,[FLOCK],%s,%u,%d,%s,%s,%s,10,SURV-%s\n",
                  bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5],
                  ssid ? ssid : "",
                  have_gps ? g.date : "",
                  (unsigned)channel, (int)rssi,
-                 have_gps ? g.lat_deg : 0.0,
-                 have_gps ? g.lon_deg : 0.0,
-                 have_gps ? g.alt_m   : 0.0,
+                 lat, lon, alt,
                  kind);
     s_csv.flush();
 
     if (s_jsonl) {
-        s_jsonl.printf("{\"ts\":%lu,\"class\":\"%s\",\"bssid\":\"%02X:%02X:%02X:%02X:%02X:%02X\",\"ssid\":\"%s\",\"ch\":%u,\"rssi\":%d,\"lat\":%.6f,\"lon\":%.6f}\n",
+        char coords[48];
+        if (have_gps)
+            snprintf(coords, sizeof(coords), "%.6f,\"lon\":%.6f", g.lat_deg, g.lon_deg);
+        else
+            snprintf(coords, sizeof(coords), "null,\"lon\":null");
+        s_jsonl.printf("{\"ts\":%lu,\"class\":\"%s\",\"bssid\":\"%02X:%02X:%02X:%02X:%02X:%02X\",\"ssid\":\"%s\",\"ch\":%u,\"rssi\":%d,\"lat\":%s}\n",
                        (unsigned long)millis(), kind,
                        bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5],
                        ssid ? ssid : "",
                        (unsigned)channel, (int)rssi,
-                       have_gps ? g.lat_deg : 0.0,
-                       have_gps ? g.lon_deg : 0.0);
+                       coords);
         s_jsonl.flush();
     }
 }
@@ -271,7 +283,9 @@ void feat_surveillance_hunter(void)
     }
     radio_switch(RADIO_WIFI);
     WiFi.mode(WIFI_STA);
-    gps_begin();
+    /* OPSEC: GPS only if the user explicitly opted in. Otherwise hits are
+     * logged without coordinates (have_gps stays false in log_hit). */
+    if (gps_user_enabled()) gps_begin();
 
     if (!open_logs()) {
         ui_toast("cant open log files", T_BAD, 1500);

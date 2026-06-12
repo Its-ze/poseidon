@@ -32,12 +32,14 @@ struct sig_category_t {
 };
 
 static const sig_category_t CATS[] = {
-    { "Cars & Garages", "cars",    "Garage doors, gates, key fobs" },
-    { "Pranks & Fun",   "pranks",  "Doorbells, pagers, fans, outlets" },
-    { "Tesla",          "tesla",   "Charge port, frunk openers" },
-    { "Home Auto",      "home",    "Smart plugs, switches, alarms" },
-    { "Custom",         "custom",  "Your recorded signals" },
-    { "All files",      "",        "Browse everything in signals/" },
+    { "Cars & Garages", "cars",     "Garage doors, gates, key fobs" },
+    { "Pranks & Fun",   "pranks",   "Doorbells, pagers, fans, outlets" },
+    { "Tesla",          "tesla",    "Charge port, frunk openers" },
+    { "Home Auto",      "home",     "Smart plugs, switches, alarms" },
+    { "Gas Station",    "gas",      "Price-sign controllers" },
+    { "Drug Store",     "drugstore","CVS / Walgreens call buttons" },
+    { "Custom",         "custom",   "Your recorded signals" },
+    { "All files",      "",         "Browse everything in signals/" },
 };
 #define CAT_COUNT (sizeof(CATS)/sizeof(CATS[0]))
 
@@ -155,21 +157,30 @@ static int pick_category(void)
 {
     auto &d = M5Cardputer.Display;
     int sel = 0;
+    int last_sel = -1;
+
+    /* Static chrome painted once. */
+    ui_force_clear_body();
+    d.setTextColor(T_ACCENT2, T_BG);
+    d.setCursor(4, BODY_Y + 2); d.print("BROADCAST");
+    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
+    ui_draw_footer(";/.=sel  ENTER=open  ESC=back");
+
     while (true) {
-        ui_clear_body();
-        d.setTextColor(T_ACCENT2, T_BG);
-        d.setCursor(4, BODY_Y + 2); d.print("BROADCAST");
-        d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
-        for (int i = 0; i < (int)CAT_COUNT; ++i) {
-            int y = BODY_Y + 18 + i * 14;
-            bool s = (i == sel);
-            if (s) d.fillRoundRect(2, y - 2, SCR_W - 4, 13, 2, 0x3007);
-            d.setTextColor(s ? T_ACCENT : T_FG, s ? 0x3007 : T_BG);
-            d.setCursor(8, y); d.printf("%s", CATS[i].name);
-            d.setTextColor(T_DIM, s ? 0x3007 : T_BG);
-            d.setCursor(140, y); d.printf("%s", CATS[i].desc);
+        if (sel != last_sel) {
+            last_sel = sel;
+            for (int i = 0; i < (int)CAT_COUNT; ++i) {
+                int y = BODY_Y + 14 + i * 13;
+                bool s = (i == sel);
+                uint16_t row_bg = s ? 0x3007 : T_BG;
+                d.fillRect(0, y - 2, SCR_W, 12, T_BG);
+                if (s) d.fillRoundRect(2, y - 2, SCR_W - 4, 12, 2, 0x3007);
+                d.setTextColor(s ? T_ACCENT : T_FG, row_bg);
+                d.setCursor(8, y); d.printf("%s", CATS[i].name);
+                d.setTextColor(T_DIM, row_bg);
+                d.setCursor(140, y); d.printf("%s", CATS[i].desc);
+            }
         }
-        ui_draw_footer(";/.=sel  ENTER=open  ESC=back");
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(20); continue; }
         if (k == PK_ESC) return -1;
@@ -183,24 +194,33 @@ static int pick_file(const char *cat_name)
 {
     auto &d = M5Cardputer.Display;
     int sel = 0;
+    int last_sel = -1, last_first = -1;
+
+    /* Static chrome painted once. */
+    ui_force_clear_body();
+    d.setTextColor(T_ACCENT, T_BG);
+    d.setCursor(4, BODY_Y + 2); d.printf("%s (%d)", cat_name, s_file_count);
+    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+    ui_draw_footer(";/.=sel  ENTER=TX  ESC=back");
+
     while (true) {
-        ui_clear_body();
-        d.setTextColor(T_ACCENT, T_BG);
-        d.setCursor(4, BODY_Y + 2); d.printf("%s (%d)", cat_name, s_file_count);
-        d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
         int first = sel < 4 ? 0 : sel - 3;
         if (first + 7 > s_file_count) first = s_file_count > 7 ? s_file_count - 7 : 0;
-        for (int r = 0; r < 7 && first + r < s_file_count; ++r) {
-            int i = first + r;
-            int y = BODY_Y + 18 + r * 13;
-            bool s = (i == sel);
-            if (s) d.fillRoundRect(2, y - 1, SCR_W - 4, 12, 2, 0x3007);
-            d.setTextColor(s ? T_ACCENT2 : T_FG, s ? 0x3007 : T_BG);
-            d.setCursor(6, y);
-            const char *base = strrchr(s_files[i], '/');
-            d.printf("%s", base ? base + 1 : s_files[i]);
+        if (sel != last_sel || first != last_first) {
+            last_sel = sel; last_first = first;
+            for (int r = 0; r < 7; ++r) {
+                int y = BODY_Y + 18 + r * 13;
+                d.fillRect(0, y - 1, SCR_W, 12, T_BG);
+                int i = first + r;
+                if (i >= s_file_count) continue;
+                bool s = (i == sel);
+                if (s) d.fillRoundRect(2, y - 1, SCR_W - 4, 12, 2, 0x3007);
+                d.setTextColor(s ? T_ACCENT2 : T_FG, s ? 0x3007 : T_BG);
+                d.setCursor(6, y);
+                const char *base = strrchr(s_files[i], '/');
+                d.printf("%s", base ? base + 1 : s_files[i]);
+            }
         }
-        ui_draw_footer(";/.=sel  ENTER=TX  ESC=back");
 
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(20); continue; }
@@ -275,34 +295,44 @@ void feat_subghz_broadcast(void)
 
         auto &d = M5Cardputer.Display;
         uint32_t plays = 0;
+        uint32_t last_plays = (uint32_t)-1;
+        bool chrome_dirty = true;
 
         while (true) {
-                ui_clear_body();
-            ui_draw_status(radio_name(), "broadcast");
-            d.setTextColor(T_ACCENT2, T_BG);
-            d.setCursor(4, BODY_Y + 2); d.print("BROADCAST");
-            d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
-            d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 20); d.printf("file: %s", display_name);
-            d.setCursor(4, BODY_Y + 32); d.printf("freq: %.3f MHz", freq);
-            d.setCursor(4, BODY_Y + 44); d.printf("pulses: %d", plen);
-            d.setTextColor(T_GOOD, T_BG);
-            d.setCursor(4, BODY_Y + 60); d.printf("plays: %lu", (unsigned long)plays);
+            if (chrome_dirty) {
+                chrome_dirty = false;
+                ui_force_clear_body();
+                ui_draw_status(radio_name(), "broadcast");
+                d.setTextColor(T_ACCENT2, T_BG);
+                d.setCursor(4, BODY_Y + 2); d.print("BROADCAST");
+                d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
+                d.setTextColor(T_FG, T_BG);
+                d.setCursor(4, BODY_Y + 20); d.printf("file: %s", display_name);
+                d.setCursor(4, BODY_Y + 32); d.printf("freq: %.3f MHz", freq);
+                d.setCursor(4, BODY_Y + 44); d.printf("pulses: %d", plen);
 
-            /* Mini waveform preview. */
-            int mid = BODY_Y + 85;
-            d.drawFastHLine(4, mid, SCR_W - 8, T_DIM);
-            int x = 4;
-            for (int i = 0; i < plen && x < SCR_W - 4; ++i) {
-                int w = abs(raw[i]) / 100;
-                if (w < 1) w = 1; if (w > 15) w = 15;
-                uint16_t c = raw[i] > 0 ? T_ACCENT : T_ACCENT2;
-                d.fillRect(x, raw[i] > 0 ? mid - 8 : mid + 1, w, 8, c);
-                x += w;
+                /* Mini waveform preview. */
+                int mid = BODY_Y + 85;
+                d.drawFastHLine(4, mid, SCR_W - 8, T_DIM);
+                int x = 4;
+                for (int i = 0; i < plen && x < SCR_W - 4; ++i) {
+                    int w = abs(raw[i]) / 100;
+                    if (w < 1) w = 1; if (w > 15) w = 15;
+                    uint16_t c = raw[i] > 0 ? T_ACCENT : T_ACCENT2;
+                    d.fillRect(x, raw[i] > 0 ? mid - 8 : mid + 1, w, 8, c);
+                    x += w;
+                }
+
+                ui_draw_footer("ENTER=TX  ESC=back to list");
             }
 
-            ui_draw_footer("ENTER=TX  ESC=back to list");
-    
+            if (plays != last_plays) {
+                last_plays = plays;
+                d.setTextColor(T_GOOD, T_BG);
+                ui_text_w(4, BODY_Y + 60, 120, T_GOOD, "plays: %lu",
+                          (unsigned long)plays);
+            }
+
             uint16_t k = input_poll();
             if (k == PK_NONE) { delay(20); continue; }
             if (k == PK_ESC) break;
@@ -352,6 +382,9 @@ void feat_subghz_broadcast(void)
                 d.fillRect(0, by, 4,           BODY_H, T_GOOD);
                 d.fillRect(SCR_W - 4, by, 4,   BODY_H, T_GOOD);
                 delay(120);
+                /* ON-AIR badge overwrote the body — repaint static chrome. */
+                chrome_dirty = true;
+                last_plays = (uint32_t)-1;
             }
         }
 

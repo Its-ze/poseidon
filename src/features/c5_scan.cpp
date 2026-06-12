@@ -20,6 +20,24 @@ extern ap_t g_last_selected_ap;
 extern bool g_last_selected_valid;
 #include "sfx.h"
 
+/* The C5 pauses its HELLO beacons while mid scan/attack, so right after a
+ * deauth its last-seen goes stale and a one-shot online check false-negatives
+ * ("no C5 online" when it's right there — hitting Status re-pings and recovers
+ * it). This pings the node and waits for a fresh reply for a few seconds before
+ * declaring it gone, so every feature self-recovers without the Status dance. */
+static bool c5_present(void)
+{
+    if (c5_any_online()) return true;
+    uint32_t deadline = millis() + 6000;
+    uint32_t last_ping = 0;
+    while (millis() < deadline) {
+        if (millis() - last_ping > 800) { c5_cmd_ping(); last_ping = millis(); }
+        delay(80);
+        if (c5_any_online()) return true;
+    }
+    return false;
+}
+
 /* Live C5 deauth dashboard — identical UX to feat_wifi_deauth, but
  * frames stat comes from c5_status_frames() (RESP_STATUS stream from
  * the satellite) and TX is routed via ESP-NOW. Auto-renews the C5
@@ -27,7 +45,7 @@ extern bool g_last_selected_valid;
 void c5_deauth_dashboard(const ap_t &a, bool broadcast)
 {
     radio_switch(RADIO_WIFI);
-    if (!c5_any_online()) { ui_toast("no C5 online", T_BAD, 1200); return; }
+    if (!c5_present()) { ui_toast("no C5 online", T_BAD, 1200); return; }
 
     auto &d = M5Cardputer.Display;
     const uint16_t BURST_MS = 60000;   /* long bursts; re-armed in loop */
@@ -175,10 +193,14 @@ void feat_c5_status(void)
     Serial.println("[c5_status] c5_begin OK");
 
     auto &d = M5Cardputer.Display;
+    ui_clear_body();
+    ui_status_invalidate();
     ui_draw_footer("P=ping  S=stop  `=back");
 
     uint32_t last = 0;
     uint32_t frame = 0;
+    int last_n = -2;
+    uint32_t last_age_s = 0xFFFFFFFFu;
     while (true) {
         if (millis() - last > 400) {
             last = millis();
@@ -194,38 +216,48 @@ void feat_c5_status(void)
             if ((frame & 7) == 0) Serial.printf("[c5_status] frame=%lu n=%d\n",
                                                 (unsigned long)frame, n);
 
-            ui_clear_body();
-            d.setTextColor(0xF81F, T_BG);
-            d.setCursor(4, BODY_Y + 2); d.print("C5 NODES");
-            d.drawFastHLine(4, BODY_Y + 12, 80, 0xF81F);
-            if (n == 0) {
-                d.setTextColor(T_BAD, T_BG);
-                d.setCursor(4, BODY_Y + 24); d.print("NO C5 ONLINE");
-                d.setTextColor(T_DIM, T_BG);
-                d.setCursor(4, BODY_Y + 38); d.print("power on your C5 node.");
-                d.setCursor(4, BODY_Y + 48); d.print("it broadcasts HELLO every 5s.");
-                d.setCursor(4, BODY_Y + 58); d.print("will auto-connect.");
-            } else {
-                d.setTextColor(T_GOOD, T_BG);
-                d.setCursor(4, BODY_Y + 22);
-                d.printf("ONLINE  %d peer%s", n, n == 1 ? "" : "s");
-                for (int i = 0; i < n; ++i) {
-                    d.setTextColor(T_FG, T_BG);
-                    d.setCursor(8, BODY_Y + 36 + i * 10);
-                    d.printf("* %s", names[i]);
+            if (n != last_n) {
+                last_n = n;
+                last_age_s = 0xFFFFFFFFu;
+                ui_clear_body();
+                d.setTextColor(0xF81F, T_BG);
+                d.setCursor(4, BODY_Y + 2); d.print("C5 NODES");
+                d.drawFastHLine(4, BODY_Y + 12, 80, 0xF81F);
+                if (n == 0) {
+                    d.setTextColor(T_BAD, T_BG);
+                    d.setCursor(4, BODY_Y + 24); d.print("NO C5 ONLINE");
+                    d.setTextColor(T_DIM, T_BG);
+                    d.setCursor(4, BODY_Y + 38); d.print("power on your C5 node.");
+                    d.setCursor(4, BODY_Y + 48); d.print("it broadcasts HELLO every 5s.");
+                    d.setCursor(4, BODY_Y + 58); d.print("will auto-connect.");
+                } else {
+                    d.setTextColor(T_GOOD, T_BG);
+                    d.setCursor(4, BODY_Y + 22);
+                    d.printf("ONLINE  %d peer%s", n, n == 1 ? "" : "s");
+                    for (int i = 0; i < n; ++i) {
+                        d.setTextColor(T_FG, T_BG);
+                        d.setCursor(8, BODY_Y + 36 + i * 10);
+                        d.printf("* %s", names[i]);
+                    }
                 }
-                d.setTextColor(T_DIM, T_BG);
-                d.setCursor(4, BODY_Y + BODY_H - 10);
-                d.printf("last seen: %lus ago", (unsigned long)(age_ms / 1000));
+            }
+            if (n > 0) {
+                uint32_t age_s = age_ms / 1000;
+                if (age_s != last_age_s) {
+                    last_age_s = age_s;
+                    ui_text_w(4, BODY_Y + BODY_H - 10, 160, T_DIM,
+                              "last seen: %lus ago", (unsigned long)age_s);
+                }
             }
             draw_status_header();
+            d.fillRect(SCR_W - 30, BODY_Y + BODY_H - 24, 24, 22, T_BG);
             ui_radar(SCR_W - 20, BODY_Y + BODY_H - 14, 8, T_ACCENT);
         }
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(40); continue; }
         if (k == PK_ESC) break;
-        if (k == 'p' || k == 'P') { c5_cmd_ping(); ui_toast("ping sent", T_ACCENT, 400); }
-        if (k == 's' || k == 'S') { c5_cmd_stop(); ui_toast("stop sent", T_WARN, 400); }
+        if (k == 'p' || k == 'P') { c5_cmd_ping(); ui_toast("ping sent", T_ACCENT, 400); last_n = -2; }
+        if (k == 's' || k == 'S') { c5_cmd_stop(); ui_toast("stop sent", T_WARN, 400); last_n = -2; }
     }
     Serial.println("[c5_status] exit");
 }
@@ -247,13 +279,16 @@ void feat_c5_scan_5g(void)
     ui_draw_footer(";/. move  ENTER=info  R=rescan  `=back");
     int cursor = 0;
     int last_n = -1;
+    int last_cursor = -1;
     uint32_t last = 0;
     while (true) {
         if (millis() - last > 300) {
             last = millis();
             int n_now = c5_aps(nullptr, 0);
             bool new_result = (n_now != last_n);
+            if (new_result || cursor != last_cursor) {
             last_n = n_now;
+            last_cursor = cursor;
             char title[40];
             snprintf(title, sizeof(title), "DUAL-BAND %d (raw %lu/%lu)",
                      n_now,
@@ -286,6 +321,7 @@ void feat_c5_scan_5g(void)
                 int rows = 7;
                 if (cursor < 0) cursor = 0;
                 if (cursor >= n) cursor = n - 1;
+                last_cursor = cursor;
                 int first = cursor - rows / 2;
                 if (first < 0) first = 0;
                 if (first + rows > n) first = max(0, n - rows);
@@ -319,6 +355,7 @@ void feat_c5_scan_5g(void)
                     d.setCursor(100, y);
                     d.printf("%.22s", a.ssid[0] ? a.ssid : "<hidden>");
                 }
+            }
             }
         }
         uint16_t k = input_poll();
@@ -365,30 +402,51 @@ void feat_c5_scan_5g(void)
 
 /* ==================== C5 5 GHz Deauth ==================== */
 
+/* Trigger a C5 dual-band sweep and poll until 5 GHz APs stream in. The C5
+ * scan blocks ~7-10 s then streams result batches over the following seconds,
+ * so a one-shot read (the old delay+read) almost always saw zero. Reuses
+ * cached 5 GHz results if present. Fills `out` with the 5 GHz subset, returns
+ * the count. Shows a radar while waiting; ESC aborts the wait. */
+static int c5_collect_5g(c5_ap_t *out, int max)
+{
+    auto &d = M5Cardputer.Display;
+    c5_ap_t all[64];
+    int n = c5_aps(all, 64);
+    int f = 0;
+    for (int i = 0; i < n && f < max; ++i) if (all[i].is_5g) out[f++] = all[i];
+    if (f > 0) return f;
+
+    c5_clear_results();
+    c5_cmd_scan_5g(300);
+    ui_clear_body();
+    d.setTextColor(T_ACCENT2, T_BG);
+    d.setCursor(4, BODY_Y + 2); d.print("SCANNING 5 GHz...");
+    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
+    ui_draw_footer("`=abort");
+    uint32_t deadline = millis() + 12000;
+    while (millis() < deadline) {
+        n = c5_aps(all, 64);
+        f = 0;
+        for (int i = 0; i < n && f < max; ++i) if (all[i].is_5g) out[f++] = all[i];
+        d.setTextColor(f ? T_GOOD : T_DIM, T_BG);
+        d.setCursor(4, BODY_Y + 30); d.printf("5G APs: %-3d   total %-3d ", f, n);
+        d.fillRect(SCR_W - 38, BODY_Y + 30, 32, 32, T_BG);
+        ui_radar(SCR_W - 24, BODY_Y + 44, 14, T_ACCENT);
+        if (input_poll() == PK_ESC) break;
+        delay(120);
+    }
+    return f;
+}
+
 void feat_c5_deauth_5g(void)
 {
     radio_switch(RADIO_WIFI);
     c5_begin();
-    if (!c5_any_online()) { ui_toast("no C5 online", T_BAD, 1500); return; }
+    if (!c5_present()) { ui_toast("no C5 online", T_BAD, 1500); return; }
 
-    /* Use the dual-band scan results if available; else trigger one. */
     c5_ap_t aps[64];
-    int n = c5_aps(aps, 64);
-    if (n == 0) {
-        c5_clear_results();
-        c5_cmd_scan_5g(400);
-        ui_toast("scanning first...", T_ACCENT, 1200);
-        delay(1500);
-        n = c5_aps(aps, 64);
-    }
-    /* Filter to 5 GHz only. */
-    int five_n = 0;
-    for (int i = 0; i < n; ++i) if (aps[i].is_5g) aps[five_n++] = aps[i];
-    n = five_n;
-    if (n == 0) {
-        ui_toast("no 5 GHz APs found", T_WARN, 1500);
-        return;
-    }
+    int n = c5_collect_5g(aps, 64);
+    if (n == 0) { ui_toast("no 5 GHz APs found", T_WARN, 1500); return; }
 
     /* Cursor select target. */
     int cursor = 0;
@@ -396,30 +454,34 @@ void feat_c5_deauth_5g(void)
     ui_draw_footer(";/. pick  ENTER=fire  X=all on ch  `=back");
     bool picking = true;
     int chosen = -1;
+    int last_drawn = -2;
     while (picking) {
-        ui_clear_body();
-        d.setTextColor(T_ACCENT2, T_BG);
-        d.setCursor(4, BODY_Y + 2); d.print("PICK 5 GHz TARGET");
-        d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
-        int rows = 7;
         if (cursor < 0) cursor = 0;
         if (cursor >= n) cursor = n - 1;
-        int first = cursor - rows / 2;
-        if (first < 0) first = 0;
-        if (first + rows > n) first = (n > rows) ? (n - rows) : 0;
-        for (int r = 0; r < rows && first + r < n; ++r) {
-            int i = first + r;
-            const c5_ap_t &a = aps[i];
-            int y = BODY_Y + 18 + r * 12;
-            bool sel = (i == cursor);
-            if (sel) d.fillRect(0, y - 1, SCR_W, 12, 0x3007);
-            d.setTextColor(sel ? T_ACCENT : T_FG, sel ? 0x3007 : T_BG);
-            d.setCursor(2, y);
-            d.printf("%4d ch%-3u %.20s", a.rssi, a.channel,
-                     a.ssid[0] ? a.ssid : "<hidden>");
+        if (cursor != last_drawn) {
+            last_drawn = cursor;
+            ui_clear_body();
+            d.setTextColor(T_ACCENT2, T_BG);
+            d.setCursor(4, BODY_Y + 2); d.print("PICK 5 GHz TARGET");
+            d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
+            int rows = 7;
+            int first = cursor - rows / 2;
+            if (first < 0) first = 0;
+            if (first + rows > n) first = (n > rows) ? (n - rows) : 0;
+            for (int r = 0; r < rows && first + r < n; ++r) {
+                int i = first + r;
+                const c5_ap_t &a = aps[i];
+                int y = BODY_Y + 18 + r * 12;
+                bool sel = (i == cursor);
+                if (sel) d.fillRect(0, y - 1, SCR_W, 12, 0x3007);
+                d.setTextColor(sel ? T_ACCENT : T_FG, sel ? 0x3007 : T_BG);
+                d.setCursor(2, y);
+                d.printf("%4d ch%-3u %.20s", a.rssi, a.channel,
+                         a.ssid[0] ? a.ssid : "<hidden>");
+            }
         }
         uint16_t k = input_poll();
-        if (k == PK_NONE) { delay(30); continue; }
+        if (k == PK_NONE) { delay(20); continue; }
         if (k == PK_ESC) return;
         if (k == ';' || k == PK_UP)   { if (cursor > 0) cursor--; }
         if (k == '.' || k == PK_DOWN) { cursor++; }
@@ -505,7 +567,7 @@ void feat_c5_scan_zb(void)
 {
     radio_switch(RADIO_WIFI);
     c5_begin();
-    if (!c5_any_online()) { ui_toast("no C5 online", T_BAD, 1500); return; }
+    if (!c5_present()) { ui_toast("no C5 online", T_BAD, 1500); return; }
 
     c5_clear_results();
     c5_cmd_scan_zb(0xFF);  /* hop all channels 11-26 */
@@ -640,21 +702,11 @@ void feat_c5_pmkid_5g(void)
 {
     radio_switch(RADIO_WIFI);
     c5_begin();
-    if (!c5_any_online()) { ui_toast("no C5 online", T_BAD, 1500); return; }
+    if (!c5_present()) { ui_toast("no C5 online", T_BAD, 1500); return; }
 
-    /* Prefer existing 5G scan results; else trigger a short one. */
+    /* Reuse cached 5 GHz results, or sweep + poll until they stream in. */
     c5_ap_t aps[64];
-    int n = c5_aps(aps, 64);
-    if (n == 0) {
-        c5_clear_results();
-        c5_cmd_scan_5g(400);
-        ui_toast("scanning first...", T_ACCENT, 1200);
-        delay(1500);
-        n = c5_aps(aps, 64);
-    }
-    int five_n = 0;
-    for (int i = 0; i < n; ++i) if (aps[i].is_5g) aps[five_n++] = aps[i];
-    n = five_n;
+    int n = c5_collect_5g(aps, 64);
     if (n == 0) { ui_toast("no 5 GHz APs found", T_WARN, 1500); return; }
 
     /* Target picker. */
@@ -662,30 +714,34 @@ void feat_c5_pmkid_5g(void)
     int cursor = 0;
     ui_draw_footer(";/. pick  ENTER=capture  `=back");
     int chosen = -1;
+    int last_drawn = -2;
     while (chosen < 0) {
-        ui_clear_body();
-        d.setTextColor(T_ACCENT2, T_BG);
-        d.setCursor(4, BODY_Y + 2); d.print("PMKID 5 GHz — PICK TARGET");
-        d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
-        int rows = 7;
         if (cursor < 0) cursor = 0;
         if (cursor >= n) cursor = n - 1;
-        int first = cursor - rows / 2;
-        if (first < 0) first = 0;
-        if (first + rows > n) first = (n > rows) ? (n - rows) : 0;
-        for (int r = 0; r < rows && first + r < n; ++r) {
-            int i = first + r;
-            const c5_ap_t &a = aps[i];
-            int y = BODY_Y + 18 + r * 12;
-            bool sel = (i == cursor);
-            if (sel) d.fillRect(0, y - 1, SCR_W, 12, 0x3007);
-            d.setTextColor(sel ? T_ACCENT : T_FG, sel ? 0x3007 : T_BG);
-            d.setCursor(2, y);
-            d.printf("%4d ch%-3u %.20s", a.rssi, a.channel,
-                     a.ssid[0] ? a.ssid : "<hidden>");
+        if (cursor != last_drawn) {
+            last_drawn = cursor;
+            ui_clear_body();
+            d.setTextColor(T_ACCENT2, T_BG);
+            d.setCursor(4, BODY_Y + 2); d.print("PMKID 5 GHz — PICK TARGET");
+            d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
+            int rows = 7;
+            int first = cursor - rows / 2;
+            if (first < 0) first = 0;
+            if (first + rows > n) first = (n > rows) ? (n - rows) : 0;
+            for (int r = 0; r < rows && first + r < n; ++r) {
+                int i = first + r;
+                const c5_ap_t &a = aps[i];
+                int y = BODY_Y + 18 + r * 12;
+                bool sel = (i == cursor);
+                if (sel) d.fillRect(0, y - 1, SCR_W, 12, 0x3007);
+                d.setTextColor(sel ? T_ACCENT : T_FG, sel ? 0x3007 : T_BG);
+                d.setCursor(2, y);
+                d.printf("%4d ch%-3u %.20s", a.rssi, a.channel,
+                         a.ssid[0] ? a.ssid : "<hidden>");
+            }
         }
         uint16_t k = input_poll();
-        if (k == PK_NONE) { delay(30); continue; }
+        if (k == PK_NONE) { delay(20); continue; }
         if (k == PK_ESC) return;
         if (k == ';' || k == PK_UP)   { if (cursor > 0) cursor--; }
         if (k == '.' || k == PK_DOWN) { cursor++; }
@@ -780,20 +836,18 @@ void feat_c5_nuke_5g(void)
 {
     radio_switch(RADIO_WIFI);
     c5_begin();
-    if (!c5_any_online()) { ui_toast("no C5 online", T_BAD, 1500); return; }
+    if (!c5_present()) { ui_toast("no C5 online", T_BAD, 1500); return; }
 
     c5_ap_t aps[64];
     int n = c5_aps(aps, 64);
     int five_n = 0;
     for (int i = 0; i < n; ++i) if (aps[i].is_5g) aps[five_n++] = aps[i];
 
-    /* Only kick a fresh scan if no 5G APs are already cached. */
+    /* Only kick a fresh scan if no 5G APs are already cached. Mirror the
+     * working feat_c5_scan_5g path exactly (clear + scan + poll) — the prior
+     * c5_cmd_stop() prefix here diverged from it and the sweep came back
+     * empty. */
     if (five_n == 0) {
-        /* Clear any lingering scan / attack state on the C5 side —
-         * s_scan_running can stick across sessions and cause the next
-         * SCAN command to be dropped as "busy". 300 ms settle. */
-        c5_cmd_stop();
-        delay(300);
         c5_clear_results();
         /* duration_ms is PER-CHANNEL dwell. Match feat_c5_scan_5g's
          * 300 ms = ~11 s full dual-band sweep. */
@@ -861,6 +915,37 @@ void feat_c5_nuke_5g(void)
     uint32_t last_rescan = millis();
 
     ui_draw_footer("`=stop   deauth-all + HS capture loop");
+
+    /* Static NUKE backdrop painted ONCE: full-screen wipe + glitch +
+     * scanlines + big headline + C5 indicator. None of this changes, so
+     * repainting it every frame was the hard full-screen flash. The
+     * dynamic target/stats band repaints in place below. */
+    d.fillScreen(0x0000);
+    ui_glitch(0, 0, SCR_W, SCR_H);
+    for (int y = 0; y < SCR_H; y += 4)
+        d.drawFastHLine(0, y, SCR_W, 0x0020);
+    {
+        const char *headline = "5 GHz NUKE";
+        d.setTextSize(3);
+        int hw = d.textWidth(headline) * 3;
+        int hx = (SCR_W - hw) / 2;
+        int hy = 22;
+        d.setTextColor(0xF81F, 0);
+        d.setCursor(hx - 2, hy); d.print(headline);
+        d.setCursor(hx + 2, hy); d.print(headline);
+        d.setCursor(hx, hy - 2); d.print(headline);
+        d.setCursor(hx, hy + 2); d.print(headline);
+        d.setTextColor(0xFFFF, 0);
+        d.setCursor(hx, hy); d.print(headline);
+        d.setTextSize(1);
+    }
+    d.fillCircle(7, 6, 2, 0x07E0);
+    d.setTextColor(0x07E0, 0);
+    d.setCursor(13, 2); d.print("C5");
+
+    int last_disp_idx = -1, last_disp_hs = -1, last_disp_pmk = -1, last_disp_five = -1;
+    int last_disp_cursor = -1;
+
     while (true) {
         uint32_t now = millis();
 
@@ -903,54 +988,46 @@ void feat_c5_nuke_5g(void)
                 pmk_written++;
             }
 
-            /* Keep the NUKE splash aesthetic for this screen too. */
-            d.fillScreen(0x0000);
-            ui_glitch(0, 0, SCR_W, SCR_H);
-            for (int y = 0; y < SCR_H; y += 4)
-                d.drawFastHLine(0, y, SCR_W, 0x0020);
+            /* Repaint the dynamic target/stats band only when it changes,
+             * over a targeted rect so the static backdrop stays put. */
+            int disp_idx = (cursor ? cursor - 1 : 0) % five_n;
+            if (disp_idx != last_disp_idx || hs_written != last_disp_hs ||
+                pmk_written != last_disp_pmk || five_n != last_disp_five ||
+                cursor != last_disp_cursor) {
+                last_disp_idx = disp_idx;
+                last_disp_hs = hs_written;
+                last_disp_pmk = pmk_written;
+                last_disp_five = five_n;
+                last_disp_cursor = cursor;
 
-            const char *headline = "5 GHz NUKE";
-            d.setTextSize(3);
-            int hw = d.textWidth(headline) * 3;
-            int hx = (SCR_W - hw) / 2;
-            int hy = 22;
-            d.setTextColor(0xF81F, 0);
-            d.setCursor(hx - 2, hy); d.print(headline);
-            d.setCursor(hx + 2, hy); d.print(headline);
-            d.setCursor(hx, hy - 2); d.print(headline);
-            d.setCursor(hx, hy + 2); d.print(headline);
-            d.setTextColor(0xFFFF, 0);
-            d.setCursor(hx, hy); d.print(headline);
-            d.setTextSize(1);
+                d.fillRect(0, SCR_H - 46, SCR_W, 46, 0x0000);
+                for (int y = ((SCR_H - 46 + 3) / 4) * 4; y < SCR_H; y += 4)
+                    d.drawFastHLine(0, y, SCR_W, 0x0020);
 
-            /* Green C5 indicator top-left. */
-            d.fillCircle(7, 6, 2, 0x07E0);
-            d.setTextColor(0x07E0, 0);
-            d.setCursor(13, 2); d.print("C5");
+                /* Target + stats. */
+                const c5_ap_t &t = aps[disp_idx];
+                d.setTextColor(0x07FF, 0);
+                d.setCursor(4, SCR_H - 44);
+                d.printf("-> %.20s", t.ssid[0] ? t.ssid : "<hidden>");
+                d.setTextColor(0x8410, 0);
+                d.setCursor(4, SCR_H - 34);
+                d.printf("ch%u %02X:%02X:%02X:%02X:%02X:%02X",
+                         t.channel, t.bssid[0], t.bssid[1], t.bssid[2],
+                         t.bssid[3], t.bssid[4], t.bssid[5]);
 
-            /* Target + stats. */
-            const c5_ap_t &t = aps[(cursor ? cursor - 1 : 0) % five_n];
-            d.setTextColor(0x07FF, 0);
-            d.setCursor(4, SCR_H - 44);
-            d.printf("-> %.20s", t.ssid[0] ? t.ssid : "<hidden>");
-            d.setTextColor(0x8410, 0);
-            d.setCursor(4, SCR_H - 34);
-            d.printf("ch%u %02X:%02X:%02X:%02X:%02X:%02X",
-                     t.channel, t.bssid[0], t.bssid[1], t.bssid[2],
-                     t.bssid[3], t.bssid[4], t.bssid[5]);
-
-            char row1[48], row2[48];
-            snprintf(row1, sizeof(row1), "%d APs  HS:%d  PMKID:%d",
-                     five_n, hs_written, pmk_written);
-            snprintf(row2, sizeof(row2), "rotation %d", cursor);
-            d.setTextColor(hs_written > 0 ? 0x07E0 : 0xFFE0, 0);
-            int w1 = d.textWidth(row1);
-            d.setCursor((SCR_W - w1) / 2, SCR_H - 22);
-            d.print(row1);
-            d.setTextColor(0xFFFF, 0);
-            int w2 = d.textWidth(row2);
-            d.setCursor((SCR_W - w2) / 2, SCR_H - 10);
-            d.print(row2);
+                char row1[48], row2[48];
+                snprintf(row1, sizeof(row1), "%d APs  HS:%d  PMKID:%d",
+                         five_n, hs_written, pmk_written);
+                snprintf(row2, sizeof(row2), "rotation %d", cursor);
+                d.setTextColor(hs_written > 0 ? 0x07E0 : 0xFFE0, 0);
+                int w1 = d.textWidth(row1);
+                d.setCursor((SCR_W - w1) / 2, SCR_H - 22);
+                d.print(row1);
+                d.setTextColor(0xFFFF, 0);
+                int w2 = d.textWidth(row2);
+                d.setCursor((SCR_W - w2) / 2, SCR_H - 10);
+                d.print(row2);
+            }
         }
 
         uint16_t k = input_poll();

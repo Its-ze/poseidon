@@ -28,6 +28,7 @@
 #include "esp_now.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -45,6 +46,24 @@ struct pmkid_ctx_t {
 };
 
 static struct pmkid_ctx_t *s_ctx = NULL;
+
+/* POS-AUDIT-006: ISR-safe queue/drain split (mirrors zb_sniffer.c
+ * POS-AUDIT-005). promisc_cb() runs in WiFi ISR/high-prio context and
+ * must stay IRAM-safe; esp_now_send() is NOT IRAM-resident (touches
+ * heap/flash, may block) so calling it from the ISR could crash the C5
+ * during concurrent flash ops. The ISR now does only the cheap parse +
+ * bounds-checks, packs the captured tuple into a small POD struct, and
+ * xQueueSendFromISR()s it. A normal-priority drain task pops the queue
+ * and does dedup + esp_now_send + ESP_LOGI in task context. */
+struct pmkid_hit_t {
+    uint8_t bssid[6];
+    uint8_t sta[6];
+    uint8_t pmkid[16];
+};
+static QueueHandle_t s_pmkid_q;
+static TaskHandle_t  s_pmkid_drain;
+
+#define PMKID_Q_DEPTH 16
 
 /* Dedup ring — same (bssid,sta,pmkid) tuple shouldn't fire twice in a
  * single capture session. 16 entries is generous; on a live AP you
@@ -89,6 +108,7 @@ static bool extract_pmkid_kde(const uint8_t *kd, int kd_len, uint8_t out[16])
     return false;
 }
 
+/* Runs in drain-task context (NOT the ISR). Does dedup + esp_now_send. */
 static void emit_pmkid(const uint8_t bssid[6], const uint8_t sta[6],
                        const uint8_t pmkid[16])
 {
@@ -115,6 +135,18 @@ static void emit_pmkid(const uint8_t bssid[6], const uint8_t sta[6],
     ESP_LOGI(TAG, "PMKID %02x%02x%02x%02x%02x%02x <- %02x:%02x:%02x:%02x:%02x:%02x",
              pmkid[0], pmkid[1], pmkid[2], pmkid[3], pmkid[4], pmkid[5],
              sta[0], sta[1], sta[2], sta[3], sta[4], sta[5]);
+}
+
+/* POS-AUDIT-006: drain task — pops captured hits off the ISR queue and
+ * does dedup + esp_now_send in normal task context. */
+static void pmkid_drain_task(void *_)
+{
+    struct pmkid_hit_t hit;
+    while (1) {
+        if (xQueueReceive(s_pmkid_q, &hit, portMAX_DELAY) != pdTRUE) continue;
+        if (!s_ctx || s_ctx->stop) continue;   /* drop late frames after stop */
+        emit_pmkid(hit.bssid, hit.sta, hit.pmkid);
+    }
 }
 
 /* Promiscuous callback — runs at high priority; keep it tight. */
@@ -168,7 +200,18 @@ static void IRAM_ATTR promisc_cb(void *buf, wifi_promiscuous_pkt_type_t type)
 
     uint8_t pmkid[16];
     if (extract_pmkid_kde(key + 95, kd_len, pmkid)) {
-        emit_pmkid(bssid, sta, pmkid);
+        /* POS-AUDIT-006: do NOT esp_now_send from the ISR. Pack the
+         * captured tuple and hand it to the drain task. Non-blocking;
+         * if the queue is full we drop rather than stall the ISR. */
+        if (s_pmkid_q) {
+            struct pmkid_hit_t hit;
+            memcpy(hit.bssid, bssid, 6);
+            memcpy(hit.sta,   sta,   6);
+            memcpy(hit.pmkid, pmkid, 16);
+            BaseType_t hp_woken = pdFALSE;
+            xQueueSendFromISR(s_pmkid_q, &hit, &hp_woken);
+            if (hp_woken) portYIELD_FROM_ISR();
+        }
     }
 }
 
@@ -177,6 +220,15 @@ static void pmkid_task(void *arg)
     struct pmkid_ctx_t *ctx = (struct pmkid_ctx_t *)arg;
     s_ctx = ctx;
     s_seen_n = 0;
+
+    /* POS-AUDIT-006: queue + drain task lifecycle. Lazy-init both so
+     * repeated start/stop cycles don't leak (mirrors zb_sniffer.c). */
+    if (!s_pmkid_q) {
+        s_pmkid_q = xQueueCreate(PMKID_Q_DEPTH, sizeof(struct pmkid_hit_t));
+    }
+    if (!s_pmkid_drain && s_pmkid_q) {
+        xTaskCreate(pmkid_drain_task, "pmkid_drain", 4096, NULL, 4, &s_pmkid_drain);
+    }
 
     led_fx_set(LED_MODE_SCAN);
     g_pause_hello = true;
@@ -214,7 +266,20 @@ void pmkid_capture_start(const uint8_t requester[6],
                          const posei_pmkid_req_t *req,
                          uint16_t seq)
 {
-    if (s_ctx) { s_ctx->stop = true; vTaskDelay(pdMS_TO_TICKS(120)); }
+    if (s_ctx) {
+        /* POS-AUDIT-006: capture-restart race. Synchronously unregister
+         * the promiscuous RX callback BEFORE the delay so the old ISR
+         * can no longer dereference the context we're about to retire.
+         * esp_wifi_set_promiscuous_rx_cb(NULL) returns only once the
+         * driver has dropped the callback. After this the ISR path is
+         * dead; the drain task harmlessly drops any already-queued hits
+         * (it checks s_ctx->stop). The queue + drain task are long-lived
+         * singletons (lazy-init, reused across restarts) so nothing
+         * leaks. The outgoing pmkid_task still owns/frees its own ctx. */
+        s_ctx->stop = true;
+        esp_wifi_set_promiscuous_rx_cb(NULL);
+        vTaskDelay(pdMS_TO_TICKS(120));
+    }
 
     struct pmkid_ctx_t *ctx = malloc(sizeof(*ctx));
     if (!ctx) return;

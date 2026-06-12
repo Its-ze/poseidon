@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Install — POSEIDON</title>
-<meta name="description" content="Three ways to flash POSEIDON onto a Cardputer-Adv: M5Burner custom repo, esptool direct, or PlatformIO from source.">
+<meta name="description" content="Flash POSEIDON onto your Cardputer-Advance in one click with M5Burner, plus the optional TRIDENT C5 satellite via the Espressif web flasher.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
@@ -23,7 +23,7 @@
   <div class="boot-lines"><div class="boot-line"><span class="dim">[LOAD]</span> install.html <span class="ok">OK</span></div></div>
 </div>
 <div id="scrollProgress"></div>
-<div id="hud"><div class="hud-row"><span class="hud-dot"></span>INSTALL · three routes</div></div>
+<div id="hud"><div class="hud-row"><span class="hud-dot"></span>INSTALL · two devices</div></div>
 
 <nav id="mainNav">
   <a href="index.html" class="nav-logo"><span class="icon">P</span><span>POSEIDON</span></a>
@@ -41,126 +41,112 @@
 <header class="page-head">
   <div class="kicker">06 // DEPLOYMENT</div>
   <h1>Flash POSEIDON</h1>
-  <p class="lede">Three supported routes. M5Burner if you want the one-click GUI flow. esptool if you already have a terminal open. PlatformIO if you're building from source. All three drop the same factory image at <code>0x0</code>.</p>
+  <p class="lede">You're about to bring your gear to life. There are two devices here — the <b>Cardputer</b> is the main event, and the <b>TRIDENT C5</b> is an optional add-on. Pick your device below and follow the numbered steps. Most people are done in under two minutes.</p>
 </header>
 
 <div class="console-strip">
   <div class="console-bar">
     <span class="ck">[FLASH]</span>
-    <span>target=<span class="nm">esp32-s3 @ 8MB</span></span>
-    <span>offset=<span class="nm">0x0</span></span>
-    <span>image=<span class="nm">factory.bin</span></span>
-    <span>size=<span class="nm">~2.1 MB</span></span>
+    <span>cardputer=<span class="nm">esp32-s3</span></span>
+    <span>trident=<span class="nm">esp32-c5 · optional</span></span>
+    <span>version=<span class="nm">v0.6.1</span></span>
     <span class="blink">▸</span>
   </div>
 </div>
 
 <section style="padding-top:1rem;">
 
-  <!-- ── Route 0: TRIDENT (C5 satellite) flash paths ── -->
-  <div class="reveal frame" style="padding:clamp(1.5rem,3vw,2.2rem);border:1px solid rgba(52,211,153,.25);border-radius:18px;background:linear-gradient(135deg,rgba(52,211,153,.08) 0%,rgba(6,10,22,.4) 100%);position:relative;overflow:hidden;margin-bottom:2.5rem;">
-    <div style="font-family:var(--font-mono);font-size:.72rem;letter-spacing:.2em;color:#34d399;margin-bottom:.5rem;">00 · TRIDENT · ESP32-C5 SATELLITE</div>
-    <h2 style="font-family:var(--font-display);font-size:clamp(1.6rem,3vw,2.2rem);color:#34d399;letter-spacing:.04em;margin-bottom:1rem;">TRIDENT — Web Flasher or esptool</h2>
-    <p style="color:#cbd5e1;line-height:1.6;margin-bottom:1.2rem;">TRIDENT is the ESP32-C5 satellite that gives POSEIDON 5 GHz deauth, Zigbee sniffing, and PMKID capture over ESP-NOW. M5Burner doesn't support ESP32-C5 yet, so use the web flasher below (Chrome/Edge/Opera) or the esptool command block. POSEIDON itself installs via M5Burner further down.</p>
+  <!-- ════════ DEVICE 1 · THE CARDPUTER ════════ -->
+  <div class="reveal frame" style="padding:clamp(1.5rem,3vw,2.2rem);border:1px solid rgba(14,165,233,.25);border-radius:18px;background:linear-gradient(135deg,rgba(14,165,233,.1) 0%,rgba(6,10,22,.4) 100%);position:relative;overflow:hidden;margin-bottom:2.5rem;">
+    <div style="font-family:var(--font-mono);font-size:.72rem;letter-spacing:.2em;color:var(--ocean-bright);margin-bottom:.5rem;">DEVICE 1 · MAIN · M5STACK CARDPUTER-ADVANCE · ESP32-S3</div>
+    <h2 style="font-family:var(--font-display);font-size:clamp(1.7rem,3.4vw,2.4rem);color:var(--ocean-vivid);letter-spacing:.04em;margin-bottom:.8rem;">🔱 The Cardputer</h2>
+    <p style="color:#cbd5e1;line-height:1.6;margin-bottom:1.6rem;">This is the brain of POSEIDON — the handheld you'll actually carry. Flashing takes one click. Grab a USB-C cable, plug it in, and let's go.</p>
 
-    <div style="padding:1.1rem 1.2rem;border:1px solid rgba(52,211,153,.2);border-radius:12px;background:rgba(6,10,22,.3);margin-bottom:1.2rem;max-width:520px;">
-      <div style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.18em;color:#34d399;margin-bottom:.4rem;">ONE-CLICK · BROWSER</div>
-      <div style="color:#94a3b8;font-size:.88rem;margin-bottom:.9rem;">Plug the C5 in via USB-C, hit the button, pick the COM port, wait ~15 s.</div>
-      <esp-web-install-button manifest="manifest-trident.json">
-        <button slot="activate" style="font-family:var(--font-mono);background:#34d399;color:#041a11;border:none;padding:.7rem 1.2rem;border-radius:8px;font-weight:700;letter-spacing:.08em;cursor:pointer;">▸ FLASH TRIDENT</button>
-        <span slot="unsupported" style="color:#f87171;font-size:.85rem;">Browser not supported — use Chrome/Edge/Opera.</span>
-        <span slot="not-allowed" style="color:#f87171;font-size:.85rem;">Web flashing needs HTTPS.</span>
+    <!-- Easiest: M5Burner -->
+    <div style="display:inline-flex;align-items:center;gap:.6rem;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.16em;color:#041a11;background:var(--ocean-vivid);padding:.35rem .8rem;border-radius:100px;margin-bottom:1rem;font-weight:700;">★ EASIEST · RECOMMENDED FOR EVERYONE</div>
+    <h3 style="font-family:var(--font-display);font-size:1.15rem;color:var(--ocean-vivid);letter-spacing:.05em;margin-bottom:.4rem;">Option A — M5Burner (one click)</h3>
+    <p style="color:#94a3b8;font-size:.92rem;line-height:1.55;margin-bottom:1rem;">M5Burner is M5Stack's free official flasher. POSEIDON is right there in the list — no files to download, no offsets to remember.</p>
+    <ol style="padding-left:1.4rem;color:#cbd5e1;line-height:1.8;font-size:.96rem;margin-bottom:1rem;">
+      <li>Download <b>M5Burner</b> from <a href="https://docs.m5stack.com/en/download" target="_blank" rel="noopener">docs.m5stack.com/download</a> and open it.</li>
+      <li>In the search box, type <b>POSEIDON</b>.</li>
+      <li>Plug your Cardputer in with a USB-C cable.</li>
+      <li>Click <b>Burn</b>.</li>
+      <li>That's it — wait for the green bar, and you're done. 🎉</li>
+    </ol>
+    <p style="color:#94a3b8;font-size:.88rem;font-style:italic;margin-bottom:1.8rem;">M5Burner picks the port and version for you automatically. New releases (<code style="background:rgba(14,165,233,.12);padding:.1rem .3rem;border-radius:3px;color:var(--ocean-vivid);font-family:var(--font-mono);">v0.6.1</code> and up) show up the moment they're tagged.</p>
+
+    <!-- Alternative: web flasher -->
+    <div style="height:1px;background:linear-gradient(90deg,rgba(14,165,233,.3),transparent);margin-bottom:1.6rem;"></div>
+    <h3 style="font-family:var(--font-display);font-size:1.15rem;color:var(--ocean-vivid);letter-spacing:.05em;margin-bottom:.4rem;">Option B — Flash in your browser</h3>
+    <p style="color:#94a3b8;font-size:.92rem;line-height:1.55;margin-bottom:1rem;">Prefer not to install anything? Flash straight from <b>Chrome or Edge</b> using WebSerial. Plug the Cardputer in, hit the button, pick its port, and watch it go.</p>
+    <div style="padding:1.1rem 1.2rem;border:1px solid rgba(14,165,233,.25);border-radius:12px;background:rgba(6,10,22,.35);max-width:540px;margin-bottom:1.2rem;">
+      <div style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.18em;color:var(--ocean-bright);margin-bottom:.4rem;">WEB FLASHER · CHROME / EDGE</div>
+      <div style="color:#94a3b8;font-size:.88rem;margin-bottom:.9rem;">Plug in via USB-C → click → choose the Cardputer's serial port → done in ~30 s.</div>
+      <esp-web-install-button manifest="manifest.json">
+        <button slot="activate" style="font-family:var(--font-mono);background:var(--ocean-vivid);color:#041a11;border:none;padding:.7rem 1.2rem;border-radius:8px;font-weight:700;letter-spacing:.08em;cursor:pointer;">▸ FLASH CARDPUTER</button>
+        <span slot="unsupported" style="color:#f87171;font-size:.85rem;">This browser can't flash — open this page in Chrome or Edge.</span>
+        <span slot="not-allowed" style="color:#f87171;font-size:.85rem;">Web flashing needs HTTPS (use the live site, not a local file).</span>
       </esp-web-install-button>
     </div>
 
-    <h3 style="font-family:var(--font-display);font-size:1rem;color:#34d399;letter-spacing:.05em;margin-bottom:.6rem;">Manual flash — esptool</h3>
-    <p style="color:#cbd5e1;line-height:1.6;font-size:.92rem;margin-bottom:.8rem;">If the browser flasher can't reach your port (Linux udev, Windows driver issues, etc.), grab <code style="background:rgba(52,211,153,.12);padding:.1rem .3rem;border-radius:3px;color:#34d399;font-family:var(--font-mono);">trident-factory.bin</code> from the <a href="https://github.com/GeneralDussDuss/poseidon/releases/latest" target="_blank" rel="noopener" style="color:#34d399;">latest release</a> and flash it yourself. The factory image already contains bootloader + partition table + app merged at offset 0x0.</p>
-
-    <div class="stream-panel" style="margin-bottom:1rem;">
-      <div class="head"><span class="led" style="background:#34d399;box-shadow:0 0 6px #34d399"></span>SHELL · ESP32-C5 one-liner</div>
-      <div class="dim"># install esptool if you haven't</div>
-      <div><span class="ocean">$</span> pip install esptool</div>
-      <div style="margin-top:.5rem;"></div>
-      <div class="dim"># flash the C5 at 0x0 — factory bin includes bootloader + partitions + app</div>
-      <div><span class="ocean">$</span> esptool.py --chip esp32c5 --port <span class="warn">COM8</span> erase_flash</div>
-      <div><span class="ocean">$</span> esptool.py --chip esp32c5 --port <span class="warn">COM8</span> write_flash 0x0 trident-factory.bin</div>
+    <!-- First boot -->
+    <div style="padding:1rem 1.2rem;border:1px solid rgba(14,165,233,.2);border-radius:12px;background:rgba(14,165,233,.05);">
+      <div style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.18em;color:var(--ocean-bright);margin-bottom:.45rem;">⚡ FIRST BOOT</div>
+      <p style="color:#cbd5e1;font-size:.92rem;line-height:1.55;margin:0;">Unplug, plug back in — POSEIDON boots straight to the main menu. From here, the <b>keyboard drives everything</b>: arrow keys to move, Enter to select, and you're inside. Go explore. 🌊</p>
     </div>
-    <p style="color:#94a3b8;font-size:.88rem;margin-bottom:.8rem;">Replace <code style="background:rgba(52,211,153,.15);padding:.1rem .35rem;border-radius:3px;color:#34d399;font-family:var(--font-mono);">COM8</code> with your actual serial port. macOS: <code style="background:rgba(52,211,153,.15);padding:.1rem .35rem;border-radius:3px;color:#34d399;font-family:var(--font-mono);">/dev/tty.usbmodem*</code> · Linux: <code style="background:rgba(52,211,153,.15);padding:.1rem .35rem;border-radius:3px;color:#34d399;font-family:var(--font-mono);">/dev/ttyACM0</code>. esptool ≥ v4.7 is required for ESP32-C5 chip support.</p>
-
-    <h3 style="font-family:var(--font-display);font-size:1rem;color:#34d399;letter-spacing:.05em;margin-bottom:.6rem;">Build from source — ESP-IDF</h3>
-    <p style="color:#cbd5e1;line-height:1.6;font-size:.92rem;margin-bottom:.8rem;">The C5 firmware lives in <code style="background:rgba(52,211,153,.12);padding:.1rem .3rem;border-radius:3px;color:#34d399;font-family:var(--font-mono);">c5_node/</code> and builds with ESP-IDF 5.5+ (needed for ESP32-C5 chip support).</p>
-    <div class="stream-panel" style="margin-bottom:1rem;">
-      <div class="head"><span class="led" style="background:#34d399;box-shadow:0 0 6px #34d399"></span>SHELL · build + flash from source</div>
-      <div><span class="ocean">$</span> cd poseidon/c5_node</div>
-      <div><span class="ocean">$</span> idf.py set-target esp32c5</div>
-      <div><span class="ocean">$</span> idf.py build</div>
-      <div><span class="ocean">$</span> idf.py -p <span class="warn">COM8</span> flash</div>
-    </div>
-    <p style="color:#94a3b8;font-size:.88rem;margin:0;">The satellite pairs with POSEIDON automatically over ESP-NOW on channel 1 — no WiFi credentials, no manual MAC pairing. Power it up next to the Cardputer and you'll see it show up in <code style="background:rgba(52,211,153,.15);padding:.1rem .35rem;border-radius:3px;color:#34d399;font-family:var(--font-mono);">C5 → Status</code>.</p>
   </div>
 
-  <!-- ── Route 1: M5Burner ── -->
-  <div class="reveal frame" style="padding:clamp(1.5rem,3vw,2.2rem);border:1px solid rgba(14,165,233,.22);border-radius:18px;background:linear-gradient(135deg,rgba(14,165,233,.08) 0%,rgba(6,10,22,.4) 100%);position:relative;overflow:hidden;margin-bottom:2.5rem;">
-    <div style="font-family:var(--font-mono);font-size:.72rem;letter-spacing:.2em;color:var(--ocean-bright);margin-bottom:.5rem;">01 · EASIEST</div>
-    <h2 style="font-family:var(--font-display);font-size:clamp(1.6rem,3vw,2.2rem);color:var(--ocean-vivid);letter-spacing:.04em;margin-bottom:1rem;">M5Burner — custom repository</h2>
-    <p style="color:#cbd5e1;line-height:1.6;margin-bottom:1.2rem;">M5Burner is M5Stack's official GUI flasher. POSEIDON isn't on their public list yet, but you can add our custom repo in <b>one click</b> and get auto-updates whenever we tag a release.</p>
+  <!-- ════════ DEVICE 2 · TRIDENT C5 SATELLITE ════════ -->
+  <div class="reveal frame" style="padding:clamp(1.5rem,3vw,2.2rem);border:1px solid rgba(52,211,153,.25);border-radius:18px;background:linear-gradient(135deg,rgba(52,211,153,.08) 0%,rgba(6,10,22,.4) 100%);position:relative;overflow:hidden;margin-bottom:2.5rem;">
+    <div style="font-family:var(--font-mono);font-size:.72rem;letter-spacing:.2em;color:#34d399;margin-bottom:.5rem;">DEVICE 2 · OPTIONAL ADD-ON · ESP32-C5</div>
+    <h2 style="font-family:var(--font-display);font-size:clamp(1.7rem,3.4vw,2.4rem);color:#34d399;letter-spacing:.04em;margin-bottom:.8rem;">🛰 The TRIDENT C5 Satellite</h2>
 
-    <div class="stream-panel" style="margin-bottom:1.2rem;">
-      <div class="head"><span class="led"></span>M5BURNER · CUSTOM REPO URL</div>
-      <div><span class="ocean">https://generaldussduss.github.io/poseidon/m5burner.json</span></div>
-      <div class="dim" style="margin-top:.3rem;">paste into M5Burner → Settings → Custom → Add</div>
-    </div>
+    <div style="display:inline-flex;align-items:center;gap:.5rem;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.14em;color:#34d399;border:1px solid rgba(52,211,153,.4);background:rgba(52,211,153,.08);padding:.35rem .8rem;border-radius:100px;margin-bottom:1rem;">OPTIONAL — ONLY IF YOU HAVE A C5 BOARD</div>
 
-    <h3 style="font-family:var(--font-display);font-size:1rem;color:var(--ocean-vivid);letter-spacing:.05em;margin-bottom:.8rem;">Step-by-step</h3>
-    <ol style="padding-left:1.5rem;color:#cbd5e1;line-height:1.7;font-size:.95rem;">
-      <li>Download M5Burner from <a href="https://docs.m5stack.com/en/download" target="_blank" rel="noopener">docs.m5stack.com/download</a> and open it.</li>
-      <li>Open <b>Settings</b> (gear icon, bottom-left) → <b>Custom Firmware</b> tab.</li>
-      <li>Paste the repo URL above and click <b>Add</b>.</li>
-      <li>Back in the main view, scroll the sidebar until you see the <b>POSEIDON</b> entry (icon: trident).</li>
-      <li>Click it → select the latest version → hit <b>Burn</b>.</li>
-      <li>M5Burner auto-detects the COM port, erases, and flashes. Reboots when done.</li>
+    <p style="color:#cbd5e1;line-height:1.6;margin-bottom:1.4rem;">TRIDENT is an optional sidekick. If you have an <b>ESP32-C5</b> board, flash it to unlock <b>5 GHz</b> work, <b>Zigbee</b> sniffing, and <b>PMKID</b> capture — beamed back to the Cardputer over ESP-NOW. Don't have a C5? Skip this whole section; the Cardputer is fully loaded on its own.</p>
+
+    <h3 style="font-family:var(--font-display);font-size:1.15rem;color:#34d399;letter-spacing:.05em;margin-bottom:.4rem;">Flash it with the Espressif web flasher</h3>
+    <p style="color:#94a3b8;font-size:.92rem;line-height:1.55;margin-bottom:1rem;">This is the recommended, verified-working route for the C5. It runs entirely in <b>Chrome or Edge</b> — no install. Open the flasher, point it at three small files, and program.</p>
+
+    <ol style="padding-left:1.4rem;color:#cbd5e1;line-height:1.8;font-size:.96rem;margin-bottom:1.2rem;">
+      <li>Plug the C5 into your computer with a USB-C cable.</li>
+      <li>In Chrome or Edge, open <a href="https://espressif.github.io/esptool-js" target="_blank" rel="noopener" style="color:#34d399;">espressif.github.io/esptool-js</a>.</li>
+      <li>Click <b>Connect</b> and pick the C5's serial port from the list.</li>
+      <li>Add the three files below, each with its <b>Flash Address</b> set exactly as shown.</li>
+      <li>Click <b>Program</b> and wait for it to finish. 🎉</li>
     </ol>
 
-    <p style="margin-top:1rem;color:#94a3b8;font-size:.9rem;font-style:italic;">M5Burner checks this URL on every launch — <code style="background:rgba(14,165,233,.12);padding:.1rem .3rem;border-radius:3px;color:var(--ocean-vivid);font-family:var(--font-mono);">v0.6.0</code> shows up automatically the moment it's tagged.</p>
+    <div class="stream-panel" style="margin-bottom:1rem;max-width:600px;">
+      <div class="head"><span class="led" style="background:#34d399;box-shadow:0 0 6px #34d399"></span>THREE FILES · from docs/flash/bin/trident-c5/</div>
+      <div><span class="warn">0x2000</span>  &nbsp;<span class="ocean">bootloader.bin</span></div>
+      <div><span class="warn">0x8000</span>  &nbsp;<span class="ocean">partition-table.bin</span></div>
+      <div><span class="warn">0x10000</span> <span class="ocean">poseidon_c5_node.bin</span></div>
+      <div class="dim" style="margin-top:.5rem;"># set each address in its Flash Address box, then Program</div>
+    </div>
+
+    <p style="color:#94a3b8;font-size:.9rem;line-height:1.55;margin-bottom:1.2rem;">Grab the three <code style="background:rgba(52,211,153,.12);padding:.1rem .3rem;border-radius:3px;color:#34d399;font-family:var(--font-mono);">.bin</code> files from <a href="flash/bin/trident-c5/" target="_blank" rel="noopener" style="color:#34d399;">flash/bin/trident-c5/</a> (or the <a href="https://github.com/GeneralDussDuss/poseidon/releases/latest" target="_blank" rel="noopener" style="color:#34d399;">latest release</a>). The Espressif flasher is the go-to here because the one-click button can't currently program the C5 — that's an upstream library limitation, not something on your end. The web flasher above gets you there reliably.</p>
+
+    <div style="padding:1rem 1.2rem;border:1px solid rgba(52,211,153,.2);border-radius:12px;background:rgba(52,211,153,.05);">
+      <div style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.18em;color:#34d399;margin-bottom:.45rem;">💡 PICK THE RIGHT PORT</div>
+      <p style="color:#cbd5e1;font-size:.92rem;line-height:1.55;margin:0;">The C5 shows up as a generic <b>"USB Serial Device"</b> — exactly like the Cardputer does. If both are plugged in, unplug the Cardputer while you flash the C5 so there's no guessing which port is which. Once flashed, the C5 pairs with POSEIDON automatically over ESP-NOW and appears under <code style="background:rgba(52,211,153,.15);padding:.1rem .35rem;border-radius:3px;color:#34d399;font-family:var(--font-mono);">C5 → Status</code>.</p>
+    </div>
   </div>
 
-  <!-- ── Route 2: esptool ── -->
-  <div class="reveal frame" style="padding:clamp(1.5rem,3vw,2.2rem);border:1px solid rgba(251,191,36,.22);border-radius:18px;background:linear-gradient(135deg,rgba(251,191,36,.06) 0%,rgba(6,10,22,.4) 100%);position:relative;overflow:hidden;margin-bottom:2.5rem;">
-    <div style="font-family:var(--font-mono);font-size:.72rem;letter-spacing:.2em;color:var(--gold);margin-bottom:.5rem;">02 · TERMINAL</div>
-    <h2 style="font-family:var(--font-display);font-size:clamp(1.6rem,3vw,2.2rem);color:var(--gold);letter-spacing:.04em;margin-bottom:1rem;">esptool — direct flash</h2>
-    <p style="color:#cbd5e1;line-height:1.6;margin-bottom:1.2rem;">Download the factory image from the <a href="https://github.com/GeneralDussDuss/poseidon/releases/latest" target="_blank">latest release</a> and flash it. Works on Windows / macOS / Linux.</p>
-
-    <div class="stream-panel" style="margin-bottom:1rem;">
-      <div class="head"><span class="led" style="background:var(--gold);box-shadow:0 0 6px var(--gold)"></span>SHELL · one-liner</div>
-      <div class="dim"># install esptool (one time)</div>
-      <div><span class="ocean">$</span> pip install esptool</div>
-      <div style="margin-top:.5rem;"></div>
-      <div class="dim"># erase + flash at 0x0</div>
-      <div><span class="ocean">$</span> esptool.py --chip esp32s3 --port <span class="warn">COM5</span> erase_flash</div>
-      <div><span class="ocean">$</span> esptool.py --chip esp32s3 --port <span class="warn">COM5</span> write_flash 0x0 poseidon-factory.bin</div>
-    </div>
-    <p style="color:#94a3b8;font-size:.9rem;">Replace <code style="background:rgba(251,191,36,.15);padding:.1rem .35rem;border-radius:3px;color:var(--gold);font-family:var(--font-mono);">COM5</code> with your actual port. macOS looks like <code style="background:rgba(251,191,36,.15);padding:.1rem .35rem;border-radius:3px;color:var(--gold);font-family:var(--font-mono);">/dev/tty.usbmodem*</code>, Linux like <code style="background:rgba(251,191,36,.15);padding:.1rem .35rem;border-radius:3px;color:var(--gold);font-family:var(--font-mono);">/dev/ttyACM0</code>.</p>
-  </div>
-
-  <!-- ── Route 3: PlatformIO ── -->
-  <div class="reveal frame" style="padding:clamp(1.5rem,3vw,2.2rem);border:1px solid rgba(34,211,238,.22);border-radius:18px;background:linear-gradient(135deg,rgba(34,211,238,.06) 0%,rgba(6,10,22,.4) 100%);position:relative;overflow:hidden;margin-bottom:2.5rem;">
-    <div style="font-family:var(--font-mono);font-size:.72rem;letter-spacing:.2em;color:var(--bio);margin-bottom:.5rem;">03 · SOURCE</div>
-    <h2 style="font-family:var(--font-display);font-size:clamp(1.6rem,3vw,2.2rem);color:var(--bio);letter-spacing:.04em;margin-bottom:1rem;">PlatformIO — build from source</h2>
-    <p style="color:#cbd5e1;line-height:1.6;margin-bottom:1.2rem;">Clone the repo, open in VS Code with the PlatformIO extension, hit Upload. Uses pioarduino platform 55.03.38 + Bruce's patched libs (pinned in <code style="background:rgba(34,211,238,.15);padding:.1rem .35rem;border-radius:3px;color:var(--bio);font-family:var(--font-mono);">platformio.ini</code>).</p>
-
-    <div class="stream-panel" style="margin-bottom:1rem;">
-      <div class="head"><span class="led" style="background:var(--bio);box-shadow:0 0 6px var(--bio)"></span>SHELL · clone + flash</div>
-      <div><span class="ocean">$</span> git clone https://github.com/GeneralDussDuss/poseidon.git</div>
-      <div><span class="ocean">$</span> cd poseidon</div>
-      <div><span class="ocean">$</span> pio run -t upload</div>
-    </div>
-    <p style="color:#94a3b8;font-size:.9rem;">First build pulls ~500 MB (framework + libs). Subsequent builds are ~30 seconds. Need <b>Python 3.10+</b> and <b>PlatformIO Core</b> installed.</p>
+  <!-- ── Troubleshooting ── -->
+  <div class="reveal frame" style="padding:clamp(1.4rem,2.8vw,2rem);border:1px solid rgba(251,191,36,.22);border-radius:16px;background:linear-gradient(135deg,rgba(251,191,36,.06) 0%,rgba(6,10,22,.4) 100%);margin-bottom:2.5rem;">
+    <div style="font-family:var(--font-mono);font-size:.72rem;letter-spacing:.2em;color:var(--gold);margin-bottom:.5rem;">STUCK? · QUICK FIXES</div>
+    <h2 style="font-family:var(--font-display);font-size:clamp(1.4rem,2.6vw,1.9rem);color:var(--gold);letter-spacing:.04em;margin-bottom:1rem;">Troubleshooting</h2>
+    <ul style="list-style:none;padding:0;margin:0;color:#cbd5e1;line-height:1.6;font-size:.95rem;">
+      <li style="margin-bottom:.9rem;"><b style="color:var(--gold);">No port shows up?</b> Install the USB serial driver (CH340 / CP210x) for your board, then unplug and replug. Try a different USB-C cable — some are charge-only and carry no data.</li>
+      <li style="margin-bottom:.9rem;"><b style="color:var(--gold);">Web flasher greyed out or missing the button?</b> Use <b>Chrome</b> or <b>Edge</b> — Firefox and Safari don't support WebSerial yet.</li>
+      <li style="margin-bottom:0;"><b style="color:var(--gold);">Won't connect / flash fails?</b> Hold the <b>BOOT</b> (G0) button while you plug in or hit Connect to force download mode, then release and flash again.</li>
+    </ul>
   </div>
 
   <!-- ── Recovery note ── -->
   <div class="reveal" style="padding:1.2rem 1.5rem;border:1px solid rgba(249,115,22,.3);border-radius:12px;background:rgba(249,115,22,.05);margin-bottom:2rem;">
-    <div style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.18em;color:var(--coral);margin-bottom:.5rem;">⚠ BRICK RECOVERY</div>
-    <p style="color:#cbd5e1;font-size:.92rem;line-height:1.55;margin:0;">If the device boots to black or locks up: hold <b>G0</b> during power-on to force download mode, then re-flash. Every ESP32-S3 has this escape hatch — you cannot permanently brick a Cardputer-Adv from software.</p>
+    <div style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.18em;color:var(--coral);margin-bottom:.5rem;">⚠ CAN'T BRICK IT</div>
+    <p style="color:#cbd5e1;font-size:.92rem;line-height:1.55;margin:0;">Boots to black or locks up? Don't panic — hold <b>BOOT (G0)</b> during power-on to force download mode, then flash again. Every ESP32 has this escape hatch, so you can't permanently brick a Cardputer or a C5 from software. Worst case, you just re-flash. 🔱</p>
   </div>
 
 </section>

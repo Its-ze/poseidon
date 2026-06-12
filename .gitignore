@@ -34,10 +34,23 @@ _release/
 # track its bins or GitHub Pages has nothing to serve. Keep these
 # specifically un-ignored.
 !docs/flash/bin/**/*.bin
-!docs/bin/**/*.bin
 
 # Superpowers brainstorm session output (HTML mockups, server state) — local only
 .superpowers/
 
-# Audit pipeline — keep maps/findings, ignore upstream reference clones
-_audit/refs/
+# Internal planning / audit docs — local only, must NOT be on the public Pages site
+docs/superpowers/
+docs/audit/
+_audit/
+
+# Personal dev helper scripts (dead pre-reorg paths / local-only logging)
+_capture.ps1
+c5_node/_idf_build.bat
+c5_node/_idf_install_v3.bat
+c5_node/_merge_factory.bat
+c5_node/_mon17.ps1
+c5_node/_build_flash.bat
+
+# Scratch web-design demos + merge backups
+_webdemos/
+*.orig

@@ -201,30 +201,34 @@ void feat_clock(void)
     ui_draw_footer("`=back");
     auto &d = M5Cardputer.Display;
 
+    d.setTextColor(T_ACCENT, T_BG);
+    d.setCursor(4, BODY_Y + 2); d.print("CLOCK");
+    d.drawFastHLine(4, BODY_Y + 12, 50, T_ACCENT);
+    d.setTextColor(T_DIM, T_BG);
+    d.setCursor(SCR_W / 2 - 20, BODY_Y + 70);
+    d.print("uptime");
+
+    char shown[16] = "";
     uint32_t last = 0;
     while (true) {
         if (millis() - last > 500) {
             last = millis();
-            ui_clear_body();
-            d.setTextColor(T_ACCENT, T_BG);
-            d.setCursor(4, BODY_Y + 2); d.print("CLOCK");
-            d.drawFastHLine(4, BODY_Y + 12, 50, T_ACCENT);
 
             /* Big uptime. */
             uint32_t s = millis() / 1000;
             uint32_t h = s / 3600, m = (s % 3600) / 60, sec = s % 60;
-            d.setTextColor(T_FG, T_BG);
-            d.setTextSize(3);
             char buf[16];
             snprintf(buf, sizeof(buf), "%02lu:%02lu:%02lu",
                      (unsigned long)h, (unsigned long)m, (unsigned long)sec);
-            int w = d.textWidth(buf);
-            d.setCursor((SCR_W - w) / 2, BODY_Y + 30);
-            d.print(buf);
-            d.setTextSize(1);
-            d.setTextColor(T_DIM, T_BG);
-            d.setCursor(SCR_W / 2 - 20, BODY_Y + 70);
-            d.print("uptime");
+            if (strcmp(buf, shown) != 0) {
+                strcpy(shown, buf);
+                d.setTextColor(T_FG, T_BG);
+                d.setTextSize(3);
+                int w = d.textWidth(buf);
+                d.setCursor((SCR_W - w) / 2, BODY_Y + 30);
+                d.print(buf);
+                d.setTextSize(1);
+            }
             ui_draw_status(radio_name(), "clock");
         }
         uint16_t k = input_poll();

@@ -40,22 +40,30 @@ static int pick_freq(void)
 {
     auto &d = M5Cardputer.Display;
     int sel = 4;  /* default 433.92 */
+
+    /* Static chrome once; rows repaint per-row each pass so a cursor
+     * move never blanks the whole body. */
+    ui_clear_body();
+    d.setTextColor(T_ACCENT, T_BG);
+    d.setCursor(4, BODY_Y + 2); d.print("JAM DETECT");
+    d.drawFastHLine(4, BODY_Y + 12, 100, T_ACCENT);
+    d.setTextColor(T_DIM, T_BG);
+    d.setCursor(4, BODY_Y + 18); d.print("pick freq to monitor");
+    ui_draw_footer(";/.=pick  ENTER=start  `=back");
+
+    int last_sel = -1;
     while (true) {
-        ui_clear_body();
-        d.setTextColor(T_ACCENT, T_BG);
-        d.setCursor(4, BODY_Y + 2); d.print("JAM DETECT");
-        d.drawFastHLine(4, BODY_Y + 12, 100, T_ACCENT);
-        d.setTextColor(T_DIM, T_BG);
-        d.setCursor(4, BODY_Y + 18); d.print("pick freq to monitor");
-        for (int i = 0; i < JAM_FREQ_COUNT; ++i) {
-            int y = BODY_Y + 32 + i * 10;
-            bool s = (i == sel);
-            if (s) d.fillRect(2, y - 1, SCR_W - 4, 10, T_SEL_BG);
-            d.setTextColor(s ? T_ACCENT : T_FG, s ? T_SEL_BG : T_BG);
-            d.setCursor(8, y);
-            d.printf("%.3f MHz", JAM_FREQS[i]);
+        if (sel != last_sel) {
+            for (int i = 0; i < JAM_FREQ_COUNT; ++i) {
+                int y = BODY_Y + 32 + i * 10;
+                bool s = (i == sel);
+                d.fillRect(2, y - 1, SCR_W - 4, 10, s ? T_SEL_BG : T_BG);
+                d.setTextColor(s ? T_ACCENT : T_FG, s ? T_SEL_BG : T_BG);
+                d.setCursor(8, y);
+                d.printf("%.3f MHz", JAM_FREQS[i]);
+            }
+            last_sel = sel;
         }
-        ui_draw_footer(";/.=pick  ENTER=start  `=back");
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(20); continue; }
         if (k == PK_ESC) return -1;
@@ -103,16 +111,13 @@ void feat_subghz_jam_detect(void)
         if (r > peak_warm) peak_warm = r;
 
         if ((samples & 0x0F) == 0) {
-            d.fillRect(0, BODY_Y + 20, SCR_W, 60, T_BG);
-            d.setTextColor(T_WARN, T_BG);
-            d.setCursor(4, BODY_Y + 24);
-            d.printf("learning baseline... %lus",
-                     (unsigned long)((warmup_end - millis()) / 1000));
-            d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 40);
-            d.printf("floor    : %d dBm", samples ? (int)(sum / samples) : 0);
-            d.setCursor(4, BODY_Y + 52);
-            d.printf("peak warm: %d dBm", peak_warm);
+            ui_text_w(4, BODY_Y + 24, SCR_W - 8, T_WARN,
+                      "learning baseline... %lus",
+                      (unsigned long)((warmup_end - millis()) / 1000));
+            ui_text_w(4, BODY_Y + 40, SCR_W - 8, T_FG,
+                      "floor    : %d dBm", samples ? (int)(sum / samples) : 0);
+            ui_text_w(4, BODY_Y + 52, SCR_W - 8, T_FG,
+                      "peak warm: %d dBm", peak_warm);
         }
         uint16_t k = input_poll();
         if (k == PK_ESC) {
@@ -134,6 +139,13 @@ void feat_subghz_jam_detect(void)
     int      peak_live  = -200;
     int      cur_rssi   = baseline;
     uint32_t last_draw  = 0;
+
+    /* Per-field change tracking so the live readout overwrites only the
+     * fields that moved instead of blanking the whole region each pass. */
+    bool     fields_init = false;
+    int      last_cur    = 0x7FFF;
+    int      last_peak   = 0x7FFF;
+    uint32_t last_alerts = 0xFFFFFFFFu;
 
     while (true) {
         cur_rssi = cc1101_get_rssi();
@@ -174,28 +186,40 @@ void feat_subghz_jam_detect(void)
             d.setCursor(4, BODY_Y + 2); d.printf("JAM DETECT %.3f", freq);
             d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
             last_draw = 0;
+            fields_init = false;   /* re-lay the static field labels */
         }
 
         uint32_t now = millis();
         if (!alerting && now - last_draw > 250) {
             last_draw = now;
-            d.fillRect(0, BODY_Y + 20, SCR_W, 80, T_BG);
-            d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 22);
-            d.printf("baseline : %d dBm", baseline);
-            d.setCursor(4, BODY_Y + 34);
-            d.printf("trigger  : %d dBm", trigger);
-            uint16_t cur_col = (cur_rssi >= trigger) ? T_BAD
-                             : (cur_rssi >= trigger - 5) ? T_WARN : T_GOOD;
-            d.setTextColor(cur_col, T_BG);
-            d.setCursor(4, BODY_Y + 46);
-            d.printf("current  : %d dBm", cur_rssi);
-            d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 58);
-            d.printf("peak     : %d dBm", peak_live);
-            d.setTextColor(alerts > 0 ? T_BAD : T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 70);
-            d.printf("alerts   : %lu", (unsigned long)alerts);
+            /* baseline + trigger are fixed after warmup — draw once (and
+             * again after an overlay/help screen wiped the body). */
+            if (!fields_init) {
+                ui_text_w(4, BODY_Y + 22, SCR_W - 8, T_FG,
+                          "baseline : %d dBm", baseline);
+                ui_text_w(4, BODY_Y + 34, SCR_W - 8, T_FG,
+                          "trigger  : %d dBm", trigger);
+                last_cur = last_peak = 0x7FFF;
+                last_alerts = 0xFFFFFFFFu;
+                fields_init = true;
+            }
+            if (cur_rssi != last_cur) {
+                uint16_t cur_col = (cur_rssi >= trigger) ? T_BAD
+                                 : (cur_rssi >= trigger - 5) ? T_WARN : T_GOOD;
+                ui_text_w(4, BODY_Y + 46, SCR_W - 8, cur_col,
+                          "current  : %d dBm", cur_rssi);
+                last_cur = cur_rssi;
+            }
+            if (peak_live != last_peak) {
+                ui_text_w(4, BODY_Y + 58, SCR_W - 8, T_FG,
+                          "peak     : %d dBm", peak_live);
+                last_peak = peak_live;
+            }
+            if (alerts != last_alerts) {
+                ui_text_w(4, BODY_Y + 70, SCR_W - 8, alerts > 0 ? T_BAD : T_DIM,
+                          "alerts   : %lu", (unsigned long)alerts);
+                last_alerts = alerts;
+            }
             ui_draw_status(radio_name(), "jamdet");
         }
 
@@ -205,6 +229,7 @@ void feat_subghz_jam_detect(void)
             ui_show_current_help();
             ui_draw_footer("`=stop  ?=help");
             last_draw = 0;
+            fields_init = false;
         }
         delay(30);
     }

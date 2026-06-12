@@ -1,0 +1,16 @@
+{
+  "name": "POSEIDON",
+  "version": "0.6.1",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "flash/bin/cardputer/poseidon-factory.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

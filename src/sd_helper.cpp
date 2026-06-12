@@ -17,6 +17,8 @@
 #include <esp_vfs_fat.h>
 #include <diskio_impl.h>
 #include <sdmmc_cmd.h>
+#include <driver/sdspi_host.h>
+#include <driver/spi_common.h>
 
 #define SD_SCK   40
 #define SD_MISO  39
@@ -184,4 +186,70 @@ bool sd_format(void)
     sd_recursive_delete("/");
     s_mounted = true;
     return true;
+}
+
+/* True FAT reformat (FAT32 for <=32 GB cards, FAT16 for tiny ones) via
+ * the ESP-IDF SDSPI + FATFS f_mkfs path. Unlike sd_format()'s content
+ * wipe, this runs a real f_mkfs even on a perfectly mountable card —
+ * Arduino's SD.begin(format_if_mount_failed=true) only formats when the
+ * mount FAILS, so a healthy card never gets a fresh filesystem. Use
+ * this to recover an exFAT / oddly-formatted / corrupt card to clean
+ * FAT32 on-device. Returns true on success and leaves the card
+ * re-mounted via the normal Arduino path. */
+bool sd_force_format(void)
+{
+    s_mounted = false;
+    SD.end();
+    sd_spi.end();
+    delay(30);
+
+    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+    host.slot = SPI3_HOST;            /* HSPI — same bus sd_spi uses */
+    host.max_freq_khz = 20000;
+
+    spi_bus_config_t bus = {};
+    bus.mosi_io_num     = SD_MOSI;
+    bus.miso_io_num     = SD_MISO;
+    bus.sclk_io_num     = SD_SCK;
+    bus.quadwp_io_num   = -1;
+    bus.quadhd_io_num   = -1;
+    bus.max_transfer_sz = 4096;
+    esp_err_t be = spi_bus_initialize((spi_host_device_t)host.slot, &bus, SPI_DMA_CH_AUTO);
+    /* ESP_ERR_INVALID_STATE = bus already initialised — fine, continue. */
+    if (be != ESP_OK && be != ESP_ERR_INVALID_STATE) {
+        Serial.printf("[sd] force-fmt bus init rc=%d\n", (int)be);
+        sd_mount();
+        return false;
+    }
+
+    sdspi_device_config_t slot = SDSPI_DEVICE_CONFIG_DEFAULT();
+    slot.gpio_cs  = (gpio_num_t)SD_CS;
+    slot.host_id  = (spi_host_device_t)host.slot;
+
+    esp_vfs_fat_mount_config_t mcfg = {};
+    mcfg.format_if_mount_failed = true;
+    mcfg.max_files              = 2;
+    mcfg.allocation_unit_size   = 16 * 1024;
+
+    sdmmc_card_t *card = nullptr;
+    esp_err_t me = esp_vfs_fat_sdspi_mount("/sdfmt", &host, &slot, &mcfg, &card);
+    if (me != ESP_OK || !card) {
+        Serial.printf("[sd] force-fmt mount rc=%d\n", (int)me);
+        spi_bus_free((spi_host_device_t)host.slot);
+        delay(20);
+        sd_mount();
+        return false;
+    }
+
+    /* Force the real format even though the mount succeeded. */
+    esp_err_t fe = esp_vfs_fat_sdcard_format("/sdfmt", card);
+    Serial.printf("[sd] f_mkfs rc=%d\n", (int)fe);
+    esp_vfs_fat_sdcard_unmount("/sdfmt", card);
+    spi_bus_free((spi_host_device_t)host.slot);
+    delay(30);
+
+    /* Re-mount through the normal Arduino path so the rest of the
+     * firmware keeps using SD.* as usual. */
+    bool ok = sd_mount();
+    return (fe == ESP_OK) && ok;
 }

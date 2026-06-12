@@ -9,6 +9,7 @@
 
 static HardwareSerial s_uart(1);
 static gps_fix_t s_fix = {};
+static portMUX_TYPE s_fix_mux = portMUX_INITIALIZER_UNLOCKED;
 static char s_line[128];
 static int  s_line_len = 0;
 static gps_diag_t s_diag = {};
@@ -20,6 +21,8 @@ static size_t  s_baud_idx = 0;
 static uint32_t s_baud    = GPS_BAUD;
 
 static bool s_started = false;
+static TaskHandle_t s_gps_task = nullptr;
+static volatile bool s_pause_poll = false;
 
 bool gps_begin(void)
 {
@@ -32,6 +35,17 @@ bool gps_begin(void)
 void gps_end(void)
 {
     if (!s_started) return;
+    /* Stop the poller before tearing down the UART so it can't read a
+     * half-closed port. Mirror the gps_cycle_baud pause: flag, brief
+     * delay to let the in-flight gps_poll iteration drain, then delete
+     * the task and null the handle so gps_ensure_running respawns it. */
+    s_pause_poll = true;
+    delay(20);
+    if (s_gps_task) {
+        vTaskDelete(s_gps_task);
+        s_gps_task = nullptr;
+    }
+    s_pause_poll = false;
     s_uart.end();
     /* gps-002: HardwareSerial::end() does not release the pin mode —
      * the UART driver leaves TX in OUTPUT (driven LOW or HIGH depending
@@ -81,7 +95,6 @@ void gps_set_user_enabled(bool on)
 /* Polling task — same as the one previously spawned by main.cpp
  * setup(), now owned by gps.cpp so gps_ensure_running can lazy-
  * spawn it post-boot when the user opens the GPS / Wardrive menu. */
-static TaskHandle_t s_gps_task = nullptr;
 static void gps_task_fn(void *_)
 {
     while (1) {
@@ -102,8 +115,6 @@ bool gps_ensure_running(void)
     return s_started;
 }
 
-static volatile bool s_pause_poll = false;
-
 uint32_t gps_cycle_baud(void)
 {
     s_pause_poll = true;  /* pause gps_task to avoid UART read during teardown */
@@ -121,13 +132,18 @@ uint32_t gps_cycle_baud(void)
     return s_baud;
 }
 
+/* Returns a live reference — fields may tear under concurrent poller
+ * updates. Use gps_snapshot() for a race-free multi-field read. */
 const gps_fix_t &gps_get(void) { return s_fix; }
 
 bool gps_snapshot(gps_fix_t *out)
 {
-    if (!out || !s_fix.valid) return false;
-    *out = s_fix;
-    return true;
+    if (!out) return false;
+    portENTER_CRITICAL(&s_fix_mux);
+    bool ok = s_fix.valid;
+    if (ok) *out = s_fix;
+    portEXIT_CRITICAL(&s_fix_mux);
+    return ok;
 }
 
 /* ---- helpers ---- */
@@ -149,6 +165,29 @@ static double nmea_to_degrees(const char *s, char hemi)
     return out;
 }
 
+static int hex_nibble(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    return -1;
+}
+
+/* Verify the NMEA *HH checksum: XOR of all bytes between '$' and '*'.
+ * Rejects sentences with no '*' delimiter or malformed hex digits. */
+static bool nmea_checksum_ok(const char *line)
+{
+    if (!line || line[0] != '$') return false;
+    uint8_t sum = 0;
+    const char *p = line + 1;
+    while (*p && *p != '*') sum ^= (uint8_t)*p++;
+    if (*p != '*') return false;
+    int hi = hex_nibble(p[1]);
+    int lo = (hi < 0) ? -1 : hex_nibble(p[2]);
+    if (hi < 0 || lo < 0) return false;
+    return sum == (uint8_t)((hi << 4) | lo);
+}
+
 static int split_csv(char *line, char **fields, int max)
 {
     int n = 0;
@@ -167,14 +206,18 @@ static void parse_gga(char *line)
     if (n < 10) return;
     int fix_quality = atoi(f[6]);
     if (fix_quality < 1) return;
-    s_fix.lat_deg = nmea_to_degrees(f[2], f[3][0]);
-    s_fix.lon_deg = nmea_to_degrees(f[4], f[5][0]);
-    s_fix.sats    = (uint8_t)atoi(f[7]);
-    s_fix.hdop    = (float)atof(f[8]);
-    s_fix.alt_m   = (float)atof(f[9]);
-    strncpy(s_fix.utc, f[1], sizeof(s_fix.utc) - 1);
-    s_fix.valid   = true;
-    s_fix.time_ms = millis();
+    gps_fix_t fix = s_fix;
+    fix.lat_deg = nmea_to_degrees(f[2], f[3][0]);
+    fix.lon_deg = nmea_to_degrees(f[4], f[5][0]);
+    fix.sats    = (uint8_t)atoi(f[7]);
+    fix.hdop    = (float)atof(f[8]);
+    fix.alt_m   = (float)atof(f[9]);
+    strncpy(fix.utc, f[1], sizeof(fix.utc) - 1);
+    fix.valid   = true;
+    fix.time_ms = millis();
+    portENTER_CRITICAL(&s_fix_mux);
+    s_fix = fix;
+    portEXIT_CRITICAL(&s_fix_mux);
 }
 
 static void parse_rmc(char *line)
@@ -183,18 +226,22 @@ static void parse_rmc(char *line)
     int n = split_csv(line, f, 16);
     if (n < 10) return;
     if (f[2][0] != 'A') return;  /* A = active, V = void */
-    s_fix.lat_deg    = nmea_to_degrees(f[3], f[4][0]);
-    s_fix.lon_deg    = nmea_to_degrees(f[5], f[6][0]);
-    s_fix.speed_kts  = (float)atof(f[7]);
-    s_fix.course_deg = (float)atof(f[8]);
-    strncpy(s_fix.date, f[9], sizeof(s_fix.date) - 1);
+    gps_fix_t fix = s_fix;
+    fix.lat_deg    = nmea_to_degrees(f[3], f[4][0]);
+    fix.lon_deg    = nmea_to_degrees(f[5], f[6][0]);
+    fix.speed_kts  = (float)atof(f[7]);
+    fix.course_deg = (float)atof(f[8]);
+    strncpy(fix.date, f[9], sizeof(fix.date) - 1);
     /* Do NOT set s_fix.valid here. RMC's "A" status only means the
      * GPS module's NMEA layer is happy, not that we have a 3D fix —
      * a 2D fix can report 'A' while GGA reports fix-quality=0. The
      * prior code overwrote `alt_m` from a stale 3D fix with garbage
      * because RMC flipped `valid=true` regardless. Let GGA gate
      * validity via fix-quality≥1 (parse_gga does this correctly). */
-    s_fix.time_ms = millis();
+    fix.time_ms = millis();
+    portENTER_CRITICAL(&s_fix_mux);
+    s_fix = fix;
+    portEXIT_CRITICAL(&s_fix_mux);
 }
 
 static void process_line(char *line)
@@ -202,6 +249,9 @@ static void process_line(char *line)
     s_diag.lines++;
     strncpy(s_diag.last, line, sizeof(s_diag.last) - 1);
     s_diag.last[sizeof(s_diag.last) - 1] = '\0';
+    /* Drop sentences whose *HH checksum doesn't match — RF noise / baud
+     * glitches can otherwise yield a valid-looking but wrong fix. */
+    if (!nmea_checksum_ok(line)) return;
     if (strncmp(line, "$GPGGA", 6) == 0 || strncmp(line, "$GNGGA", 6) == 0) {
         s_diag.gga++;
         parse_gga(line);
@@ -246,6 +296,8 @@ void gps_poll(void)
 
     /* Age out stale fixes after 10 seconds without an update. */
     if (s_fix.valid && millis() - s_fix.time_ms > 10000) {
+        portENTER_CRITICAL(&s_fix_mux);
         s_fix.valid = false;
+        portEXIT_CRITICAL(&s_fix_mux);
     }
 }

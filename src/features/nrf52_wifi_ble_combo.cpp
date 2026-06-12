@@ -98,6 +98,7 @@ void feat_nrf52_wifi_ble_combo(void)
     uint32_t deauth_duration_ms = 15000; /* 15s of deauth then move to BLE */
     bool aborted = false;
     bool skipped = false;
+    uint32_t last_draw = 0;
 
     while (millis() - deauth_start < deauth_duration_ms && !aborted && !skipped) {
         /* Fire broadcast deauth bursts */
@@ -108,7 +109,8 @@ void feat_nrf52_wifi_ble_combo(void)
         }
 
         /* Update display every 250ms */
-        if (millis() % 250 < 20) {
+        if (millis() - last_draw > 250) {
+            last_draw = millis();
             ui_dashboard_chrome(">> DEAUTH <<", (sent % 16 == 0));
             d.fillRect(0, BODY_Y+16, SCR_W, 40, T_BG);
             d.setTextColor(T_ACCENT, T_BG); d.setCursor(4, BODY_Y+18);
@@ -154,7 +156,7 @@ void feat_nrf52_wifi_ble_combo(void)
     File log_file = sdlog_open("combo_ble", "ts,type,data");
     uint32_t ble_pkts = 0;
     uint32_t prov_found = 0;
-    uint32_t last_draw = 0;
+    last_draw = 0;
 
     while (true) {
         while (NRF52Hardware::available()) {

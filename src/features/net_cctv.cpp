@@ -349,8 +349,9 @@ static void fmt_eta(uint32_t secs, char *out, size_t sz)
     else            snprintf(out, sz, "%lus",       (unsigned long)secs);
 }
 
-static void draw_progress(int done, int total, int hits,
-                          const char *phase, const char *current)
+static uint32_t s_prog_last = 0;
+
+static void draw_cctv_chrome(void)
 {
     auto &d = M5Cardputer.Display;
     ui_clear_body();
@@ -359,21 +360,30 @@ static void draw_progress(int done, int total, int hits,
     d.setCursor(4, BODY_Y + 2);
     d.print("CCTV TOOLKIT");
     d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+    d.drawRect(4, BODY_Y + 38, SCR_W - 12, 5, T_ACCENT);
+    ui_draw_footer("`=abort");
+    s_prog_last = 0;
+}
+
+static void draw_progress(int done, int total, int hits,
+                          const char *phase, const char *current)
+{
+    bool final = (total <= 0) || (done >= total);
+    uint32_t now = millis();
+    if (!final && now - s_prog_last < 150) return;
+    s_prog_last = now;
+
+    auto &d = M5Cardputer.Display;
 
     /* Phase + current target IP, so the user knows we're actually working. */
-    d.setTextColor(T_FG, T_BG);
-    d.setCursor(4, BODY_Y + 16);
-    d.printf("%s", phase);
-    if (current && *current) {
-        d.setTextColor(T_DIM, T_BG);
-        d.setCursor(4, BODY_Y + 26);
-        d.printf("-> %s", current);
-    }
+    ui_text(4, BODY_Y + 16, T_FG, "%s", phase);
+    if (current && *current) ui_text(4, BODY_Y + 26, T_DIM, "-> %s", current);
+    else                     ui_text_w(4, BODY_Y + 26, SCR_W - 8, T_DIM, "");
 
     /* Progress bar + counts + ETA. */
     int bar_w = SCR_W - 12;
     int filled = total ? (bar_w * done / total) : 0;
-    d.drawRect(4, BODY_Y + 38, bar_w, 5, T_ACCENT);
+    d.fillRect(5, BODY_Y + 39, bar_w - 2, 3, T_BG);
     d.fillRect(5, BODY_Y + 39, filled, 3, T_ACCENT2);
 
     char eta[16] = "";
@@ -382,14 +392,8 @@ static void draw_progress(int done, int total, int hits,
         uint32_t remaining = (elapsed * (uint32_t)(total - done)) / (uint32_t)done;
         fmt_eta(remaining, eta, sizeof(eta));
     }
-
-    d.setTextColor(T_DIM, T_BG);
-    d.setCursor(4, BODY_Y + 46);
-    d.printf("%d / %d   eta %s", done, total, eta);
-
-    d.setTextColor(T_GOOD, T_BG);
-    d.setCursor(4, BODY_Y + 56);
-    d.printf("hits %d", hits);
+    ui_text(4, BODY_Y + 46, T_DIM, "%d / %d   eta %s", done, total, eta);
+    ui_text(4, BODY_Y + 56, T_GOOD, "hits %d", hits);
 
     /* 3 most recent hits — the 4th row overlapped the footer. */
     int first = s_hits_n > 3 ? s_hits_n - 3 : 0;
@@ -397,12 +401,9 @@ static void draw_progress(int done, int total, int hits,
         int y = BODY_Y + 68 + (i - first) * 10;
         const cctv_hit_t &h = s_hits[i];
         uint16_t col = h.creds[0] ? T_BAD : (h.stream[0] ? T_WARN : T_GOOD);
-        d.setTextColor(col, T_BG);
-        d.setCursor(4, y);
-        d.printf("%s %.7s %.14s", h.ip, h.brand,
-                 h.creds[0] ? h.creds : (h.stream[0] ? h.stream : "ports"));
+        ui_text(4, y, col, "%s %.7s %.14s", h.ip, h.brand,
+                h.creds[0] ? h.creds : (h.stream[0] ? h.stream : "ports"));
     }
-    ui_draw_footer("`=abort");
 }
 
 /* Abort-sensitive sleep. */
@@ -451,6 +452,7 @@ static void scan_lan(void)
     int total = 254;
     char cur[16] = "";
 
+    draw_cctv_chrome();
     for (int host = 1; host <= 254 && !s_abort; ++host) {
         IPAddress ip((base >> 24) & 0xFF,
                      (base >> 16) & 0xFF,
@@ -485,6 +487,7 @@ static void scan_single(void)
     reset_state();
     open_log();
     s_scan_start_ms = millis();
+    draw_cctv_chrome();
     draw_progress(0, 1, 0, "single host", buf);
     scan_host(ip);
     if (s_hits_n) log_hit(s_hits[0]);
@@ -513,6 +516,7 @@ static void scan_file(void)
     }
     f.seek(0);
 
+    draw_cctv_chrome();
     int done = 0;
     char cur[16] = "";
     while (f.available() && !s_abort) {

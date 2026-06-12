@@ -51,17 +51,27 @@ void argus_flash(argus_mood_t mood, uint32_t ms)
     s_flash_until = millis() + ms;
 }
 
-static void overlay_lightning(int x, int y)
+static void overlay_lightning(const uint16_t *src, int x, int y)
 {
     auto &d = M5Cardputer.Display;
+    /* Wipe last frame's bolts by re-pushing the top strip of the cached
+     * face, then crackle DOWNWARD from the crown — kept inside the sprite
+     * so the bolts never bleed into (or fail to clear from) the status bar
+     * above the head. Only re-push when the source is the RAM sprite; a
+     * per-frame flash push during STORM's heavy TX would scramble it. */
+    const int STRIP = 20;
+    if (src == s_ram_sprite && src)
+        d.pushImage(x, y, ARGUS_W, STRIP, src);
     int strikes = 1 + (int)(esp_random() % 2);
     for (int s = 0; s < strikes; ++s) {
         int sx = x + (esp_random() % ARGUS_W);
-        int sy = y + (esp_random() % 4);
+        int sy = y + (int)(esp_random() % 3);
         int mx = sx + (int)(esp_random() % 7) - 3;
-        int my = sy - (3 + (int)(esp_random() % 5));
+        int my = sy + (3 + (int)(esp_random() % 5));
         int ex = mx + (int)(esp_random() % 5) - 2;
-        int ey = my - (2 + (int)(esp_random() % 4));
+        int ey = my + (2 + (int)(esp_random() % 4));
+        if (my > y + STRIP - 1) my = y + STRIP - 1;
+        if (ey > y + STRIP - 1) ey = y + STRIP - 1;
         uint16_t c = (esp_random() & 1) ? 0xFFFF : T_ACCENT;
         d.drawLine(sx, sy, mx, my, c);
         d.drawLine(mx, my, ex, ey, c);
@@ -155,9 +165,9 @@ void argus_draw(argus_mood_t mood, int x, int y)
     /* Only push when something visible changed. Source is RAM (or flash
      * fallback if alloc failed), not flash directly — no MMU cache
      * contention with WiFi TX. */
+    const uint16_t *src = s_ram_sprite ? s_ram_sprite : ARGUS_SPRITES[idx];
     if (cur != s_last_mood || sway != s_last_sway
         || x != s_last_x || y != s_last_y) {
-        const uint16_t *src = s_ram_sprite ? s_ram_sprite : ARGUS_SPRITES[idx];
         d.pushImage(x, y + sway, ARGUS_W, ARGUS_H, src);
         s_last_mood = cur;
         s_last_sway = sway;
@@ -166,7 +176,7 @@ void argus_draw(argus_mood_t mood, int x, int y)
     }
 
     switch (cur) {
-    case ARGUS_OLD_FURY:    overlay_lightning(x, y + sway);       break;
+    case ARGUS_OLD_FURY:    overlay_lightning(src, x, y + sway);  break;
     case ARGUS_SLEEPING:    overlay_zzz(x, y + sway, now);        break;
     case ARGUS_CALCULATING: overlay_scan_line(x, y + sway, now);  break;
     case ARGUS_ANNOYED:     overlay_glitch(x, y + sway, now);     break;

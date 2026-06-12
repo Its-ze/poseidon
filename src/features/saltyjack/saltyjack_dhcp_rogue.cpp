@@ -337,7 +337,19 @@ static void run_rogue(rogue_mode_t mode)
     sj_frame(mode == ROGUE_STA ? "ROGUE DHCP STA" : "ROGUE DHCP AP");
 
     auto &d = M5Cardputer.Display;
+    d.setTextColor(SJ_FG_DIM, SJ_BG);
+    d.setCursor(SJ_CONTENT_X, SJ_CONTENT_Y);
+    d.print("srv ");
+    d.setTextColor(SJ_ACCENT, SJ_BG);
+    d.print(s_server_ip.toString().c_str());
+    sj_footer("`=stop");
+
     uint32_t last_draw = 0;
+    bool first = true;
+    uint32_t p_offer = 0, p_ack = 0;
+    int p_clients = -1;
+    uint32_t p_last_alloc = 0;
+    uint8_t p_mac[6] = {0};
     while (true) {
         /* Handle any pending DHCP packet. */
         int ps = s_udp.parsePacket();
@@ -366,44 +378,48 @@ static void run_rogue(rogue_mode_t mode)
 
         if (millis() - last_draw > 250) {
             last_draw = millis();
-            sj_frame(mode == ROGUE_STA ? "ROGUE DHCP STA" : "ROGUE DHCP AP");
-
-            d.setTextColor(SJ_FG_DIM, SJ_BG);
-            d.setCursor(SJ_CONTENT_X, SJ_CONTENT_Y);
-            d.print("srv ");
-            d.setTextColor(SJ_ACCENT, SJ_BG);
-            d.print(s_server_ip.toString().c_str());
-
-            sj_row           (SJ_CONTENT_Y + 11, "offers  ", s_offer_ct);
-            sj_row_highlight (SJ_CONTENT_Y + 20, "ACKs    ", s_ack_ct);
 
             int n_clients = 0;
             for (int i = 0; i < ROGUE_MAX_CLIENTS; ++i) {
                 if (s_clients[i].ip_suffix != 0) n_clients++;
             }
-            sj_row_colored(SJ_CONTENT_Y + 31, "clients ", (uint32_t)n_clients, SJ_WARN);
 
-            if (s_last_allocated_ip != 0) {
-                int by = SJ_CONTENT_Y + 48;
-                sj_info_box(SJ_FRAME_X + 4, by, SJ_FRAME_W - 8, 28, "LAST LEASE");
-                char ip_str[20], mac_str[24];
-                snprintf(ip_str, sizeof(ip_str), "%d.%d.%d.%d",
-                         (int)((s_last_allocated_ip >> 24) & 0xFF),
-                         (int)((s_last_allocated_ip >> 16) & 0xFF),
-                         (int)((s_last_allocated_ip >>  8) & 0xFF),
-                         (int)( s_last_allocated_ip        & 0xFF));
-                snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
-                         s_last_client_mac[0], s_last_client_mac[1],
-                         s_last_client_mac[2], s_last_client_mac[3],
-                         s_last_client_mac[4], s_last_client_mac[5]);
-                sj_info_row(SJ_FRAME_X + 4, by, 0, "ip  ", ip_str);
-                sj_info_row(SJ_FRAME_X + 4, by, 1, "mac ", mac_str);
-            } else {
-                sj_print_info(SJ_CONTENT_Y + 52, mode == ROGUE_STA ?
-                    "racing real server..." : "awaiting clients...");
+            if (first || s_offer_ct != p_offer || s_ack_ct != p_ack ||
+                n_clients != p_clients) {
+                sj_row           (SJ_CONTENT_Y + 11, "offers  ", s_offer_ct);
+                sj_row_highlight (SJ_CONTENT_Y + 20, "ACKs    ", s_ack_ct);
+                sj_row_colored   (SJ_CONTENT_Y + 31, "clients ", (uint32_t)n_clients, SJ_WARN);
+                p_offer = s_offer_ct; p_ack = s_ack_ct; p_clients = n_clients;
             }
 
-            sj_footer("`=stop");
+            if (first || s_last_allocated_ip != p_last_alloc ||
+                memcmp(s_last_client_mac, p_mac, 6) != 0) {
+                d.fillRect(SJ_FRAME_X + SJ_FRAME_TH, SJ_CONTENT_Y + 44,
+                           SJ_FRAME_W - 2 * SJ_FRAME_TH, 34, SJ_BG);
+                if (s_last_allocated_ip != 0) {
+                    int by = SJ_CONTENT_Y + 48;
+                    sj_info_box(SJ_FRAME_X + 4, by, SJ_FRAME_W - 8, 28, "LAST LEASE");
+                    char ip_str[20], mac_str[24];
+                    snprintf(ip_str, sizeof(ip_str), "%d.%d.%d.%d",
+                             (int)((s_last_allocated_ip >> 24) & 0xFF),
+                             (int)((s_last_allocated_ip >> 16) & 0xFF),
+                             (int)((s_last_allocated_ip >>  8) & 0xFF),
+                             (int)( s_last_allocated_ip        & 0xFF));
+                    snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+                             s_last_client_mac[0], s_last_client_mac[1],
+                             s_last_client_mac[2], s_last_client_mac[3],
+                             s_last_client_mac[4], s_last_client_mac[5]);
+                    sj_info_row(SJ_FRAME_X + 4, by, 0, "ip  ", ip_str);
+                    sj_info_row(SJ_FRAME_X + 4, by, 1, "mac ", mac_str);
+                } else {
+                    sj_print_info(SJ_CONTENT_Y + 52, mode == ROGUE_STA ?
+                        "racing real server..." : "awaiting clients...");
+                }
+                p_last_alloc = s_last_allocated_ip;
+                memcpy(p_mac, s_last_client_mac, 6);
+            }
+
+            first = false;
         }
 
         uint16_t k = input_poll();

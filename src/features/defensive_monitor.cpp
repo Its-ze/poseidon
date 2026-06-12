@@ -59,6 +59,11 @@
  * heap-policy gating. */
 #define DM_PHASE_WIFI_MS          30000
 #define DM_PHASE_BLE_MS           15000
+/* Largest internal free block required before we dare re-init NimBLE for a
+ * BLE phase. The repeated deinit/init fragments the heap (POS-AUDIT-015); if
+ * the BT controller can't get a big enough contiguous block, init() aborts
+ * and resets the device. Below this we skip BLE and keep WiFi monitoring. */
+#define DM_BLE_MIN_BLOCK          50000
 
 static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
 static volatile bool     s_running    = false;
@@ -651,6 +656,11 @@ static void enter_ble_phase(void)
     }
     NimBLEScan *scan = NimBLEDevice::getScan();
     scan->setScanCallbacks(&s_ble_cb, false);
+    /* POS-AUDIT-011: process adverts via the callback only — store none.
+     * Without this NimBLE accumulates every advertisement (duplicates too,
+     * since the filter is off) in an internal results vector that grows
+     * unbounded and reboots the device after a few hundred (~550). */
+    scan->setMaxResults(0);
     scan->setActiveScan(false);
     scan->setInterval(97);
     scan->setWindow(67);
@@ -704,8 +714,19 @@ void feat_defensive_monitor(void)
         uint32_t now = millis();
         uint32_t phase_dur = (s_phase == DM_PHASE_WIFI) ? DM_PHASE_WIFI_MS : DM_PHASE_BLE_MS;
         if (now - s_phase_start_ms > phase_dur) {
-            if (s_phase == DM_PHASE_WIFI) enter_ble_phase();
-            else                          enter_wifi_phase();
+            if (s_phase == DM_PHASE_WIFI) {
+                /* Only flip to BLE if NimBLE can actually re-init — see
+                 * DM_BLE_MIN_BLOCK. A fragmented heap here is what was
+                 * resetting the device on the WiFi->BLE flip. */
+                if (heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) > DM_BLE_MIN_BLOCK) {
+                    enter_ble_phase();
+                } else {
+                    Serial.println("[defmon] heap too fragmented for NimBLE; staying WiFi-only");
+                    s_phase_start_ms = now;   /* skip BLE this cycle, keep WiFi */
+                }
+            } else {
+                enter_wifi_phase();
+            }
         }
 
         if (s_phase == DM_PHASE_WIFI) window_tick();

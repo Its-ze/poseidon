@@ -92,22 +92,27 @@ void feat_ble_tracker(void)
     ui_draw_footer("`=back");
 
     size_t last_alert_count = 0;
+    int last_count = -1;
     uint32_t last = 0;
     while (true) {
         if (millis() - last > 400) {
             last = millis();
             auto &d = M5Cardputer.Display;
-            ui_clear_body();
-            d.setTextColor(T_ACCENT, T_BG);
-            d.setCursor(4, BODY_Y + 2);
-            d.printf("TRACKERS  %d", s_tracker_count);
-            d.drawFastHLine(4, BODY_Y + 12, 100, T_ACCENT);
+            if (s_tracker_count != last_count) {
+                ui_clear_body();
+                d.setTextColor(T_ACCENT, T_BG);
+                d.setCursor(4, BODY_Y + 2);
+                d.printf("TRACKERS  %d", s_tracker_count);
+                d.drawFastHLine(4, BODY_Y + 12, 100, T_ACCENT);
+                if (s_tracker_count == 0) {
+                    d.setTextColor(T_DIM, T_BG);
+                    d.setCursor(4, BODY_Y + 24);
+                    d.print("scanning for AirTag/SmartTag/Tile");
+                }
+                last_count = s_tracker_count;
+            }
 
-            if (s_tracker_count == 0) {
-                d.setTextColor(T_DIM, T_BG);
-                d.setCursor(4, BODY_Y + 24);
-                d.print("scanning for AirTag/SmartTag/Tile");
-            } else {
+            if (s_tracker_count > 0) {
                 /* Distance estimate from RSSI: empirical free-space
                  *   d ≈ 10 ^ ((tx_power - rssi) / (10 * N))
                  * with tx_power ≈ -59 dBm @ 1m and path-loss N=2.
@@ -122,22 +127,17 @@ void feat_ble_tracker(void)
                     else if (t.rssi > -72) { prox = "NEAR ";  prox_col = T_WARN; }
                     else                   { prox = "FAR  ";  prox_col = T_DIM; }
 
-                    d.setTextColor(prox_col, T_BG);
-                    d.setCursor(4, y);
-                    d.printf("%-5s", prox);
-                    d.setTextColor(T_BAD, T_BG);
-                    d.setCursor(36, y);
-                    d.printf("%-9s %ddB", t.type, t.rssi);
-                    d.setTextColor(T_DIM, T_BG);
-                    d.setCursor(140, y);
-                    d.printf("%02X:%02X %lus",
-                             t.addr[4], t.addr[5],
-                             (unsigned long)((millis() - t.first_seen) / 1000));
+                    ui_text_w(4, y, 32, prox_col, "%-5s", prox);
+                    ui_text_w(36, y, 104, T_BAD, "%-9s %ddB", t.type, t.rssi);
+                    ui_text_w(140, y, 60, T_DIM, "%02X:%02X %lus",
+                              t.addr[4], t.addr[5],
+                              (unsigned long)((millis() - t.first_seen) / 1000));
 
                     /* Signal bar (small). */
                     int pct = (t.rssi + 100) * 100 / 70;
                     if (pct < 0) pct = 0; if (pct > 100) pct = 100;
                     d.drawRect(200, y + 1, 36, 6, T_DIM);
+                    d.fillRect(201, y + 2, 34, 4, T_BG);
                     d.fillRect(201, y + 2, 34 * pct / 100, 4, prox_col);
                 }
                 /* Alert on new detection: flash screen border + chirp. */
@@ -214,19 +214,19 @@ void feat_ble_sniff(void)
 
     ui_clear_body();
     ui_draw_footer("`=stop");
+    {
+        auto &d = M5Cardputer.Display;
+        d.setTextColor(T_ACCENT, T_BG);
+        d.setCursor(4, BODY_Y + 2); d.print("BLE SNIFFER");
+        d.drawFastHLine(4, BODY_Y + 12, 90, T_ACCENT);
+        d.setTextColor(T_DIM, T_BG);
+        d.setCursor(4, BODY_Y + 40); d.printf("%s", path);
+    }
     uint32_t last = 0;
     while (true) {
         if (millis() - last > 300) {
             last = millis();
-            auto &d = M5Cardputer.Display;
-            ui_clear_body();
-            d.setTextColor(T_ACCENT, T_BG);
-            d.setCursor(4, BODY_Y + 2); d.print("BLE SNIFFER");
-            d.drawFastHLine(4, BODY_Y + 12, 90, T_ACCENT);
-            d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 22); d.printf("packets: %lu", (unsigned long)s_sniff_count);
-            d.setTextColor(T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 40); d.printf("%s", path);
+            ui_text_w(4, BODY_Y + 22, 200, T_FG, "packets: %lu", (unsigned long)s_sniff_count);
             ui_draw_status(radio_name(), "sniff");
         }
         uint16_t k = input_poll();

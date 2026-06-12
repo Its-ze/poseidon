@@ -36,19 +36,28 @@ void feat_subghz_bruteforce(void)
 {
     auto &d = M5Cardputer.Display;
     int sel = 0;
+
+    /* Static chrome once; rows repaint per-row only when the cursor
+     * moves so a selection change never blanks the whole body. */
+    ui_clear_body();
+    d.setTextColor(T_ACCENT2, T_BG);
+    d.setCursor(4, BODY_Y + 2); d.print("BRUTE FORCE");
+    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
+    ui_draw_footer(";/.=sel  ENTER=start  ESC=back");
+
+    int last_sel = -1;
     while (true) {
-        ui_clear_body();
-        d.setTextColor(T_ACCENT2, T_BG);
-        d.setCursor(4, BODY_Y + 2); d.print("BRUTE FORCE");
-        d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
-        for (int i = 0; i < (int)PROTO_COUNT; ++i) {
-            int y = BODY_Y + 18 + i * 13;
-            bool s = (i == sel);
-            if (s) d.fillRoundRect(2, y - 1, SCR_W - 4, 12, 2, 0x3007);
-            d.setTextColor(s ? T_ACCENT : T_FG, s ? 0x3007 : T_BG);
-            d.setCursor(8, y); d.printf("%s (%d bit)", PROTOS[i].name, PROTOS[i].bits);
+        if (sel != last_sel) {
+            for (int i = 0; i < (int)PROTO_COUNT; ++i) {
+                int y = BODY_Y + 18 + i * 13;
+                bool s = (i == sel);
+                if (s) d.fillRoundRect(2, y - 1, SCR_W - 4, 12, 2, 0x3007);
+                else   d.fillRect(2, y - 1, SCR_W - 4, 12, T_BG);
+                d.setTextColor(s ? T_ACCENT : T_FG, s ? 0x3007 : T_BG);
+                d.setCursor(8, y); d.printf("%s (%d bit)", PROTOS[i].name, PROTOS[i].bits);
+            }
+            last_sel = sel;
         }
-        ui_draw_footer(";/.=sel  ENTER=start  ESC=back");
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(20); continue; }
         if (k == PK_ESC) return;
@@ -81,6 +90,18 @@ void feat_subghz_bruteforce(void)
      * per second so loopTask's TWDT subscription doesn't trip. */
     uint32_t last_wdt_reset = 0;
 
+    /* Paint the TX screen chrome (title, rule, progress-bar frame) once;
+     * the per-200ms redraw then only overwrites the live fields + the
+     * growing bar fill instead of blanking the whole body each pass. */
+    ui_clear_body();
+    ui_draw_status(radio_name(), "brute");
+    d.setTextColor(T_BAD, T_BG);
+    d.setCursor(4, BODY_Y + 2); d.printf("BRUTE: %s", p.name);
+    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_BAD);
+    d.drawRect(4, BODY_Y + 36, SCR_W - 8, 12, T_ACCENT);
+    ui_draw_footer("ESC=abort");
+    int last_bw = -1;
+
     while (running && code < total) {
         /* Transmit current code. */
         cc1101_set_tx();
@@ -95,20 +116,19 @@ void feat_subghz_bruteforce(void)
         }
         if (now - last_draw > 200) {
             last_draw = now;
-            ui_clear_body();
             ui_draw_status(radio_name(), "brute");
-            d.setTextColor(T_BAD, T_BG);
-            d.setCursor(4, BODY_Y + 2); d.printf("BRUTE: %s", p.name);
-            d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_BAD);
-            d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 20); d.printf("code %lu / %lu", (unsigned long)code, (unsigned long)total);
-            /* Progress bar. */
+            ui_text_w(4, BODY_Y + 20, SCR_W - 8, T_FG,
+                      "code %lu / %lu", (unsigned long)code, (unsigned long)total);
+            /* Progress bar — extend only the newly filled segment so the
+             * bar grows smoothly without re-blanking. */
             int bw = (int)((code * (SCR_W - 16)) / total);
-            d.drawRect(4, BODY_Y + 36, SCR_W - 8, 12, T_ACCENT);
-            d.fillRect(6, BODY_Y + 38, bw, 8, T_ACCENT2);
-            d.setCursor(4, BODY_Y + 54);
-            d.printf("%.1f%% complete", (code * 100.0f) / total);
-            ui_draw_footer("ESC=abort");
+            if (bw > last_bw) {
+                d.fillRect(6 + (last_bw < 0 ? 0 : last_bw), BODY_Y + 38,
+                           bw - (last_bw < 0 ? 0 : last_bw), 8, T_ACCENT2);
+                last_bw = bw;
+            }
+            ui_text_w(4, BODY_Y + 54, SCR_W - 8, T_FG,
+                      "%.1f%% complete", (code * 100.0f) / total);
         }
 
         uint16_t k = input_poll();

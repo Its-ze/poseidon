@@ -38,6 +38,16 @@ void feat_subghz_jammer(void)
      * yields via delayMicroseconds + the UI redraw cadence, but the
      * cheap reset keeps both modes safe under future cap raises. */
     uint32_t last_wdt_reset = 0;
+
+    /* Paint static chrome once; repaint only on state change (arm/cap)
+     * and per-field for the live readouts. Blanking the whole body every
+     * loop tick pulsed the panel even while sitting idle. */
+    bool need_chrome = true;
+    bool last_active = !active;
+    float last_freq = freq + 1.0f;
+    int   last_mode = -1;
+    uint32_t last_elapsed = 0xFFFFFFFFu;
+
     while (true) {
         uint32_t now = millis();
         if (active && now - last_wdt_reset > 1000) {
@@ -67,33 +77,54 @@ void feat_subghz_jammer(void)
             delayMicroseconds(esp_random() % 1000 + 200);
         }
 
-        ui_clear_body();
         ui_draw_status(radio_name(), "jammer");
-        d.setTextColor(active ? T_BAD : T_ACCENT2, T_BG);
-        d.setCursor(4, BODY_Y + 2);
-        d.printf("JAMMER %s", active ? "ACTIVE" : "ARMED");
-        d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, active ? T_BAD : T_ACCENT2);
 
-        d.setTextColor(T_FG, T_BG);
-        d.setCursor(4, BODY_Y + 20); d.printf("freq: %.3f MHz", freq);
-        d.setCursor(4, BODY_Y + 32);
-        d.printf("mode: %s", mode == 0 ? "INTERMITTENT" : "FULL CARRIER");
+        /* Title + rule + footer repaint only when the armed/active state
+         * flips — their color depends on it, and a flip also has to wipe
+         * the cap toast / stale TX rows, so the full clear is correct
+         * here (it runs on transitions only, not per tick). */
+        if (need_chrome || active != last_active) {
+            ui_clear_body();
+            ui_text_w(4, BODY_Y + 2, 130, active ? T_BAD : T_ACCENT2,
+                      "JAMMER %s", active ? "ACTIVE" : "ARMED");
+            d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, active ? T_BAD : T_ACCENT2);
+            ui_draw_footer(active ? "ESC=STOP" : "ENTER=start  M=mode  +-=freq  ESC=quit");
+            /* Force the static fields to repaint after the body clear. */
+            last_freq = freq + 1.0f;
+            last_mode = -1;
+            last_elapsed = 0xFFFFFFFFu;
+            need_chrome = false;
+        }
+
+        if (freq != last_freq) {
+            ui_text_w(4, BODY_Y + 20, SCR_W - 8, T_FG, "freq: %.3f MHz", freq);
+            last_freq = freq;
+        }
+        if (mode != last_mode) {
+            ui_text_w(4, BODY_Y + 32, SCR_W - 8, T_FG,
+                      "mode: %s", mode == 0 ? "INTERMITTENT" : "FULL CARRIER");
+            last_mode = mode;
+        }
 
         if (active) {
             uint32_t elapsed = (now - jam_start) / 1000;
-            uint32_t remain  = (JAM_MAX_MS / 1000) - elapsed;
-            d.setTextColor(T_BAD, T_BG);
-            d.setCursor(4, BODY_Y + 48);
-            d.printf("TX  %lus / %ds max", (unsigned long)elapsed, JAM_MAX_MS / 1000);
+            if (elapsed != last_elapsed) {
+                ui_text_w(4, BODY_Y + 48, SCR_W - 8, T_BAD,
+                          "TX  %lus / %ds max",
+                          (unsigned long)elapsed, JAM_MAX_MS / 1000);
+                last_elapsed = elapsed;
+            }
 
-            /* Animated TX bars. */
+            /* Animated TX bars — confined to their own strip, cleared
+             * only within that strip so the rest of the body stays put. */
+            d.fillRect(10, BODY_Y + 70, 8 * 28, 25, T_BG);
             for (int i = 0; i < 8; ++i) {
                 int h = (esp_random() % 20) + 5;
                 int x = 10 + i * 28;
                 d.fillRect(x, BODY_Y + 70, 20, h, T_BAD);
             }
         }
-        ui_draw_footer(active ? "ESC=STOP" : "ENTER=start  M=mode  +-=freq  ESC=quit");
+        last_active = active;
 
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(active ? 2 : 20); continue; }

@@ -266,7 +266,18 @@ void feat_saltyjack_dhcp_starve(void)
     sfx_deauth_burst();
 
     sj_frame("DHCP STARVE");
+    d.setTextColor(SJ_FG_DIM, SJ_BG);
+    d.setCursor(SJ_CONTENT_X, SJ_CONTENT_Y);
+    d.print("srv ");
+    d.setTextColor(SJ_ACCENT, SJ_BG);
+    d.print(s_dhcp_server.toString().c_str());
+    sj_footer("`=stop");
+
     uint32_t last_draw = 0;
+    bool first = true;
+    uint32_t p_discover = 0, p_offer = 0, p_request = 0, p_ack = 0, p_nak = 0;
+    IPAddress p_last_ip(255, 255, 255, 255);
+    bool p_starved = false;
     while (true) {
         uint8_t mac[6];
         random_mac(mac);
@@ -274,31 +285,34 @@ void feat_saltyjack_dhcp_starve(void)
 
         if (millis() - last_draw > 250) {
             last_draw = millis();
-            sj_frame("DHCP STARVE");
 
-            d.setTextColor(SJ_FG_DIM, SJ_BG);
-            d.setCursor(SJ_CONTENT_X, SJ_CONTENT_Y);
-            d.print("srv ");
-            d.setTextColor(SJ_ACCENT, SJ_BG);
-            d.print(s_dhcp_server.toString().c_str());
+            if (first || s_discover != p_discover || s_offer != p_offer ||
+                s_request != p_request || s_ack != p_ack || s_nak != p_nak ||
+                s_last_ip != p_last_ip) {
+                sj_row             (SJ_CONTENT_Y + 11, "discover", s_discover);
+                sj_row             (SJ_CONTENT_Y + 20, "offer   ", s_offer);
+                sj_row             (SJ_CONTENT_Y + 29, "request ", s_request);
+                sj_row_highlight   (SJ_CONTENT_Y + 38, "ACK     ", s_ack);
+                sj_row_colored     (SJ_CONTENT_Y + 49, "NAK     ", s_nak, SJ_BAD);
 
-            sj_row             (SJ_CONTENT_Y + 11, "discover", s_discover);
-            sj_row             (SJ_CONTENT_Y + 20, "offer   ", s_offer);
-            sj_row             (SJ_CONTENT_Y + 29, "request ", s_request);
-            sj_row_highlight   (SJ_CONTENT_Y + 38, "ACK     ", s_ack);
-            sj_row_colored     (SJ_CONTENT_Y + 49, "NAK     ", s_nak, SJ_BAD);
+                d.fillRect(SJ_CONTENT_X, SJ_CONTENT_Y + 60, SJ_FRAME_W - 12, 9, SJ_BG);
+                d.setTextColor(SJ_FG_DIM, SJ_BG);
+                d.setCursor(SJ_CONTENT_X, SJ_CONTENT_Y + 60);
+                d.printf("last IP: %s", s_last_ip.toString().c_str());
 
-            d.setTextColor(SJ_FG_DIM, SJ_BG);
-            d.setCursor(SJ_CONTENT_X, SJ_CONTENT_Y + 60);
-            d.printf("last IP: %s", s_last_ip.toString().c_str());
-
-            if (s_nak >= 20) {
-                sj_print_warn(SJ_CONTENT_Y + 72, "pool exhausted");
-            } else {
-                sj_print_ok(SJ_CONTENT_Y + 72, "flooding...");
+                p_discover = s_discover; p_offer = s_offer; p_request = s_request;
+                p_ack = s_ack; p_nak = s_nak; p_last_ip = s_last_ip;
             }
 
-            sj_footer(s_nak >= 20 ? "STARVED  `=stop" : "`=stop");
+            bool starved = s_nak >= 20;
+            if (first || starved != p_starved) {
+                if (starved) sj_print_warn(SJ_CONTENT_Y + 72, "pool exhausted");
+                else         sj_print_ok  (SJ_CONTENT_Y + 72, "flooding...");
+                sj_footer(starved ? "STARVED  `=stop" : "`=stop");
+                p_starved = starved;
+            }
+
+            first = false;
         }
 
         uint16_t k = input_poll();

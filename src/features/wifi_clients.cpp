@@ -270,6 +270,63 @@ static void client_detail(int idx)
     esp_wifi_set_channel(s_target_ch, WIFI_SECOND_CHAN_NONE);
 }
 
+/* Paint the static list chrome (hline + AP SSID subtitle). Called once at
+ * entry and again after any full-screen event (detail view, toast) that
+ * overwrites it. The CLIENTS header count is repainted on the data path. */
+static void draw_client_chrome(void)
+{
+    auto &d = M5Cardputer.Display;
+    ui_force_clear_body();
+    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+    d.setTextColor(T_DIM, T_BG);
+    d.setCursor(4, BODY_Y + 14);
+    d.printf("%.24s", g_last_selected_ap.ssid);
+}
+
+/* Paint one client row in full: own full-width background (so the prior
+ * row's pixels are overwritten without a body clear), then all fields on
+ * top. Used by both the cursor-move and window-scroll redraw paths. */
+static void draw_client_row(int r, int first, int cursor)
+{
+    auto &d = M5Cardputer.Display;
+    const cli_t &c = s_clients[first + r];
+    int y = BODY_Y + 28 + r * 11;
+    bool sel = (first + r == cursor);
+    uint16_t bg = sel ? 0x18C7 : T_BG;
+    d.fillRect(0, y - 1, SCR_W, 11, bg);
+
+    uint32_t oui = ((uint32_t)c.mac[0] << 16) |
+                   ((uint32_t)c.mac[1] << 8) |
+                    (uint32_t)c.mac[2];
+    bool randomized = (c.mac[0] & 0x02) != 0;
+    /* Don't OUI-lookup randomized MACs — the bytes are
+     * arbitrary so any "match" is a false positive. */
+    const char *vendor   = randomized ? nullptr : ble_db_oui(oui);
+    const char *hostname = dhcp_hostname(c.mac);
+
+    /* Hostname wins, then real-MAC vendor, then a
+     * "random" tag for privacy MACs, then "?". */
+    if (hostname) {
+        d.setTextColor(sel ? T_ACCENT : T_GOOD, bg);
+        d.setCursor(4, y); d.printf("%-14.14s", hostname);
+    } else if (vendor) {
+        d.setTextColor(sel ? T_ACCENT : T_WARN, bg);
+        d.setCursor(4, y); d.printf("%-14.14s", vendor);
+    } else if (randomized) {
+        d.setTextColor(sel ? T_ACCENT : T_DIM, bg);
+        d.setCursor(4, y); d.printf("%-14.14s", "~random");
+    } else {
+        d.setTextColor(T_DIM, bg);
+        d.setCursor(4, y); d.print("?");
+    }
+    d.setTextColor(sel ? T_ACCENT : T_FG, bg);
+    d.setCursor(90, y);
+    d.printf("%02X:%02X:%02X", c.mac[3], c.mac[4], c.mac[5]);
+    d.setTextColor(T_DIM, bg);
+    d.setCursor(146, y);
+    d.printf("%3d %lu", c.rssi, (unsigned long)c.frames);
+}
+
 void feat_wifi_clients(void)
 {
     radio_switch(RADIO_WIFI);
@@ -306,86 +363,87 @@ void feat_wifi_clients(void)
 
     int cursor = s_saved_cursor;
     ui_draw_footer(";/.move ENTER=info D=deauth `=back");
+
+    /* Static chrome painted once at entry; the body never gets a blanket
+     * clear after this, so scrolling no longer flashes black. */
+    draw_client_chrome();
+
     uint32_t last = 0;
-    /* Only redraw when the client list or cursor actually changed. The
-     * promiscuous callback bumps s_count as new MACs appear, so watching
-     * s_count is sufficient. RSSI/frames update inside the row but those
-     * change often enough that a full periodic sweep once per second is
-     * cheap — just not once every 300 ms like before. */
+    /* Each row owns its background and repaints incrementally:
+     *   - count changed  → repaint header + visible rows
+     *   - window (first) changed → repaint visible rows
+     *   - cursor-only move within window → repaint old + new rows
+     *   - timer tick → overwrite only the volatile RSSI/frames cells
+     * The promiscuous callback bumps s_count as new MACs appear. */
     int last_count  = -1;
     int last_cursor = -1;
+    int last_first  = -1;
     while (true) {
-        bool changed = (s_count != last_count) || (cursor != last_cursor);
+        const int rows = 7;
+        int first = 0;
+        if (s_count > 0) {
+            if (cursor < 0) cursor = 0;
+            if (cursor >= s_count) cursor = s_count - 1;
+            first = cursor - rows / 2;
+            if (first < 0) first = 0;
+            if (first + rows > s_count) first = max(0, s_count - rows);
+        }
+        bool count_changed  = (s_count != last_count);
+        bool cursor_changed = (cursor != last_cursor);
+        bool first_changed  = (first != last_first);
+        bool changed = count_changed || cursor_changed || first_changed;
         if (changed || millis() - last > 1000) {
             last = millis();
-            last_count  = s_count;
-            last_cursor = cursor;
             auto &d = M5Cardputer.Display;
-            ui_clear_body();
-            d.setTextColor(T_ACCENT, T_BG);
-            d.setCursor(4, BODY_Y + 2);
-            d.printf("CLIENTS  %d  ch%u", s_count, s_target_ch);
-            d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
-
-            d.setTextColor(T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 14);
-            d.printf("%.24s", g_last_selected_ap.ssid);
+          if (changed) {
+            if (count_changed) {
+                ui_text_w(4, BODY_Y + 2, SCR_W - 8, T_ACCENT,
+                          "CLIENTS  %d  ch%u", s_count, s_target_ch);
+            }
 
             if (s_count == 0) {
-                d.setTextColor(T_DIM, T_BG);
-                d.setCursor(4, BODY_Y + 34);
-                d.print("no traffic yet. waiting...");
-                d.setCursor(4, BODY_Y + 46);
-                d.print("try running deauth to");
-                d.setCursor(4, BODY_Y + 58);
-                d.print("force reconnects.");
-            } else {
-                int rows = 7;
-                if (cursor < 0) cursor = 0;
-                if (cursor >= s_count) cursor = s_count - 1;
-                int first = cursor - rows / 2;
-                if (first < 0) first = 0;
-                if (first + rows > s_count) first = max(0, s_count - rows);
-
-                for (int r = 0; r < rows && first + r < s_count; ++r) {
-                    const cli_t &c = s_clients[first + r];
-                    int y = BODY_Y + 28 + r * 11;
-                    bool sel = (first + r == cursor);
-                    uint16_t bg = sel ? 0x18C7 : T_BG;
-                    if (sel) d.fillRect(0, y - 1, SCR_W, 11, bg);
-
-                    uint32_t oui = ((uint32_t)c.mac[0] << 16) |
-                                   ((uint32_t)c.mac[1] << 8) |
-                                    (uint32_t)c.mac[2];
-                    bool randomized = (c.mac[0] & 0x02) != 0;
-                    /* Don't OUI-lookup randomized MACs — the bytes are
-                     * arbitrary so any "match" is a false positive. */
-                    const char *vendor   = randomized ? nullptr : ble_db_oui(oui);
-                    const char *hostname = dhcp_hostname(c.mac);
-
-                    /* Hostname wins, then real-MAC vendor, then a
-                     * "random" tag for privacy MACs, then "?". */
-                    if (hostname) {
-                        d.setTextColor(sel ? T_ACCENT : T_GOOD, bg);
-                        d.setCursor(4, y); d.printf("%-14.14s", hostname);
-                    } else if (vendor) {
-                        d.setTextColor(sel ? T_ACCENT : T_WARN, bg);
-                        d.setCursor(4, y); d.printf("%-14.14s", vendor);
-                    } else if (randomized) {
-                        d.setTextColor(sel ? T_ACCENT : T_DIM, bg);
-                        d.setCursor(4, y); d.printf("%-14.14s", "~random");
-                    } else {
-                        d.setTextColor(T_DIM, bg);
-                        d.setCursor(4, y); d.print("?");
-                    }
-                    d.setTextColor(sel ? T_ACCENT : T_FG, bg);
-                    d.setCursor(90, y);
-                    d.printf("%02X:%02X:%02X", c.mac[3], c.mac[4], c.mac[5]);
-                    d.setTextColor(T_DIM, bg);
-                    d.setCursor(146, y);
-                    d.printf("%3d %lu", c.rssi, (unsigned long)c.frames);
+                if (count_changed) {
+                    d.fillRect(0, BODY_Y + 28, SCR_W, BODY_H - 28, T_BG);
+                    d.setTextColor(T_DIM, T_BG);
+                    d.setCursor(4, BODY_Y + 34);
+                    d.print("no traffic yet. waiting...");
+                    d.setCursor(4, BODY_Y + 46);
+                    d.print("try running deauth to");
+                    d.setCursor(4, BODY_Y + 58);
+                    d.print("force reconnects.");
                 }
+            } else if (count_changed || first_changed) {
+                /* Window scrolled or list grew — repaint every visible
+                 * row over its own background, no body clear. */
+                for (int r = 0; r < rows && first + r < s_count; ++r)
+                    draw_client_row(r, first, cursor);
+            } else {
+                /* Cursor moved within the same window — repaint only the
+                 * old and new selected rows. */
+                int old_r = last_cursor - first;
+                int new_r = cursor - first;
+                if (old_r >= 0 && old_r < rows && last_first + old_r < s_count)
+                    draw_client_row(old_r, first, cursor);
+                if (new_r >= 0 && new_r < rows && first + new_r < s_count)
+                    draw_client_row(new_r, first, cursor);
             }
+            last_count  = s_count;
+            last_cursor = cursor;
+            last_first  = first;
+          } else if (s_count > 0) {
+            /* Timer tick, list unchanged — refresh only the volatile
+             * RSSI/frames column so the table doesn't strobe. */
+            for (int r = 0; r < rows && first + r < s_count; ++r) {
+                const cli_t &c = s_clients[first + r];
+                int y = BODY_Y + 28 + r * 11;
+                bool sel = (first + r == cursor);
+                uint16_t bg = sel ? 0x18C7 : T_BG;
+                d.fillRect(146, y, SCR_W - 146 - 2, 10, bg);
+                d.setTextColor(T_DIM, bg);
+                d.setCursor(146, y);
+                d.printf("%3d %lu", c.rssi, (unsigned long)c.frames);
+            }
+          }
             ui_draw_status(radio_name(), "clients");
         }
 
@@ -397,7 +455,10 @@ void feat_wifi_clients(void)
         if (k == PK_ENTER && s_count > 0 && cursor < s_count) {
             /* #B1: open the per-client detail + action screen. */
             client_detail(cursor);
-            last_count = -1;  /* force list repaint on return */
+            /* detail view overwrote our chrome — repaint it and force a
+             * full list rebuild on return. */
+            draw_client_chrome();
+            last_count = last_cursor = last_first = -1;
         }
         if ((k == 'd' || k == 'D') && s_count > 0 && cursor < s_count) {
             deauth_client(s_clients[cursor].mac);
@@ -408,7 +469,9 @@ void feat_wifi_clients(void)
             esp_wifi_set_promiscuous_rx_cb(client_cb);
             esp_wifi_set_channel(s_target_ch, WIFI_SECOND_CHAN_NONE);
             ui_toast("deauth sent", T_BAD, 600);
-            last_count = -1;  /* toast covered screen — force next-iter redraw */
+            /* toast covered the body — repaint chrome + force full redraw. */
+            draw_client_chrome();
+            last_count = last_cursor = last_first = -1;
         }
     }
 

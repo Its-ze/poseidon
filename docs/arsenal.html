@@ -4,10 +4,27 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Arsenal — POSEIDON</title>
-<meta name="description" content="150+ features across WiFi / BLE / sub-GHz / 2.4 GHz / LoRa / IR / network — the full POSEIDON arsenal. v0.6.0 adds Argus mood sprite, six themes, ambient motion, raw-IDF AP path.">
+<meta name="description" content="163 features across WiFi / BLE / sub-GHz / 2.4 GHz / LoRa / IR / network — the full POSEIDON arsenal. v0.6.1 adds Argus mood sprite, six themes, ambient motion, raw-IDF AP path.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
+<style>
+.acc-section .acc-head{cursor:pointer;user-select:none}
+.acc-section .acc-head .section-title{transition:text-shadow .25s}
+.acc-section .acc-head:hover .section-title{text-shadow:2.5px 0 rgba(56,189,248,.8),-2.5px 0 rgba(240,171,252,.7)}
+.acc-ind{display:inline-flex;align-items:center;gap:.6rem;margin-top:1.2rem;font-family:var(--font-mono);font-size:.7rem;letter-spacing:.22em;text-transform:uppercase;color:var(--ocean-bright);background:rgba(6,10,22,.4);border:1px solid rgba(14,165,233,.45);border-radius:999px;padding:.45rem 1rem;cursor:pointer;transition:box-shadow .25s,background .25s,transform .15s}
+.acc-ind:hover{box-shadow:0 0 18px rgba(14,165,233,.35);background:rgba(14,165,233,.1);transform:translateY(-1px)}
+.acc-ind-chev{display:inline-block;transition:transform .35s var(--ease-spring)}
+.acc-section.open .acc-ind-chev{transform:rotate(90deg)}
+.acc-panel{overflow:hidden;max-height:0;opacity:0;transition:max-height .55s var(--ease-smooth),opacity .45s ease}
+.acc-section.open .acc-panel{opacity:1}
+.acc-panel .reveal{opacity:1 !important;transform:none !important}
+@keyframes accGlitch{0%,100%{clip-path:inset(0 0 0 0);transform:translate(0)}15%{clip-path:inset(15% 0 55% 0);transform:translate(-3px,0)}30%{clip-path:inset(55% 0 12% 0);transform:translate(3px,0)}45%{clip-path:inset(30% 0 45% 0);transform:translate(-2px,1px)}60%{clip-path:inset(8% 0 70% 0);transform:translate(2px,-1px)}75%{clip-path:inset(45% 0 20% 0);transform:translate(-1px,0)}}
+.acc-section.glitching .section-title{animation:accGlitch .45s steps(2,end) 1}
+.acc-section{margin-bottom:2.5rem}
+.acc-section .section-desc{margin-bottom:1.5rem}
+@media(prefers-reduced-motion:reduce){.acc-section.glitching .section-title{animation:none}.acc-panel{transition:max-height .3s ease}}
+</style>
 </head>
 <body data-matrix>
 
@@ -17,7 +34,7 @@
   <div class="boot-lines"><div class="boot-line"><span class="dim">[LOAD]</span> arsenal.html <span class="ok">OK</span></div></div>
 </div>
 <div id="scrollProgress"></div>
-<div id="hud"><div class="hud-row"><span class="hud-dot"></span>ARSENAL · 150+ tools · v0.6.0</div></div>
+<div id="hud"><div class="hud-row"><span class="hud-dot"></span>ARSENAL · 163 tools · v0.6.1</div></div>
 
 <nav id="mainNav">
   <a href="index.html" class="nav-logo"><span class="icon">P</span><span>POSEIDON</span></a>
@@ -41,7 +58,7 @@
 <div class="console-strip">
   <div class="console-bar">
     <span class="ck">[ARSENAL]</span>
-    <span>features=<span class="nm">150+</span></span>
+    <span>features=<span class="nm">163</span></span>
     <span>bands=<span class="nm">6</span></span>
     <span>wired=<span class="nm">1</span></span>
     <span>themes=<span class="nm">6</span></span>
@@ -51,28 +68,95 @@
   </div>
 </div>
 
-<section id="features" style="padding-top:1rem;">
+<div id="features" style="padding-top:1rem;">
+
+<section class="acc-section" data-open="1"><div>
+  <div class="section-label reveal" style="color:#0ea5e9">HIGHLIGHTS</div>
+  <h2 class="section-title reveal">WiFi Offensive</h2>
+  <p class="section-desc reveal">The deauth-correctness core: scan, capture, sniff, wardrive.</p>
   <div class="feature-grid">
-    <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M2 12c2-4 7-6 10-6s8 2 10 6M5 16c2-3 5-4 7-4s5 1 7 4M8 20c1-2 3-2 4-2s3 0 4 2M12 22v.01"/></svg></span><h3>WiFi Offensive</h3></div><p>Scan, deauth with client sniffer + disassoc pair + seq counter, evil portal, karma, beacon spam, probe sniff, PMKID + 4-way handshake capture, wardrive + GPS, CIW zeroclick SSID injection.</p><div class="count">17 TOOLS</div></div>
-    <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M6 3h3l2 3 3-4 2 4 2-2v16h-12z M10 8v8 M13 8v8"/></svg></span><h3>Bluetooth Low Energy</h3></div><p>Classifying scan with OUI + Continuity + Fast Pair DBs. Spam (Apple/Samsung/Google/Windows). Bad-KB HID, tracker detect, GATT explorer, Sour Apple CVE-2023-42941, Find-My emulator, clone, flood, plus <a href="index.html#whisperpair" style="color:#fca5a5;font-weight:600;">WhisperPair</a> CVE-2025-36911 probe with real ECDH + AES.</p><div class="count">15 TOOLS</div></div>
-    <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M3 12h4l2-8 4 16 2-8h6"/></svg></span><h3>Sub-GHz (CC1101)</h3></div><p>Signal capture with protocol decoder (Princeton, CAME, NICE, Linear). Record RAW via native RMT peripheral. Replay Flipper .sub files. 3,190+ signal library. Spectrum analyzer. Brute force. Jammer. <b>Jam Detect</b> RSSI anomaly monitor.</p><div class="count">10 TOOLS</div></div>
-    <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M12 2v4 M12 18v4 M4.93 4.93l2.83 2.83 M16.24 16.24l2.83 2.83 M2 12h4 M18 12h4 M4.93 19.07l2.83-2.83 M16.24 7.76l2.83-2.83 M8 12a4 4 0 018 0"/></svg></span><h3>2.4 GHz (nRF24L01+)</h3></div><p>Promiscuous ESB sniffer (Goodspeed trick). MouseJack HID injection. BLE advertising spam via nRF24 with full CRC24 + whitening. Spectrum analyzer. CW carrier jammer.</p><div class="count">6 TOOLS</div></div>
-    <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M12 2l3 6 6 1-4.5 4 1 6L12 16l-5.5 3 1-6L3 9l6-1z"/></svg></span><h3>LoRa + GNSS (SX1262)</h3></div><p>Multi-band LoRa scan. Beacon TX with GPS coordinates. Meshtastic LongFast listener + full leaf node (chat/nodes/page/position). LoRa Analyzer with live packet capture. GPS fix with baud auto-detect.</p><div class="count">8 TOOLS</div></div>
-    <div class="feature-card reveal"><div class="fc-head" style="color:#f59e0b;"><span class="fc-glyph" style="color:#f59e0b;border-color:rgba(245,158,11,.4);"><svg viewBox="0 0 24 24"><path d="M4 6h16v12H4z M4 10h16 M8 14h2 M12 14h2 M16 14h2"/></svg></span><h3>Network Attacks + SaltyJack</h3></div><p>Full LAN suite: port scan, ping, DNS, SSDP poisoner, honeypot, reverse TCP tunnel, UART shell, plus the <a href="index.html#saltyjack" style="color:#fbbf24;">SaltyJack</a> arsenal (DHCP starve, rogue DHCP, Responder, WPAD NTLM, on-device cracker).</p><div class="count">18 TOOLS</div></div>
-    <div class="feature-card reveal"><div class="fc-head" style="color:#34d399;"><span class="fc-glyph" style="color:#34d399;border-color:rgba(52,211,153,.4);"><svg viewBox="0 0 24 24"><path d="M3 12h18 M12 3v18 M6 6l12 12 M18 6L6 18"/></svg></span><h3>TRIDENT (ESP32-C5 satellite)</h3></div><p>Plug-in ESP32-C5 node over ESP-NOW. Adds what the S3 can't do: 5 GHz deauth (targeted + broadcast, binary patch bypassing <code>ieee80211_raw_frame_sanity_check</code>), 802.15.4 Zigbee sniffer, 5 GHz PMKID capture, dual-band WiFi scan with auth column (WPA3 red-flagged). Pairs automatically on channel 1.</p><div class="count">v0.5 HEADLINE</div></div>
-    <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 00-5 5v3a5 5 0 0010 0V7a5 5 0 00-5-5z M8 22c0-2 2-3 4-3s4 1 4 3 M9 14h6 M9 11h.01 M15 11h.01"/></svg></span><h3>Triton Gotchi</h3></div><p>Autonomous handshake hunter with cyberpunk helmet face. RL channel picker persisted to SD. 4 modes: HUNT, STEALTH, SURGICAL, STORM. Inherits the full deauth correctness stack.</p><div class="count">1 CREATURE</div></div>
-    <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M5.6 18.4l2.1-2.1 M16.3 7.7l2.1-2.1 M12 8a4 4 0 014 4 M12 16a4 4 0 01-4-4"/></svg></span><h3>HUNT bundle</h3></div><p>Unified hot/cold proximity submenu under Tools. BLE tracker hunt + passive tracker scan + sub-GHz (CC1101) finder + 2.4 GHz (nRF24) finder, all with the same geiger-style UI. Pick what you're hunting first, radio switches automatically.</p><div class="count">4 TOOLS</div></div>
-    <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M3 12h18 M12 3v18 M6 6l12 12 M18 6L6 18"/></svg></span><h3>LoRa + Meshtastic (SX1262)</h3></div><p>Full SX1262 stack on the CAP-LoRa1262 hat — canonical init with BUSY pin, HSPI shared with SD, antenna-switch-before-begin. Scan / beacon / Meshtastic listener (with from/to/id header parse) / spectrum, all working on 433 / 868 / 915 / US LongFast.</p><div class="count">v0.5 FIXED</div></div>
+    <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M2 12c2-4 7-6 10-6s8 2 10 6M5 16c2-3 5-4 7-4s5 1 7 4M8 20c1-2 3-2 4-2s3 0 4 2M12 22v.01"/></svg></span><h3>WiFi Offensive</h3></div><p>Scan, deauth (client sniffer + disassoc pair + seq counter), evil portal, karma, beacon spam, probe sniff, PMKID + 4-way handshake, wardrive + GPS, CIW zeroclick injection.</p><div class="count">17 TOOLS</div></div>
+    <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 00-5 5v3a5 5 0 0010 0V7a5 5 0 00-5-5z M8 22c0-2 2-3 4-3s4 1 4 3 M9 14h6 M9 11h.01 M15 11h.01"/></svg></span><h3>Argus Gotchi</h3></div><p>Autonomous handshake hunter, cyberpunk helmet face. RL channel picker, SD-persisted. 4 modes: HUNT, STEALTH, SURGICAL, STORM.</p><div class="count">1 CREATURE</div></div>
+  </div>
+</div></section>
+
+<section class="acc-section"><div>
+  <div class="section-label reveal" style="color:#0ea5e9">BLUETOOTH LE</div>
+  <h2 class="section-title reveal">Bluetooth LE</h2>
+  <p class="section-desc reveal">Classify, spam, clone, and the WhisperPair CVE probe.</p>
+  <div class="feature-grid">
+    <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M6 3h3l2 3 3-4 2 4 2-2v16h-12z M10 8v8 M13 8v8"/></svg></span><h3>Bluetooth Low Energy</h3></div><p>Classifying scan (OUI + Continuity + Fast Pair DBs). Spam Apple/Samsung/Google/Windows. Bad-KB HID, tracker detect, GATT explorer, Sour Apple CVE-2023-42941, Find-My emulator, clone, flood, plus <a href="index.html#whisperpair" style="color:#fca5a5;font-weight:600;">WhisperPair</a> CVE-2025-36911 probe (real ECDH + AES).</p><div class="count">15 TOOLS</div></div>
+  </div>
+</div></section>
+
+<section class="acc-section"><div>
+  <div class="section-label reveal" style="color:#0ea5e9">SUB-GHZ (CC1101)</div>
+  <h2 class="section-title reveal">Sub-GHz (CC1101)</h2>
+  <p class="section-desc reveal">Capture, decode, replay, and a 3,190+ signal library.</p>
+  <div class="feature-grid">
+    <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M3 12h4l2-8 4 16 2-8h6"/></svg></span><h3>Sub-GHz (CC1101)</h3></div><p>Capture with protocol decoder (Princeton, CAME, NICE, Linear). RAW record via native RMT. Replay Flipper .sub. 3,190+ signal library. Spectrum analyzer. Brute force. Jammer. <b>Jam Detect</b> RSSI monitor.</p><div class="count">10 TOOLS</div></div>
+  </div>
+</div></section>
+
+<section class="acc-section"><div>
+  <div class="section-label reveal" style="color:#0ea5e9">2.4 GHz (nRF24)</div>
+  <h2 class="section-title reveal">2.4 GHz (nRF24)</h2>
+  <p class="section-desc reveal">ESB sniffing, MouseJack injection, nRF24 BLE spam.</p>
+  <div class="feature-grid">
+    <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M12 2v4 M12 18v4 M4.93 4.93l2.83 2.83 M16.24 16.24l2.83 2.83 M2 12h4 M18 12h4 M4.93 19.07l2.83-2.83 M16.24 7.76l2.83-2.83 M8 12a4 4 0 018 0"/></svg></span><h3>2.4 GHz (nRF24L01+)</h3></div><p>Promiscuous ESB sniffer (Goodspeed trick). MouseJack HID injection. nRF24 BLE spam with full CRC24 + whitening. Spectrum analyzer. CW jammer.</p><div class="count">6 TOOLS</div></div>
+  </div>
+</div></section>
+
+<section class="acc-section"><div>
+  <div class="section-label reveal" style="color:#0ea5e9">LORA &amp; MESH</div>
+  <h2 class="section-title reveal">LoRa &amp; Mesh (SX1262)</h2>
+  <p class="section-desc reveal">Multi-band LoRa, GNSS, and a full Meshtastic leaf node.</p>
+  <div class="feature-grid">
+    <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M12 2l3 6 6 1-4.5 4 1 6L12 16l-5.5 3 1-6L3 9l6-1z"/></svg></span><h3>LoRa + GNSS (SX1262)</h3></div><p>Multi-band scan. Beacon TX with GPS coords. Meshtastic LongFast listener + full leaf node (chat/nodes/page/position). LoRa Analyzer live capture. GPS fix, baud auto-detect.</p><div class="count">8 TOOLS</div></div>
+    <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M3 12h18 M12 3v18 M6 6l12 12 M18 6L6 18"/></svg></span><h3>LoRa + Meshtastic (SX1262)</h3></div><p>Full SX1262 stack on the CAP-LoRa1262 hat: canonical init with BUSY pin, HSPI shared with SD, antenna-switch-before-begin. Scan / beacon / listener / spectrum on 433 / 868 / 915 / US LongFast.</p><div class="count">v0.5 FIXED</div></div>
+  </div>
+</div></section>
+
+<section class="acc-section"><div>
+  <div class="section-label reveal" style="color:#f59e0b">LAN / NETWORK</div>
+  <h2 class="section-title reveal">LAN / Network + SaltyJack</h2>
+  <p class="section-desc reveal">Wired LAN suite plus the SaltyJack credential arsenal.</p>
+  <div class="feature-grid">
+    <div class="feature-card reveal"><div class="fc-head" style="color:#f59e0b;"><span class="fc-glyph" style="color:#f59e0b;border-color:rgba(245,158,11,.4);"><svg viewBox="0 0 24 24"><path d="M4 6h16v12H4z M4 10h16 M8 14h2 M12 14h2 M16 14h2"/></svg></span><h3>Network Attacks + SaltyJack</h3></div><p>Port scan, ping, DNS, SSDP poisoner, honeypot, reverse TCP tunnel, UART shell, plus <a href="index.html#saltyjack" style="color:#fbbf24;">SaltyJack</a> (DHCP starve, rogue DHCP, Responder, WPAD NTLM, on-device cracker).</p><div class="count">18 TOOLS</div></div>
+  </div>
+</div></section>
+
+<section class="acc-section"><div>
+  <div class="section-label reveal" style="color:#0ea5e9">INFRARED · BADUSB · SYSTEM</div>
+  <h2 class="section-title reveal">IR, BadUSB &amp; System</h2>
+  <p class="section-desc reveal">HID payloads, IR remotes, and pocket utilities.</p>
+  <div class="feature-grid">
     <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z M8 8h8v2H8z M8 12h8v2H8z M8 16h4v2H8z"/></svg></span><h3>Tools + BadUSB + IR</h3></div><p>USB-HID payload runner. TV-B-Gone. Samsung remote. Flashlight, stopwatch, calculator, morse, MAC randomizer, SD format, file browser. 6-palette theme engine.</p><div class="count">12 TOOLS</div></div>
   </div>
-</section>
+</div></section>
 
-<!-- Themes (belongs under arsenal since it's a UX feature) -->
-<section id="themes">
-  <div class="section-label reveal">THEME ENGINE</div>
+<section class="acc-section"><div>
+  <div class="section-label reveal" style="color:#0ea5e9">RECON &amp; DEFENSE</div>
+  <h2 class="section-title reveal">Recon &amp; Defense</h2>
+  <p class="section-desc reveal">Unified proximity hunting across every radio.</p>
+  <div class="feature-grid">
+    <div class="feature-card reveal"><div class="fc-head"><span class="fc-glyph"><svg viewBox="0 0 24 24"><path d="M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M5.6 18.4l2.1-2.1 M16.3 7.7l2.1-2.1 M12 8a4 4 0 014 4 M12 16a4 4 0 01-4-4"/></svg></span><h3>HUNT bundle</h3></div><p>Hot/cold proximity submenu: BLE tracker hunt + passive tracker scan + CC1101 finder + nRF24 finder, all geiger-style. Pick a target, radio switches automatically.</p><div class="count">4 TOOLS</div></div>
+  </div>
+</div></section>
+
+<section class="acc-section"><div>
+  <div class="section-label reveal" style="color:#34d399">C5 / TRIDENT SATELLITE</div>
+  <h2 class="section-title reveal">TRIDENT (ESP32-C5 satellite)</h2>
+  <p class="section-desc reveal">5 GHz attacks the S3 can't do, paired over ESP-NOW.</p>
+  <div class="feature-grid">
+    <div class="feature-card reveal"><div class="fc-head" style="color:#34d399;"><span class="fc-glyph" style="color:#34d399;border-color:rgba(52,211,153,.4);"><svg viewBox="0 0 24 24"><path d="M3 12h18 M12 3v18 M6 6l12 12 M18 6L6 18"/></svg></span><h3>TRIDENT (ESP32-C5 satellite)</h3></div><p>Plug-in ESP32-C5 over ESP-NOW: 5 GHz deauth (targeted + broadcast, binary patch bypassing <code>ieee80211_raw_frame_sanity_check</code>), 802.15.4 Zigbee sniffer, 5 GHz PMKID, dual-band scan with auth column (WPA3 red-flagged). Auto-pairs on channel 1.</p><div class="count">v0.5 HEADLINE</div></div>
+  </div>
+</div></section>
+
+<section class="acc-section"><div>
+  <div class="section-label reveal" style="color:#0ea5e9">SYSTEM / THEMES</div>
   <h2 class="section-title reveal">Six Visual Palettes</h2>
-  <p class="section-desc reveal">POSEIDON ships with six swappable color schemes. Pick your mood.</p>
-
+  <p class="section-desc reveal">Six swappable color schemes. Pick your mood.</p>
   <div class="theme-grid">
     <div class="theme-card reveal"><div class="theme-swatch" style="background:linear-gradient(135deg,#0ea5e9,#7dd3fc 45%,#f97316)"></div><div class="name">POSEIDON</div></div>
     <div class="theme-card reveal"><div class="theme-swatch" style="background:linear-gradient(135deg,#c026d3,#f0abfc 45%,#7c3aed)"></div><div class="name">PHANTOM</div></div>
@@ -81,7 +165,9 @@
     <div class="theme-card reveal"><div class="theme-swatch" style="background:linear-gradient(135deg,#f8fafc,#94a3b8 45%,#0f172a)"></div><div class="name">E-INK</div></div>
     <div class="theme-card reveal"><div class="theme-swatch" style="background:linear-gradient(135deg,#06b6d4,#67e8f9 45%,#155e75)"></div><div class="name">TRON</div></div>
   </div>
-</section>
+</div></section>
+
+</div>
 
 <footer>
   <div class="foot-glyph">⟠</div>
@@ -99,5 +185,8 @@
 
 <canvas id="particles" style="position:fixed;inset:0;z-index:-1;pointer-events:none"></canvas>
 <script src="assets/site.js"></script>
+<script>
+(function(){function ready(fn){document.readyState!=='loading'?fn():document.addEventListener('DOMContentLoaded',fn);}ready(function(){document.querySelectorAll('.acc-section').forEach(function(sec){var wrap=sec.querySelector(':scope > div');if(!wrap)wrap=sec;var desc=wrap.querySelector('.section-desc, .acc-headstop');if(!desc)return;var label=wrap.querySelector('.section-label');var accent=label?getComputedStyle(label).color:'';var panel=document.createElement('div');panel.className='acc-panel';var n=desc.nextElementSibling;while(n){var nx=n.nextElementSibling;panel.appendChild(n);n=nx;}var head=document.createElement('div');head.className='acc-head';var c=wrap.firstElementChild,nodes=[];while(c){var nx2=c.nextElementSibling;nodes.push(c);if(c===desc)break;c=nx2;}nodes.forEach(function(el){head.appendChild(el);});var ind=document.createElement('button');ind.type='button';ind.className='acc-ind';var t=document.createElement('span');t.className='acc-ind-txt';t.textContent='EXPAND';var ch=document.createElement('span');ch.className='acc-ind-chev';ch.textContent='▸';ind.appendChild(t);ind.appendChild(ch);if(accent){ind.style.color=accent;ind.style.borderColor=accent;}head.appendChild(ind);wrap.insertBefore(head,wrap.firstChild);wrap.appendChild(panel);var isOpen=false;function expand(g){isOpen=true;sec.classList.add('open');t.textContent='COLLAPSE';ind.setAttribute('aria-expanded','true');panel.style.maxHeight=panel.scrollHeight+'px';var te=function(){if(isOpen)panel.style.maxHeight='none';panel.removeEventListener('transitionend',te);};panel.addEventListener('transitionend',te);if(g){sec.classList.add('glitching');setTimeout(function(){sec.classList.remove('glitching');},480);}}function collapse(){isOpen=false;sec.classList.remove('open');t.textContent='EXPAND';ind.setAttribute('aria-expanded','false');panel.style.maxHeight=panel.scrollHeight+'px';requestAnimationFrame(function(){requestAnimationFrame(function(){panel.style.maxHeight='0px';});});}head.addEventListener('click',function(e){if(e.target.closest('a'))return;isOpen?collapse():expand(true);});if(sec.dataset.open==='1'){isOpen=true;sec.classList.add('open');t.textContent='COLLAPSE';ind.setAttribute('aria-expanded','true');panel.style.maxHeight='none';}else{ind.setAttribute('aria-expanded','false');}});});})();
+</script>
 </body>
 </html>

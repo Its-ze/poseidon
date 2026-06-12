@@ -674,6 +674,10 @@ void feat_nrf24_jammer(void)
     uint8_t noise[32];
     for (int i = 0; i < 32; i++) noise[i] = esp_random();
 
+    int last_sel = -1;
+    int last_active = -1;
+    uint32_t last_draw = 0;
+
     while (true) {
         uint32_t now = millis();
         if (active && now - jam_start > JAM_MAX_MS) {
@@ -716,8 +720,15 @@ void feat_nrf24_jammer(void)
             }
         }
 
-        if (!active || millis() % 250 < 10) {
-            if (!active) ui_clear_body();
+        bool trans = ((int)active != last_active);
+        bool do_draw = trans
+                    || (!active && sel != last_sel)
+                    || (active && now - last_draw >= 250);
+        if (do_draw) {
+            if (trans) ui_clear_body();
+            last_active = active;
+            last_sel = sel;
+            last_draw = now;
             ui_draw_status(radio_name(), "jammer");
             ui_text(4, BODY_Y + 2, active ? T_BAD : T_ACCENT2,
                     "nRF24 JAMMER %s", active ? "ACTIVE" : "");
@@ -728,6 +739,7 @@ void feat_nrf24_jammer(void)
                     int y = BODY_Y + 16 + i * 12;
                     bool s = (i == sel);
                     if (s) d.fillRoundRect(2, y - 1, SCR_W - 4, 11, 2, T_SEL_BG);
+                    else   d.fillRect(2, y - 1, SCR_W - 4, 11, T_BG);
                     d.setTextColor(s ? T_ACCENT : T_FG, s ? T_SEL_BG : T_BG);
                     d.setCursor(6, y);
                     d.printf("%s (%uch)", PRESETS[i].name, PRESETS[i].count);
@@ -740,6 +752,7 @@ void feat_nrf24_jammer(void)
                 ui_text(4, BODY_Y + 20, T_FG, "%s", PRESETS[sel].name);
                 ui_text(4, BODY_Y + 34, T_FG, "mode: %s", jam_mode == 0 ? "CW" : "flood");
                 ui_text(4, BODY_Y + 50, T_BAD, "TX %lus / 20s", (unsigned long)el);
+                d.fillRect(8, BODY_Y + 68, 10 * 23, 28, T_BG);
                 for (int i = 0; i < 10; i++) {
                     int h = (esp_random() % 25) + 3;
                     d.fillRect(8 + i * 23, BODY_Y + 68, 18, h, T_BAD);

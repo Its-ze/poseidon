@@ -249,6 +249,15 @@ void app_main(void)
 
     ESP_ERROR_CHECK(esp_wifi_start());
 
+    /* Crank TX to the API ceiling (84 = 21 dBm) for stronger deauth / scan
+     * reach. esp_wifi_set_max_tx_power must be called after esp_wifi_start. */
+    esp_wifi_set_max_tx_power(84);
+    {
+        int8_t tx_now = 0;
+        esp_wifi_get_max_tx_power(&tx_now);
+        ESP_LOGI(TAG, "max_tx_power set: %d (%.2f dBm)", (int)tx_now, tx_now / 4.0f);
+    }
+
     /* Lock the C5 to 2.4 GHz channel 1 so ESP-NOW has a real channel
      * to transmit on. Without this, a not-connected STA in AUTO band
      * mode sits at channel=0 → esp_wifi_get_channel returns 0 → HELLOs

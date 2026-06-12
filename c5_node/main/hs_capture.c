@@ -29,6 +29,7 @@
 #include "esp_now.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -45,6 +46,30 @@ struct hs_ctx_t {
     volatile bool stop;
 };
 static struct hs_ctx_t *s_ctx = NULL;
+
+/* POS-AUDIT-006: ISR-safe queue/drain split (mirrors zb_sniffer.c
+ * POS-AUDIT-005). promisc_cb() runs in WiFi ISR/high-prio context and
+ * must stay IRAM-safe; esp_now_send() is NOT IRAM-resident (touches
+ * heap/flash, may block) so calling it from the ISR could crash the C5
+ * during concurrent flash ops. The ISR still does the cheap parse,
+ * bounds-checks, and M1/M2 pairing (all non-blocking), but on a complete
+ * (M1,M2) pair it packs the captured tuple into this POD struct and
+ * xQueueSendFromISR()s it. A normal-priority drain task pops the queue
+ * and does dedup + esp_now_send + ESP_LOGI in task context. */
+struct hs_hit_t {
+    uint8_t  bssid[6];
+    uint8_t  sta[6];
+    uint8_t  anonce[32];
+    uint8_t  snonce[32];
+    uint8_t  mic[16];
+    uint8_t  rc[8];
+    uint8_t  eapol_m2[128];
+    int      eapol_m2_len;
+};
+static QueueHandle_t s_hs_q;
+static TaskHandle_t  s_hs_drain;
+
+#define HS_Q_DEPTH 8
 
 /* M1 waiting room — we hold ANonce + replay counter per (bssid,sta)
  * until the matching M2 shows up. 8 simultaneous incomplete handshakes
@@ -111,6 +136,7 @@ static void m1_store(const uint8_t bssid[6], const uint8_t sta[6],
     e->ts_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
 }
 
+/* Runs in drain-task context (NOT the ISR). Does dedup + esp_now_send. */
 static void emit_hs(const uint8_t bssid[6], const uint8_t sta[6],
                     const uint8_t anonce[32], const uint8_t snonce[32],
                     const uint8_t mic[16], const uint8_t rc[8],
@@ -146,6 +172,19 @@ static void emit_hs(const uint8_t bssid[6], const uint8_t sta[6],
     ESP_LOGI(TAG, "HS emitted bssid=%02x:%02x:%02x:%02x:%02x:%02x sta=%02x:%02x:%02x:%02x:%02x:%02x m2=%d",
              bssid[0],bssid[1],bssid[2],bssid[3],bssid[4],bssid[5],
              sta[0],sta[1],sta[2],sta[3],sta[4],sta[5], eapol_m2_len);
+}
+
+/* POS-AUDIT-006: drain task — pops completed handshakes off the ISR
+ * queue and does dedup + esp_now_send in normal task context. */
+static void hs_drain_task(void *_)
+{
+    struct hs_hit_t hit;
+    while (1) {
+        if (xQueueReceive(s_hs_q, &hit, portMAX_DELAY) != pdTRUE) continue;
+        if (!s_ctx || s_ctx->stop) continue;   /* drop late frames after stop */
+        emit_hs(hit.bssid, hit.sta, hit.anonce, hit.snonce, hit.mic, hit.rc,
+                hit.eapol_m2, hit.eapol_m2_len);
+    }
 }
 
 static void IRAM_ATTR promisc_cb(void *buf, wifi_promiscuous_pkt_type_t type)
@@ -209,8 +248,27 @@ static void IRAM_ATTR promisc_cb(void *buf, wifi_promiscuous_pkt_type_t type)
         /* M2: STA→AP, MIC=1, ACK=0. Pair with the stored M1. */
         struct m1_slot_t *e = m1_lookup(bssid, sta);
         if (!e) return;
-        emit_hs(bssid, sta, e->anonce, nonce, mic_bytes, rc,
-                key, klen);
+        /* POS-AUDIT-006: do NOT esp_now_send from the ISR. Pack the
+         * complete (M1,M2) tuple and hand it to the drain task.
+         * Non-blocking; if the queue is full we drop rather than stall
+         * the ISR. */
+        if (s_hs_q) {
+            struct hs_hit_t hit;
+            memcpy(hit.bssid, bssid, 6);
+            memcpy(hit.sta, sta, 6);
+            memcpy(hit.anonce, e->anonce, 32);
+            memcpy(hit.snonce, nonce, 32);
+            memcpy(hit.mic, mic_bytes, 16);
+            memcpy(hit.rc, rc, 8);
+            int m2_len = klen;
+            if (m2_len > 128) m2_len = 128;
+            if (m2_len < 0)   m2_len = 0;
+            hit.eapol_m2_len = m2_len;
+            if (m2_len > 0) memcpy(hit.eapol_m2, key, m2_len);
+            BaseType_t hp_woken = pdFALSE;
+            xQueueSendFromISR(s_hs_q, &hit, &hp_woken);
+            if (hp_woken) portYIELD_FROM_ISR();
+        }
     }
 }
 
@@ -220,6 +278,15 @@ static void hs_task(void *arg)
     s_ctx = ctx;
     s_m1_n = 0;
     s_done_n = 0;
+
+    /* POS-AUDIT-006: queue + drain task lifecycle. Lazy-init both so
+     * repeated start/stop cycles don't leak (mirrors zb_sniffer.c). */
+    if (!s_hs_q) {
+        s_hs_q = xQueueCreate(HS_Q_DEPTH, sizeof(struct hs_hit_t));
+    }
+    if (!s_hs_drain && s_hs_q) {
+        xTaskCreate(hs_drain_task, "hs_drain", 4096, NULL, 4, &s_hs_drain);
+    }
 
     led_fx_set(LED_MODE_SCAN);
     g_pause_hello = true;
@@ -256,7 +323,20 @@ void hs_capture_start(const uint8_t requester[6],
                       const posei_hs_req_t *req,
                       uint16_t seq)
 {
-    if (s_ctx) { s_ctx->stop = true; vTaskDelay(pdMS_TO_TICKS(120)); }
+    if (s_ctx) {
+        /* POS-AUDIT-006: capture-restart race. Synchronously unregister
+         * the promiscuous RX callback BEFORE the delay so the old ISR
+         * can no longer dereference the context we're about to retire.
+         * esp_wifi_set_promiscuous_rx_cb(NULL) returns only once the
+         * driver has dropped the callback. After this the ISR path is
+         * dead; the drain task harmlessly drops any already-queued hits
+         * (it checks s_ctx->stop). The queue + drain task are long-lived
+         * singletons (lazy-init, reused across restarts) so nothing
+         * leaks. The outgoing hs_task still owns/frees its own ctx. */
+        s_ctx->stop = true;
+        esp_wifi_set_promiscuous_rx_cb(NULL);
+        vTaskDelay(pdMS_TO_TICKS(120));
+    }
 
     struct hs_ctx_t *ctx = malloc(sizeof(*ctx));
     if (!ctx) return;

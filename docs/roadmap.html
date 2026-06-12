@@ -8,6 +8,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
+<style>
+/* ===== Collapsible roadmap timeline ===== */
+.rm-card .rm-title{cursor:pointer;-webkit-user-select:none;user-select:none;transition:text-shadow .25s}
+.rm-card .rm-title:hover{text-shadow:2px 0 rgba(56,189,248,.7),-2px 0 rgba(240,171,252,.6)}
+.rm-body{overflow:hidden;max-height:0;opacity:0;transition:max-height .5s var(--ease-smooth),opacity .4s ease}
+.rm-card.open .rm-body{opacity:1;margin-top:.6rem}
+.rm-ind{display:inline-block;margin-left:.55rem;font-family:var(--font-mono);font-size:.62rem;font-weight:600;letter-spacing:.12em;line-height:1;color:var(--ocean-bright);border:1px solid rgba(14,165,233,.4);border-radius:999px;padding:.2rem .5rem;cursor:pointer;vertical-align:middle;background:rgba(6,10,22,.4);transition:background .2s,box-shadow .2s}
+.rm-ind:hover{background:rgba(14,165,233,.12);box-shadow:0 0 12px rgba(14,165,233,.3)}
+@keyframes rmGlitch{0%,100%{clip-path:inset(0 0 0 0);transform:translate(0)}20%{clip-path:inset(20% 0 50% 0);transform:translate(-2px,0)}40%{clip-path:inset(50% 0 20% 0);transform:translate(2px,0)}60%{clip-path:inset(30% 0 42% 0);transform:translate(-1px,0)}}
+.rm-card.glitching .rm-title{animation:rmGlitch .4s steps(2,end) 1}
+@media(prefers-reduced-motion:reduce){.rm-card.glitching .rm-title{animation:none}.rm-body{transition:max-height .3s ease}}
+</style>
 </head>
 <body data-matrix>
 
@@ -61,7 +73,7 @@
         </div>
         <div class="rm-title">First tagged release — the foundation</div>
         <div class="rm-body">
-          Every radio band brought online. Full menu shell with slide transitions. Hokusai splash. 90+ features across WiFi, BLE, sub-GHz, LoRa, nRF24, IR, net attacks, BadUSB, theme engine, Triton gotchi. Initial C5 satellite scaffolding (not yet end-to-end — that lands in v0.5).
+          Every radio band brought online. Full menu shell with slide transitions. Hokusai splash. 90+ features across WiFi, BLE, sub-GHz, LoRa, nRF24, IR, net attacks, BadUSB, theme engine, Argus gotchi. Initial C5 satellite scaffolding (not yet end-to-end — that lands in v0.5).
         </div>
       </div>
     </div>
@@ -77,7 +89,7 @@
         <div class="rm-body">
           Two back-to-back audits landed simultaneously — deauth wasn't kicking clients, LoRa was hard-rebooting the device. Both classes of bug found, fixed, reviewed, shipped.
           <ul>
-            <li>Deauth: <code>addr1</code> bug fixed across 4 sites + Triton, shared frame builder with correct 802.11-2016 Sequence Control encoding</li>
+            <li>Deauth: <code>addr1</code> bug fixed across 4 sites + Argus, shared frame builder with correct 802.11-2016 Sequence Control encoding</li>
             <li>Deauth + disassoc pair with per-frame seq increment, client sniffer feeding alternating broadcast/unicast rounds</li>
             <li>PMF / WPA3 / WPA2-Enterprise warning + driver-level TX drop counter</li>
             <li>LoRa bandwidth unit fixed (kHz directly, not divided by 1000)</li>
@@ -111,48 +123,6 @@
       </div>
     </div>
 
-    <div class="rm-item shipped current reveal-left">
-      <div class="rm-card">
-        <div class="rm-head">
-          <span class="rm-ver">v0.6.0</span>
-          <span class="rm-date">Shipped 2026-05-28</span>
-          <span class="rm-tag shipped">Live</span>
-        </div>
-        <div class="rm-title">Argus mood sprite · six themes · ambient motion · raw-IDF AP path · BLE cooperative tick · C5 protocol v3</div>
-        <div class="rm-body">
-          The biggest single drop since 0.5.0. Triton finally has a real character — a 96x96 <b>Argus mood sprite</b> with twelve mood portraits (Watching, Pleased, Annoyed, Resigned, Calculating, Old Fury, Sleeping…) that maps live to hunt state. Six themes ship (POSEIDON / MATRIX / E-INK / SYNTHWAVE / PHANTOM / BLOOD), seven idle screensavers keyed off the active theme, carousel menu style with cyberpunk pictographs, ambient procedural motion painted under every menu draw. WiFi raw-TX moves to STA mode with a <code>-Wl,-zmuldefs</code> linker override of <code>ieee80211_raw_frame_sanity_check</code> (Bruce-libs-safe). Portal gets a real raw-IDF AP recipe that actually broadcasts. BLE features (Sour Apple, Spam, Karma, Flood, FindMy) move from broken <code>xTaskCreate</code> to a cooperative tick pattern that actually fires. IR LED polarity finally corrected (active-HIGH, not active-LOW), full Samsung Smart Remote keymap (~40 buttons) verified against Flipper-IRDB. <b>New features:</b> AP Signal Test, Evil Twin, BLE BlueDucky, SATCOM Tracker (SGP4 + baked TLEs), Drone Remote ID (ASTM F3411), Surveillance Hunter (Flock + Raven detection), Defensive Monitor, four nRF52 hat features. <b>C5:</b> protocol v3 with 5G scan terminator fix. <b>Removed:</b> OTA Update (M5Burner / web flasher cover the same ground without partition complexity).
-        </div>
-      </div>
-    </div>
-
-    <div class="rm-item shipped reveal-left">
-      <div class="rm-card">
-        <div class="rm-head">
-          <span class="rm-ver">v0.5.0</span>
-          <span class="rm-date">Shipped 2026-04-21</span>
-          <span class="rm-tag shipped">Shipped</span>
-        </div>
-        <div class="rm-title">TRIDENT (C5 satellite) · 5 GHz deauth · LoRa end-to-end · flicker killed · M5 Launcher</div>
-        <div class="rm-body">
-          The ESP32-C5 companion node (<b>TRIDENT</b>) lands as a proper peripheral over ESP-NOW — 5 GHz deauth targeted + broadcast (binary patch bypassing <code>ieee80211_raw_frame_sanity_check</code> in <code>libnet80211.a</code>), 802.15.4 Zigbee sniffer, 5 GHz PMKID capture, dual-band WiFi scan with auth column. One-click WebSerial flasher on the install page (<code>esp-web-tools@10.2.0</code>). LoRa SX1262 now works end-to-end on the CAP-LoRa1262 hat: BUSY pin wired into RadioLib, shared HSPI with SD, antenna switch order fixed, <code>setCurrentLimit(140)</code>. Every live screen (<code>wifi_scan</code>, <code>ble_scan</code>, <code>wifi_clients</code>, <code>wifi_spectrum</code>, the C5 dashboards) is flicker-free — state caching across the board. bmorcelli Launcher integration ships as a second PIO env (<code>cardputer-launcher</code>) that links into <code>ota_0</code> at <code>0x170000</code>.
-        </div>
-      </div>
-    </div>
-
-    <div class="rm-item shipped reveal-left">
-      <div class="rm-card">
-        <div class="rm-head">
-          <span class="rm-ver">v0.4.3</span>
-          <span class="rm-date">Shipped 2026-04-20</span>
-          <span class="rm-tag shipped">Shipped</span>
-        </div>
-        <div class="rm-title">Sub-GHz actually transmits · WhisperPair CVE probe · Jam Detect · HUNT bundle</div>
-        <div class="rm-body">
-          Four consecutive drops across two days. Record / replay / broadcast finally fire the radio (native <code>rmt_tx.h</code> / <code>rmt_rx.h</code>). WhisperPair CVE-2025-36911 detector with real secp256r1 ECDH lands (credit COSIC @ KU Leuven). Sub-GHz Jam Detect RSSI monitor ships as peer to the WiFi deauth detector. Unified Tools → Hunt submenu. TRIDENT protocol grows <code>status</code> + <code>loot</code> commands. Meshtastic <code>!poseidon</code> command parser. Scan CSV export everywhere. Cross-feature state handoff (wardrive → Triton / PMKID). In-feature <code>?</code> help. Theme persistence + WhisperPair scan fixes.
-        </div>
-      </div>
-    </div>
-
     <div class="rm-item shipped reveal-left">
       <div class="rm-card">
         <div class="rm-head">
@@ -175,8 +145,49 @@
       </div>
     </div>
 
+    <div class="rm-item shipped reveal-left">
+      <div class="rm-card">
+        <div class="rm-head">
+          <span class="rm-ver">v0.4.3</span>
+          <span class="rm-date">Shipped 2026-04-20</span>
+          <span class="rm-tag shipped">Shipped</span>
+        </div>
+        <div class="rm-title">Sub-GHz actually transmits · WhisperPair CVE probe · Jam Detect · HUNT bundle</div>
+        <div class="rm-body">
+          Four consecutive drops across two days. Record / replay / broadcast finally fire the radio (native <code>rmt_tx.h</code> / <code>rmt_rx.h</code>). WhisperPair CVE-2025-36911 detector with real secp256r1 ECDH lands (credit COSIC @ KU Leuven). Sub-GHz Jam Detect RSSI monitor ships as peer to the WiFi deauth detector. Unified Tools → Hunt submenu. TRIDENT protocol grows <code>status</code> + <code>loot</code> commands. Meshtastic <code>!poseidon</code> command parser. Scan CSV export everywhere. Cross-feature state handoff (wardrive → Triton / PMKID). In-feature <code>?</code> help. Theme persistence + WhisperPair scan fixes.
+        </div>
+      </div>
+    </div>
 
     <div class="rm-item shipped reveal-left">
+      <div class="rm-card">
+        <div class="rm-head">
+          <span class="rm-ver">v0.5.0</span>
+          <span class="rm-date">Shipped 2026-04-21</span>
+          <span class="rm-tag shipped">Shipped</span>
+        </div>
+        <div class="rm-title">TRIDENT (C5 satellite) · 5 GHz deauth · LoRa end-to-end · flicker killed · M5 Launcher</div>
+        <div class="rm-body">
+          The ESP32-C5 companion node (<b>TRIDENT</b>) lands as a proper peripheral over ESP-NOW — 5 GHz deauth targeted + broadcast (binary patch bypassing <code>ieee80211_raw_frame_sanity_check</code> in <code>libnet80211.a</code>), 802.15.4 Zigbee sniffer, 5 GHz PMKID capture, dual-band WiFi scan with auth column. One-click WebSerial flasher on the install page (<code>esp-web-tools@10.2.0</code>). LoRa SX1262 now works end-to-end on the CAP-LoRa1262 hat: BUSY pin wired into RadioLib, shared HSPI with SD, antenna switch order fixed, <code>setCurrentLimit(140)</code>. Every live screen (<code>wifi_scan</code>, <code>ble_scan</code>, <code>wifi_clients</code>, <code>wifi_spectrum</code>, the C5 dashboards) is flicker-free — state caching across the board. bmorcelli Launcher integration ships as a second PIO env (<code>cardputer-launcher</code>) that links into <code>ota_0</code> at <code>0x170000</code>.
+        </div>
+      </div>
+    </div>
+
+    <div class="rm-item shipped reveal-left">
+      <div class="rm-card">
+        <div class="rm-head">
+          <span class="rm-ver">v0.6.0</span>
+          <span class="rm-date">Shipped 2026-05-28</span>
+          <span class="rm-tag shipped">Shipped</span>
+        </div>
+        <div class="rm-title">Argus mood sprite · six themes · ambient motion · raw-IDF AP path · BLE cooperative tick · C5 protocol v3</div>
+        <div class="rm-body">
+          The biggest single drop since 0.5.0. Argus finally has a real character — a 96x96 <b>mood sprite</b> with twelve mood portraits (Watching, Pleased, Annoyed, Resigned, Calculating, Old Fury, Sleeping…) that maps live to hunt state. Six themes ship (POSEIDON / MATRIX / E-INK / SYNTHWAVE / PHANTOM / BLOOD), seven idle screensavers keyed off the active theme, carousel menu style with cyberpunk pictographs, ambient procedural motion painted under every menu draw. WiFi raw-TX moves to STA mode with a <code>-Wl,-zmuldefs</code> linker override of <code>ieee80211_raw_frame_sanity_check</code> (Bruce-libs-safe). Portal gets a real raw-IDF AP recipe that actually broadcasts. BLE features (Sour Apple, Spam, Karma, Flood, FindMy) move from broken <code>xTaskCreate</code> to a cooperative tick pattern that actually fires. IR LED polarity finally corrected (active-HIGH, not active-LOW), full Samsung Smart Remote keymap (~40 buttons) verified against Flipper-IRDB. <b>New features:</b> AP Signal Test, Evil Twin, BLE BlueDucky, SATCOM Tracker (SGP4 + baked TLEs), Drone Remote ID (ASTM F3411), Surveillance Hunter (Flock + Raven detection), Defensive Monitor, four nRF52 hat features. <b>C5:</b> protocol v3 with 5G scan terminator fix. <b>Removed:</b> OTA Update (M5Burner / web flasher cover the same ground without partition complexity).
+        </div>
+      </div>
+    </div>
+
+    <div class="rm-item shipped current reveal-left">
       <div class="rm-card">
         <div class="rm-head">
           <span class="rm-ver">v0.6.1</span>
@@ -206,6 +217,20 @@
             <li>Coded PHY S=8 long-range attacks</li>
             <li>Thread / Matter enumeration via TRIDENT C5</li>
           </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="rm-item planned reveal-left">
+      <div class="rm-card">
+        <div class="rm-head">
+          <span class="rm-ver">TRIDENT CSI</span>
+          <span class="rm-date">In R&amp;D</span>
+          <span class="rm-tag planned">Flagship</span>
+        </div>
+        <div class="rm-title">Full C5 CSI integration — WiFi sensing radar (see through walls)</div>
+        <div class="rm-body">
+          The big one. Full WiFi <b>Channel State Information</b> capture on the ESP32-C5 turns TRIDENT into a passive radar — ambient WiFi becomes a live presence + motion map: count bodies, track movement room-to-room, even detect <b>breathing</b>, through drywall, no camera, no contact. The C5 runs the DSP on-chip and streams a real-time heatmap to POSEIDON over ESP-NOW. Clean-room implementation; the C5 firmware already inits CSI on hardware. The endgame for the satellite.
         </div>
       </div>
     </div>
@@ -250,5 +275,38 @@
 
 <canvas id="particles" style="position:fixed;inset:0;z-index:-1;pointer-events:none"></canvas>
 <script src="assets/site.js"></script>
+<script>
+/* Collapse each roadmap card's body; open the current release by default. */
+(function(){
+  function ready(fn){document.readyState!=='loading'?fn():document.addEventListener('DOMContentLoaded',fn);}
+  ready(function(){
+    document.querySelectorAll('.roadmap .rm-card').forEach(function(card){
+      var body=card.querySelector('.rm-body'); if(!body) return;
+      var head=card.querySelector('.rm-head'); var title=card.querySelector('.rm-title');
+      var ind=document.createElement('button'); ind.type='button'; ind.className='rm-ind'; ind.textContent='+';
+      if(head) head.appendChild(ind);
+      var isOpen=false;
+      function set(o,g){
+        isOpen=o; card.classList.toggle('open',o); ind.textContent=o?'–':'+'; ind.setAttribute('aria-expanded',o);
+        if(o){
+          body.style.maxHeight=body.scrollHeight+'px';
+          var te=function(){if(isOpen)body.style.maxHeight='none';body.removeEventListener('transitionend',te);};
+          body.addEventListener('transitionend',te);
+          if(g){card.classList.add('glitching');setTimeout(function(){card.classList.remove('glitching');},430);}
+        } else {
+          body.style.maxHeight=body.scrollHeight+'px';
+          requestAnimationFrame(function(){requestAnimationFrame(function(){body.style.maxHeight='0px';});});
+        }
+      }
+      function toggle(e){ if(e.target.closest('a')) return; set(!isOpen, !isOpen); }
+      if(title) title.addEventListener('click',toggle);
+      ind.addEventListener('click',function(e){e.stopPropagation();toggle(e);});
+      var item=card.closest('.rm-item');
+      if(item && item.classList.contains('current')){ isOpen=true; card.classList.add('open'); ind.textContent='–'; ind.setAttribute('aria-expanded','true'); body.style.maxHeight='none'; }
+      else { ind.setAttribute('aria-expanded','false'); }
+    });
+  });
+})();
+</script>
 </body>
 </html>

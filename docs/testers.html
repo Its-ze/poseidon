@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Testers &mdash; POSEIDON</title>
-<meta name="description" content="POSEIDON v0.6.0 shipped. Argus mood sprite, six themes, ambient motion, raw-IDF AP path, BLE cooperative tick, C5 protocol v3. Regression sweep needs eyes; Hydra hat sub-GHz fixes land tomorrow.">
+<meta name="description" content="POSEIDON v0.6.1 shipped. Argus mood sprite, six themes, ambient motion, raw-IDF AP path, BLE cooperative tick, C5 protocol v3. Regression sweep needs eyes on real hardware.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
@@ -35,7 +35,7 @@
 <header class="page-head">
   <div class="kicker">04 // FIELD TEAM</div>
   <h1>For testers</h1>
-  <p class="lede">v0.6.0 is shipped — the biggest single drop since 0.5. Big stuff to verify on real hardware: <b style="color:#d946ef;">Argus mood sprite</b> in Triton, <b style="color:#d946ef;">six themes</b> + ambient motion + screensavers, the rewritten <b style="color:#d946ef;">raw-IDF AP path</b> (Portal, Beacon Spam, Evil Twin), the <b style="color:#d946ef;">BLE cooperative tick refactor</b> (Sour Apple, Spam, Karma actually firing now), and the <b style="color:#d946ef;">C5 protocol v3</b> with 5G scan terminator. Sub-GHz / Hydra hat regression sweep lands tomorrow when the hat arrives. Full doc: <a href="https://github.com/GeneralDussDuss/poseidon/blob/master/TESTERS.md" target="_blank"><code>TESTERS.md</code></a>.</p>
+  <p class="lede">v0.6.1 is shipped — on top of the biggest single drop since 0.5. Big stuff to verify on real hardware: the <b style="color:#d946ef;">Argus mood-sprite gotchi</b>, <b style="color:#d946ef;">six themes</b> + ambient motion + screensavers, the rewritten <b style="color:#d946ef;">raw-IDF AP path</b> (Portal, Beacon Spam, Evil Twin), the <b style="color:#d946ef;">BLE cooperative tick refactor</b> (Sour Apple, Spam, Karma actually firing now), and the <b style="color:#d946ef;">C5 protocol v3</b> with 5G scan terminator. The Hydra hat sub-GHz regression sweep is queued for the bench. Full doc: <a href="https://github.com/GeneralDussDuss/poseidon/blob/master/TESTERS.md" target="_blank"><code>TESTERS.md</code></a>.</p>
 </header>
 
 <div class="console-strip">
@@ -131,7 +131,7 @@
     <div class="test-card p6 reveal">
       <div class="test-prio">Priority 6 &middot; Regression sweep (broad surface)</div>
       <h3>Every menu leaf still enters without crashing</h3>
-      <p>150+ features. Hit each one once, even if just to enter and back out. Anything that crashes or reboots since v0.6.0 is a regression we want to know about now. Sub-GHz path verified once the Hydra hat lands tomorrow.</p>
+      <p>163 features. Hit each one once, even if just to enter and back out. Anything that crashes or reboots is a regression we want to know about now. Sub-GHz gets its full pass once the Hydra hat is on the bench.</p>
       <ul class="test-steps">
         <li><b>WiFi (17):</b> Scan / Clients / Deauth / Deauth All / Detector / AP Clone / Evil Portal / Karma / Beacon Spam / Probe Sniff / PMKID / Spectrum / Wardrive / CIW / Connect</li>
         <li><b>BLE (16):</b> Scan / Spam / Bad-KB / Tracker Detect / Tracker Finder / Sniffer / iBeacon / Clone / GATT / Flood / Karma / Sour Apple / Find My / Toys / Drone RID / WhisperPair</li>

@@ -171,32 +171,47 @@ static const sj_menu_item_t SJ_ITEMS[] = {
 enum view_mode_t { VIEW_LIST, VIEW_GRID, VIEW_CAROUSEL };
 
 /* ===== LIST view ===== */
+static const int SJ_LIST_ROW_H = 16;
+
+static void draw_list_row(int idx, int slot, bool sel)
+{
+    auto &d = M5Cardputer.Display;
+    int y = SJ_CONTENT_Y + slot * SJ_LIST_ROW_H;
+
+    d.fillRect(SJ_FRAME_X + SJ_FRAME_TH + 1, y,
+               SJ_FRAME_W - 2 * SJ_FRAME_TH - 2, SJ_LIST_ROW_H,
+               sel ? SJ_SEL_BG : SJ_BG);
+    /* 16x16 pixel-art sprite at left. */
+    SJ_ITEMS[idx].icon(SJ_CONTENT_X, y, 0, 1);
+
+    d.setTextColor(sel ? SJ_SEL_FG : SJ_FG, sel ? SJ_SEL_BG : SJ_BG);
+    d.setCursor(SJ_CONTENT_X + 20, y + 4);
+    d.print(SJ_ITEMS[idx].label);
+}
+
+static void draw_list_blurb(int cursor)
+{
+    auto &d = M5Cardputer.Display;
+    int blurb_y = SJ_CONTENT_Y + SJ_WINDOW * SJ_LIST_ROW_H + 4;
+    d.drawFastHLine(SJ_CONTENT_X, blurb_y - 2,
+                    SJ_FRAME_W - 2 * SJ_FRAME_TH - 4, SJ_ACCENT_DIM);
+    d.fillRect(SJ_CONTENT_X, blurb_y, SJ_FRAME_W - 2 * SJ_FRAME_TH - 4, 9, SJ_BG);
+    d.setTextColor(SJ_FG_DIM, SJ_BG);
+    d.setCursor(SJ_CONTENT_X, blurb_y);
+    d.print(SJ_ITEMS[cursor].blurb);
+}
+
 static void draw_list(int cursor, int offset)
 {
     auto &d = M5Cardputer.Display;
     sj_frame("SaltyJack");
 
-    /* Row must fit a 16x16 sprite. */
-    const int row_h = 16;
     int row_y0 = SJ_CONTENT_Y;
-
     int visible = (int)SJ_ITEMS_N < SJ_WINDOW ? (int)SJ_ITEMS_N : SJ_WINDOW;
     for (int i = 0; i < visible; ++i) {
         int idx = offset + i;
         if (idx >= (int)SJ_ITEMS_N) break;
-        int y = row_y0 + i * row_h;
-        bool sel = (idx == cursor);
-
-        if (sel) {
-            d.fillRect(SJ_FRAME_X + SJ_FRAME_TH + 1, y,
-                       SJ_FRAME_W - 2 * SJ_FRAME_TH - 2, row_h, SJ_SEL_BG);
-        }
-        /* 16x16 pixel-art sprite at left. */
-        SJ_ITEMS[idx].icon(SJ_CONTENT_X, y, 0, 1);
-
-        d.setTextColor(sel ? SJ_SEL_FG : SJ_FG, sel ? SJ_SEL_BG : SJ_BG);
-        d.setCursor(SJ_CONTENT_X + 20, y + 4);
-        d.print(SJ_ITEMS[idx].label);
+        draw_list_row(idx, i, idx == cursor);
     }
 
     /* Scroll hints */
@@ -207,67 +222,78 @@ static void draw_list(int cursor, int offset)
     }
     if (offset + SJ_WINDOW < (int)SJ_ITEMS_N) {
         d.setTextColor(SJ_FG_DIM, SJ_BG);
-        d.setCursor(SJ_FRAME_X + SJ_FRAME_W - 10, row_y0 + (SJ_WINDOW - 1) * row_h);
+        d.setCursor(SJ_FRAME_X + SJ_FRAME_W - 10, row_y0 + (SJ_WINDOW - 1) * SJ_LIST_ROW_H);
         d.print("v");
     }
 
-    /* Blurb line under the list — RaspyJack's sub-label hint. */
-    int blurb_y = row_y0 + SJ_WINDOW * row_h + 4;
-    d.drawFastHLine(SJ_CONTENT_X, blurb_y - 2,
-                    SJ_FRAME_W - 2 * SJ_FRAME_TH - 4, SJ_ACCENT_DIM);
-    d.setTextColor(SJ_FG_DIM, SJ_BG);
-    d.setCursor(SJ_CONTENT_X, blurb_y);
-    d.print(SJ_ITEMS[cursor].blurb);
-
+    draw_list_blurb(cursor);
     sj_footer(";/.  ent=go  i=info  v=view  `=back");
 }
 
 /* ===== GRID view (2 cols × N rows of tiles) ===== */
-static void draw_grid(int cursor)
+#define SJ_GRID_TILE_W   ((SJ_FRAME_W - 2 * SJ_FRAME_TH - 8) / 2)
+#define SJ_GRID_TILE_H   28
+#define SJ_GRID_X        (SJ_FRAME_X + SJ_FRAME_TH + 3)
+#define SJ_GRID_Y        (SJ_CONTENT_Y + 2)
+
+static bool grid_tile_pos(int i, int *x, int *y)
+{
+    int col = i & 1;
+    int row = i >> 1;
+    *x = SJ_GRID_X + col * (SJ_GRID_TILE_W + 4);
+    *y = SJ_GRID_Y + row * (SJ_GRID_TILE_H + 3);
+    return (*y + SJ_GRID_TILE_H <= SJ_FRAME_Y + SJ_FRAME_H - 14);
+}
+
+static void draw_grid_tile(int i, bool sel)
 {
     auto &d = M5Cardputer.Display;
+    int x, y;
+    if (!grid_tile_pos(i, &x, &y)) return;
+
+    d.fillRect(x, y, SJ_GRID_TILE_W, SJ_GRID_TILE_H, sel ? SJ_SEL_BG : SJ_BG);
+    d.drawRect(x, y, SJ_GRID_TILE_W, SJ_GRID_TILE_H, sel ? SJ_SEL_FG : SJ_ACCENT_DIM);
+
+    /* 16x16 icon centered in the top half of the tile. */
+    int ix = x + (SJ_GRID_TILE_W - 16) / 2;
+    int iy = y + 2;
+    SJ_ITEMS[i].icon(ix, iy, sel ? SJ_SEL_FG : SJ_ACCENT, 1);
+
+    /* Label below */
+    d.setTextColor(sel ? SJ_SEL_FG : SJ_FG, sel ? SJ_SEL_BG : SJ_BG);
+    const char *lbl = SJ_ITEMS[i].label;
+    int lw = (int)strlen(lbl) * 6;
+    int lx = x + (SJ_GRID_TILE_W - lw) / 2;
+    d.setCursor(lx, y + SJ_GRID_TILE_H - 10);
+    d.print(lbl);
+}
+
+static void draw_grid(int cursor)
+{
     sj_frame("SaltyJack");
 
-    const int tile_w = (SJ_FRAME_W - 2 * SJ_FRAME_TH - 8) / 2;
-    const int tile_h = 28;
-    const int grid_x = SJ_FRAME_X + SJ_FRAME_TH + 3;
-    const int grid_y = SJ_CONTENT_Y + 2;
-
     for (int i = 0; i < (int)SJ_ITEMS_N; ++i) {
-        int col = i & 1;
-        int row = i >> 1;
-        int x = grid_x + col * (tile_w + 4);
-        int y = grid_y + row * (tile_h + 3);
-        if (y + tile_h > SJ_FRAME_Y + SJ_FRAME_H - 14) break;
-
-        bool sel = (i == cursor);
-
-        if (sel) d.fillRect(x, y, tile_w, tile_h, SJ_SEL_BG);
-        d.drawRect(x, y, tile_w, tile_h, sel ? SJ_SEL_FG : SJ_ACCENT_DIM);
-
-        /* 16x16 icon centered in the top half of the tile. */
-        int ix = x + (tile_w - 16) / 2;
-        int iy = y + 2;
-        SJ_ITEMS[i].icon(ix, iy,
-                         sel ? SJ_SEL_FG : SJ_ACCENT, 1);
-
-        /* Label below */
-        d.setTextColor(sel ? SJ_SEL_FG : SJ_FG, sel ? SJ_SEL_BG : SJ_BG);
-        const char *lbl = SJ_ITEMS[i].label;
-        int lw = (int)strlen(lbl) * 6;
-        int lx = x + (tile_w - lw) / 2;
-        d.setCursor(lx, y + tile_h - 10);
-        d.print(lbl);
+        int x, y;
+        if (!grid_tile_pos(i, &x, &y)) break;
+        draw_grid_tile(i, i == cursor);
     }
 
     sj_footer(";/.  ent=go  i=info  v=view  `=back");
 }
 
 /* ===== CAROUSEL view — one giant icon + label centered ===== */
-static void draw_carousel(int cursor)
+static void draw_carousel_card(int cursor)
 {
     auto &d = M5Cardputer.Display;
-    sj_frame("SaltyJack");
+
+    /* Clear the interior card region only (between frame border and the
+     * dots/footer), leaving the static chrome untouched. */
+    int card_x = SJ_FRAME_X + SJ_FRAME_TH + 1;
+    int card_y = SJ_CONTENT_Y;
+    int card_w = SJ_FRAME_W - 2 * SJ_FRAME_TH - 2;
+    int dots_y = SJ_FRAME_Y + SJ_FRAME_H - 8;
+    int card_h = (dots_y - 4) - card_y;
+    d.fillRect(card_x, card_y, card_w, card_h, SJ_BG);
 
     /* Huge 48x48 procedural icon centered. */
     int ix = (SCR_W - 16 * 3) / 2;
@@ -289,14 +315,18 @@ static void draw_carousel(int cursor)
     d.print(blurb);
 
     /* Position dots at bottom (like iOS page indicator) */
-    int dots_y = SJ_FRAME_Y + SJ_FRAME_H - 8;
     int dots_total_w = SJ_ITEMS_N * 6;
     int dots_x0 = (SCR_W - dots_total_w) / 2;
     for (int i = 0; i < (int)SJ_ITEMS_N; ++i) {
         if (i == cursor) d.fillCircle(dots_x0 + i * 6 + 2, dots_y, 2, SJ_ACCENT);
         else             d.drawCircle(dots_x0 + i * 6 + 2, dots_y, 2, SJ_ACCENT_DIM);
     }
+}
 
+static void draw_carousel(int cursor)
+{
+    sj_frame("SaltyJack");
+    draw_carousel_card(cursor);
     sj_footer(";/.  ent=go  i=info  v=view  `=back");
 }
 
@@ -307,49 +337,47 @@ static void show_info_page(int idx)
     char title[32];
     snprintf(title, sizeof(title), "%s info", SJ_ITEMS[idx].label);
 
-    while (true) {
-        sj_frame(title);
+    sj_frame(title);
 
-        /* Blurb at top (highlighted) */
-        d.fillRect(SJ_FRAME_X + SJ_FRAME_TH + 1, SJ_CONTENT_Y - 1,
-                   SJ_FRAME_W - 2 * SJ_FRAME_TH - 2, 10, SJ_SEL_BG);
-        d.setTextColor(SJ_SEL_FG, SJ_SEL_BG);
-        d.setCursor(SJ_CONTENT_X, SJ_CONTENT_Y);
-        d.print(SJ_ITEMS[idx].blurb);
+    /* Blurb at top (highlighted) */
+    d.fillRect(SJ_FRAME_X + SJ_FRAME_TH + 1, SJ_CONTENT_Y - 1,
+               SJ_FRAME_W - 2 * SJ_FRAME_TH - 2, 10, SJ_SEL_BG);
+    d.setTextColor(SJ_SEL_FG, SJ_SEL_BG);
+    d.setCursor(SJ_CONTENT_X, SJ_CONTENT_Y);
+    d.print(SJ_ITEMS[idx].blurb);
 
-        /* Body text — pre-formatted with \n line breaks */
-        int y = SJ_CONTENT_Y + 14;
-        const int max_y = SJ_FRAME_Y + SJ_FRAME_H - 14;
-        const char *p = SJ_ITEMS[idx].desc;
-        char line[64];
-        size_t li = 0;
-        d.setTextColor(SJ_FG, SJ_BG);
-        while (*p && y < max_y) {
-            if (*p == '\n' || li >= sizeof(line) - 1) {
-                line[li] = '\0';
-                d.setCursor(SJ_CONTENT_X, y);
-                d.print(line);
-                y += 9;
-                li = 0;
-                if (*p == '\n') ++p;
-                continue;
-            }
-            line[li++] = *p++;
-        }
-        if (li > 0 && y < max_y) {
+    /* Body text — pre-formatted with \n line breaks */
+    int y = SJ_CONTENT_Y + 14;
+    const int max_y = SJ_FRAME_Y + SJ_FRAME_H - 14;
+    const char *p = SJ_ITEMS[idx].desc;
+    char line[64];
+    size_t li = 0;
+    d.setTextColor(SJ_FG, SJ_BG);
+    while (*p && y < max_y) {
+        if (*p == '\n' || li >= sizeof(line) - 1) {
             line[li] = '\0';
             d.setCursor(SJ_CONTENT_X, y);
             d.print(line);
+            y += 9;
+            li = 0;
+            if (*p == '\n') ++p;
+            continue;
         }
+        line[li++] = *p++;
+    }
+    if (li > 0 && y < max_y) {
+        line[li] = '\0';
+        d.setCursor(SJ_CONTENT_X, y);
+        d.print(line);
+    }
 
-        sj_footer("ent/`=back");
+    sj_footer("ent/`=back");
 
-        /* Any key dismisses */
-        while (true) {
-            uint16_t k = input_poll();
-            if (k == PK_NONE) { delay(20); continue; }
-            return;
-        }
+    /* Any key dismisses */
+    while (true) {
+        uint16_t k = input_poll();
+        if (k == PK_NONE) { delay(20); continue; }
+        return;
     }
 }
 
@@ -451,17 +479,49 @@ void feat_saltyjack_root(void)
     view_mode_t view = VIEW_LIST;
     uint32_t last_input = millis();
 
+    int prev_cursor = -1;
+    int prev_offset = -1;
+    view_mode_t prev_view = view;
+    bool full_repaint = true;
+
     while (true) {
         /* Keep cursor visible in list view. */
         if (cursor < offset) offset = cursor;
         else if (cursor >= offset + SJ_WINDOW) offset = cursor - SJ_WINDOW + 1;
 
-        /* Draw current view. */
-        switch (view) {
-            case VIEW_LIST:     draw_list(cursor, offset);   break;
-            case VIEW_GRID:     draw_grid(cursor);           break;
-            case VIEW_CAROUSEL: draw_carousel(cursor);       break;
+        if (full_repaint || view != prev_view ||
+            (view == VIEW_LIST && offset != prev_offset)) {
+            /* Static chrome + all items repainted once on entry, view-mode
+             * change, or list scroll. */
+            switch (view) {
+                case VIEW_LIST:     draw_list(cursor, offset);   break;
+                case VIEW_GRID:     draw_grid(cursor);           break;
+                case VIEW_CAROUSEL: draw_carousel(cursor);       break;
+            }
+        } else if (cursor != prev_cursor) {
+            /* Cursor moved within the current view — repaint only the
+             * affected rows/tiles/card, never the frame. */
+            switch (view) {
+                case VIEW_LIST:
+                    if (prev_cursor >= offset && prev_cursor < offset + SJ_WINDOW)
+                        draw_list_row(prev_cursor, prev_cursor - offset, false);
+                    draw_list_row(cursor, cursor - offset, true);
+                    draw_list_blurb(cursor);
+                    break;
+                case VIEW_GRID:
+                    draw_grid_tile(prev_cursor, false);
+                    draw_grid_tile(cursor, true);
+                    break;
+                case VIEW_CAROUSEL:
+                    draw_carousel_card(cursor);
+                    break;
+            }
         }
+
+        prev_cursor = cursor;
+        prev_offset = offset;
+        prev_view = view;
+        full_repaint = false;
 
         /* Wait for a key with idle-timeout → screensaver. */
         uint16_t k;
@@ -471,6 +531,7 @@ void feat_saltyjack_root(void)
             if (millis() - last_input > SJ_IDLE_MS) {
                 run_screensaver();
                 last_input = millis();
+                full_repaint = true;
                 break;  /* redraw, don't process key */
             }
             delay(20);
@@ -483,9 +544,10 @@ void feat_saltyjack_root(void)
         } else if (k == '.' || k == PK_DOWN) {
             cursor = (cursor + 1) % SJ_ITEMS_N;
         } else if (k == PK_ENTER) {
-            if (SJ_ITEMS[cursor].run) SJ_ITEMS[cursor].run();
+            if (SJ_ITEMS[cursor].run) { SJ_ITEMS[cursor].run(); full_repaint = true; }
         } else if (k == 'i' || k == 'I') {
             show_info_page(cursor);
+            full_repaint = true;
         } else if (k == 'v' || k == 'V') {
             view = (view_mode_t)((view + 1) % 3);
         } else if (k == PK_ESC) {

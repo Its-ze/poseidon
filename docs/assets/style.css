@@ -391,3 +391,18 @@ footer::after{content:'01001000 01010101 01001110 01010100  ·  01010010 0101010
   .credits-grid{grid-template-columns:1fr}
   #spotlight{display:none}
 }
+
+/* ===== Magenta cyberpunk skin — purple/magenta primary + cyan pop + CRT scanlines (site-wide) ===== */
+:root{
+  --ocean-abyssal:#16041f;--ocean-dim:#3a0a4a;--ocean-muted:#b13ac4;--ocean-core:#a21caf;
+  --ocean-bright:#e833c0;--ocean-vivid:#d946ef;--ocean-hot:#f0abfc;--ocean-white:#fce7f6;--bio:#22d3ee;
+  --glow-subtle:0 0 4px rgba(217,70,239,.35);
+  --glow-medium:0 0 12px rgba(217,70,239,.45),0 0 4px rgba(217,70,239,.6);
+  --glow-intense:0 0 22px rgba(217,70,239,.5),0 0 8px rgba(217,70,239,.7),0 0 44px rgba(34,211,238,.22);
+  --glow-neon:0 0 4px #e833c0,0 0 12px rgba(217,70,239,.6),0 0 30px rgba(217,70,239,.32),0 0 60px rgba(34,211,238,.16);
+}
+body::before{background:radial-gradient(ellipse at top,rgba(217,70,239,.12),transparent 60%),radial-gradient(ellipse at bottom,rgba(34,211,238,.07),transparent 60%)!important}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9998;opacity:.16;background:repeating-linear-gradient(0deg,rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.5) 2px,rgba(0,0,0,.5) 3px)}
+.hero-title{filter:drop-shadow(0 0 32px rgba(217,70,239,.5))!important}
+.hero-badge{border-color:rgba(217,70,239,.35)!important;background:rgba(217,70,239,.06)!important}
+.console-strip,.ticker{border-color:rgba(217,70,239,.2)!important}

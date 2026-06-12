@@ -440,11 +440,23 @@ static void run_karma(void)
     uint32_t last_redraw = 0;
     uint32_t last_beacon = 0;
     bool spam_on = true;
+    int last_count  = -1;
+    int last_cursor = -1;
     while (true) {
         uint32_t now = millis();
         if (now - last_redraw > 400) {
             last_redraw = now;
-            draw_probe_list(cursor);
+            int cnt;
+            portENTER_CRITICAL(&s_probe_mux);
+            cnt = s_probe_count;
+            portEXIT_CRITICAL(&s_probe_mux);
+            /* Only clear+repaint the list when it actually changed —
+             * the unconditional 400 ms redraw was the flicker source. */
+            if (cnt != last_count || cursor != last_cursor) {
+                last_count  = cnt;
+                last_cursor = cursor;
+                draw_probe_list(cursor);
+            }
             ui_draw_status(radio_name(), spam_on ? "karma+" : "karma");
         }
 
@@ -540,11 +552,22 @@ static void run_probe_sniff(void)
 
     int cursor = 0;
     uint32_t last_redraw = 0;
+    int last_count  = -1;
+    int last_cursor = -1;
     while (true) {
         uint32_t now = millis();
         if (now - last_redraw > 400) {
             last_redraw = now;
-            draw_probe_list(cursor);
+            int cnt;
+            portENTER_CRITICAL(&s_probe_mux);
+            cnt = s_probe_count;
+            portEXIT_CRITICAL(&s_probe_mux);
+            /* Repaint only on change — no unconditional periodic clear. */
+            if (cnt != last_count || cursor != last_cursor) {
+                last_count  = cnt;
+                last_cursor = cursor;
+                draw_probe_list(cursor);
+            }
         }
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(20); continue; }

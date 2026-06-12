@@ -167,8 +167,11 @@ void feat_net_ssdp(void)
 
     /* Scroll list. */
     int cursor = 0;
+    int last_cursor = -1;
     ui_draw_footer(";/. move  `=back");
     while (true) {
+      if (cursor != last_cursor) {
+        last_cursor = cursor;
         ui_clear_body();
         d.setTextColor(T_ACCENT, T_BG);
         d.setCursor(4, BODY_Y + 2);
@@ -198,6 +201,7 @@ void feat_net_ssdp(void)
                 d.printf("%.22s", e.friendly[0] ? e.friendly : e.model[0] ? e.model : "?");
             }
         }
+      }
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(40); continue; }
         if (k == PK_ESC) return;

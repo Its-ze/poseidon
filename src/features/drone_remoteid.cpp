@@ -244,6 +244,10 @@ void feat_drone_remoteid(void)
     }
     NimBLEScan *scan = NimBLEDevice::getScan();
     scan->setScanCallbacks(&s_cb, false);
+    /* POS-AUDIT-011: callback-only, store nothing. This is a forever scan
+     * (duration 0) with duplicates on — without this NimBLE accumulates every
+     * advert unbounded and reboots the device after a few hundred. */
+    scan->setMaxResults(0);
     scan->setActiveScan(false);
     scan->setInterval(97);
     scan->setWindow(67);

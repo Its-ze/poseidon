@@ -393,39 +393,55 @@ void feat_saltyjack_wpad(void)
     auto &d = M5Cardputer.Display;
     sj_frame("WPAD / 407 NTLM");
 
+    d.setTextColor(SJ_FG_DIM, SJ_BG);
+    d.setCursor(SJ_CONTENT_X, SJ_CONTENT_Y);
+    d.print("ip ");
+    d.setTextColor(SJ_ACCENT, SJ_BG);
+    d.print(wpad_our_ip().toString().c_str());
+    sj_footer("`=stop");
+
     uint32_t last_draw = 0;
+    bool first = true;
+    uint32_t p_gets = 0, p_407 = 0, p_type1 = 0, p_hash = 0;
+    char p_sig[128] = "";
     while (true) {
         WiFiClient c = s_server.available();
         if (c) handle_client(c);
 
         if (millis() - last_draw > 250) {
             last_draw = millis();
-            sj_frame("WPAD / 407 NTLM");
 
-            d.setTextColor(SJ_FG_DIM, SJ_BG);
-            d.setCursor(SJ_CONTENT_X, SJ_CONTENT_Y);
-            d.print("ip ");
-            d.setTextColor(SJ_ACCENT, SJ_BG);
-            d.print(wpad_our_ip().toString().c_str());
-
-            sj_row           (SJ_CONTENT_Y + 11, "PAC gets", s_wpad_gets);
-            sj_row           (SJ_CONTENT_Y + 20, "407 sent", s_407_sent);
-            sj_row           (SJ_CONTENT_Y + 29, "type1   ", s_type1_seen);
-            sj_row_highlight (SJ_CONTENT_Y + 38, "HASHES  ", s_hash_count);
-
-            if (s_last_user[0]) {
-                int by = SJ_CONTENT_Y + 55;
-                sj_info_box(SJ_FRAME_X + 4, by, SJ_FRAME_W - 8, 28, "LAST CAPTURE");
-                char ud[48];
-                snprintf(ud, sizeof(ud), "%.18s\\%.12s", s_last_domain, s_last_user);
-                sj_info_row(SJ_FRAME_X + 4, by, 0, "user", ud);
-                sj_info_row(SJ_FRAME_X + 4, by, 1, "from", s_last_client);
-            } else {
-                sj_print_info(SJ_CONTENT_Y + 58, s_type1_seen > 0 ?
-                    "NTLM dance in flight..." : "serving PAC...");
+            if (first || s_wpad_gets != p_gets || s_407_sent != p_407 ||
+                s_type1_seen != p_type1 || s_hash_count != p_hash) {
+                sj_row           (SJ_CONTENT_Y + 11, "PAC gets", s_wpad_gets);
+                sj_row           (SJ_CONTENT_Y + 20, "407 sent", s_407_sent);
+                sj_row           (SJ_CONTENT_Y + 29, "type1   ", s_type1_seen);
+                sj_row_highlight (SJ_CONTENT_Y + 38, "HASHES  ", s_hash_count);
+                p_gets = s_wpad_gets; p_407 = s_407_sent;
+                p_type1 = s_type1_seen; p_hash = s_hash_count;
             }
 
-            sj_footer("`=stop");
+            char sig[128];
+            snprintf(sig, sizeof(sig), "%s|%s|%s|%d",
+                     s_last_user, s_last_domain, s_last_client, s_type1_seen > 0 ? 1 : 0);
+            if (first || strcmp(sig, p_sig) != 0) {
+                d.fillRect(SJ_FRAME_X + SJ_FRAME_TH, SJ_CONTENT_Y + 52,
+                           SJ_FRAME_W - 2 * SJ_FRAME_TH, 34, SJ_BG);
+                if (s_last_user[0]) {
+                    int by = SJ_CONTENT_Y + 55;
+                    sj_info_box(SJ_FRAME_X + 4, by, SJ_FRAME_W - 8, 28, "LAST CAPTURE");
+                    char ud[48];
+                    snprintf(ud, sizeof(ud), "%.18s\\%.12s", s_last_domain, s_last_user);
+                    sj_info_row(SJ_FRAME_X + 4, by, 0, "user", ud);
+                    sj_info_row(SJ_FRAME_X + 4, by, 1, "from", s_last_client);
+                } else {
+                    sj_print_info(SJ_CONTENT_Y + 58, s_type1_seen > 0 ?
+                        "NTLM dance in flight..." : "serving PAC...");
+                }
+                strncpy(p_sig, sig, sizeof(p_sig) - 1);
+            }
+
+            first = false;
         }
 
         uint16_t k = input_poll();

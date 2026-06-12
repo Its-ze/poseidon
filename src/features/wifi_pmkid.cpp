@@ -558,21 +558,50 @@ void feat_wifi_pmkid(void)
     d.setCursor(4, BODY_Y + 2); d.print("HANDSHAKE CAPTURE");
     d.drawFastHLine(4, BODY_Y + 12, 150, T_BAD);
 
+    /* Static field labels drawn once; only the changing values get
+     * overwritten per-tick via ui_text_w, each gated on its own last_*
+     * so an unchanged row never repaints (no whole-block wipe flash). */
+    d.setTextColor(T_DIM, T_BG);
+    d.setCursor(4, BODY_Y + 92); d.print("/poseidon/hashcat.22000");
+
     uint32_t last = 0;
+    uint8_t  last_ch     = 0xFF;
+    int      last_cache  = -1;
+    uint32_t last_eapol  = 0xFFFFFFFF;
+    uint32_t last_pmkids = 0xFFFFFFFF;
+    uint32_t last_hs     = 0xFFFFFFFF;
+    int      last_hunt   = -1;
+    int      last_pmf    = -1, last_pmf_total = -1, last_unknown = -1;
     while (true) {
         if (millis() - last > 200) {
             last = millis();
-            d.fillRect(0, BODY_Y + 18, SCR_W, 90, T_BG);
-            d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 18); d.printf("channel:    %u", s_current_ch);
-            d.setCursor(4, BODY_Y + 28); d.printf("APs seen:   %d", s_cache_n);
-            d.setCursor(4, BODY_Y + 38); d.printf("EAPOLs:     %lu", (unsigned long)s_eapol_seen);
-            d.setTextColor(s_pmkids > 0 ? T_GOOD : T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 48); d.printf("PMKIDs:     %lu", (unsigned long)s_pmkids);
-            d.setTextColor(s_handshakes > 0 ? T_GOOD : T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 58); d.printf("Handshakes: %lu", (unsigned long)s_handshakes);
-            d.setTextColor(s_hunt ? T_BAD : T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 70); d.printf("HUNT:       %s", s_hunt ? "ON - deauthing" : "off");
+            if (s_current_ch != last_ch) {
+                last_ch = s_current_ch;
+                ui_text_w(4, BODY_Y + 18, SCR_W - 8, T_FG, "channel:    %u", s_current_ch);
+            }
+            if (s_cache_n != last_cache) {
+                last_cache = s_cache_n;
+                ui_text_w(4, BODY_Y + 28, SCR_W - 8, T_FG, "APs seen:   %d", s_cache_n);
+            }
+            if (s_eapol_seen != last_eapol) {
+                last_eapol = s_eapol_seen;
+                ui_text_w(4, BODY_Y + 38, SCR_W - 8, T_FG, "EAPOLs:     %lu", (unsigned long)s_eapol_seen);
+            }
+            if (s_pmkids != last_pmkids) {
+                last_pmkids = s_pmkids;
+                ui_text_w(4, BODY_Y + 48, SCR_W - 8, s_pmkids > 0 ? T_GOOD : T_DIM,
+                          "PMKIDs:     %lu", (unsigned long)s_pmkids);
+            }
+            if (s_handshakes != last_hs) {
+                last_hs = s_handshakes;
+                ui_text_w(4, BODY_Y + 58, SCR_W - 8, s_handshakes > 0 ? T_GOOD : T_DIM,
+                          "Handshakes: %lu", (unsigned long)s_handshakes);
+            }
+            if ((int)s_hunt != last_hunt) {
+                last_hunt = (int)s_hunt;
+                ui_text_w(4, BODY_Y + 70, SCR_W - 8, s_hunt ? T_BAD : T_DIM,
+                          "HUNT:       %s", s_hunt ? "ON - deauthing" : "off");
+            }
             /* PMF / WPA3 audit chrome — wardrive-seeded cache has real
              * auth types so we can count how many cached BSSIDs will
              * cryptographically drop our deauth. If the count is high
@@ -586,16 +615,17 @@ void feat_wifi_pmkid(void)
                     if (s_cache[i].auth == 0xFF) unknown++;
                     else if (wifi_auth_has_pmf(s_cache[i].auth)) pmf_locked++;
                 }
-                d.setTextColor(pmf_locked > 0 ? T_WARN : T_DIM, T_BG);
-                d.setCursor(4, BODY_Y + 80);
-                if (s_cache_n > 0) {
-                    d.printf("PMF lock:  %d/%d  ?%d", pmf_locked, s_cache_n, unknown);
-                } else {
-                    d.print("PMF lock:  --");
+                if (pmf_locked != last_pmf || s_cache_n != last_pmf_total || unknown != last_unknown) {
+                    last_pmf = pmf_locked; last_pmf_total = s_cache_n; last_unknown = unknown;
+                    if (s_cache_n > 0) {
+                        ui_text_w(4, BODY_Y + 80, SCR_W - 8, pmf_locked > 0 ? T_WARN : T_DIM,
+                                  "PMF lock:  %d/%d  ?%d", pmf_locked, s_cache_n, unknown);
+                    } else {
+                        ui_text_w(4, BODY_Y + 80, SCR_W - 8, pmf_locked > 0 ? T_WARN : T_DIM,
+                                  "PMF lock:  --");
+                    }
                 }
             }
-            d.setTextColor(T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 92); d.print("/poseidon/hashcat.22000");
             ui_draw_status(radio_name(), s_hunt ? "hunt" : "capture");
         }
         /* Radial wave pulse + matrix rain gutter. */

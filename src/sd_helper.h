@@ -11,9 +11,15 @@
 bool sd_mount(void);
 bool sd_is_mounted(void);
 
-/* FAT-format the inserted card. Re-mounts on success. Returns true
- * on success. BLOCKING, ~3-10s depending on card size. */
+/* Content wipe: recursive delete of every file/dir. Only does a real
+ * f_mkfs if the card is UNmountable to begin with. Re-mounts on
+ * success. BLOCKING. */
 bool sd_format(void);
+
+/* True FAT32 reformat via ESP-IDF f_mkfs — forces a fresh filesystem
+ * even on a mountable card (recovers exFAT / corrupt cards on-device).
+ * Re-mounts on success. BLOCKING, ~3-15s. */
+bool sd_force_format(void);
 
 /* Shared SPI bus — the CAP-LoRa1262 SX1262 and the SD card sit on
  * the SAME physical pins (SCK=40 MISO=39 MOSI=14). Features that

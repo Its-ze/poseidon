@@ -138,33 +138,35 @@ static bool select_target(void) {
      * fixed-width / region-only clears — no full-body flash. */
     ui_clear_body();
     d.drawFastHLine(4, BODY_Y+12, SCR_W-8, T_ACCENT2);
+    bool dirty = true;
     while (true) {
-        d.setTextColor(T_ACCENT, T_BG); d.setCursor(4, BODY_Y+2);
-        d.printf("MITM: %-4d peripherals", s_count);
-        d.fillRect(0, fy, SCR_W, rows * row_h, T_BG);
-        int top = max(0, cursor - rows/2);
-        if (top + rows > s_count) top = max(0, s_count - rows);
-        for (int r = 0; r < rows && top+r < s_count; ++r) {
-            int i = top+r, y = fy + r * row_h;
-            bool sel = (i == cursor);
-            uint16_t bg = sel ? T_SEL_BG : T_BG;
-            if (sel) d.fillRoundRect(2, y-1, SCR_W-4, row_h-1, 2, T_SEL_BG);
-            d.setTextColor(T_DIM, bg); d.setCursor(4, y+1); d.printf("%4d", s_devs[i].rssi);
-            d.setTextColor(T_WARN, bg); d.setCursor(32, y+1); d.printf("%-7s", s_devs[i].type_hint);
-            d.setTextColor(sel ? T_ACCENT : T_FG, bg); d.setCursor(78, y+1);
-            if (s_devs[i].name[0]) d.printf("%.20s", s_devs[i].name);
-            else d.printf("%02X:%02X:%02X:%02X", s_devs[i].addr[2], s_devs[i].addr[3],
-                          s_devs[i].addr[4], s_devs[i].addr[5]);
+        if (dirty) {
+            d.setTextColor(T_ACCENT, T_BG); d.setCursor(4, BODY_Y+2);
+            d.printf("MITM: %-4d peripherals", s_count);
+            d.fillRect(0, fy, SCR_W, rows * row_h, T_BG);
+            int top = max(0, cursor - rows/2);
+            if (top + rows > s_count) top = max(0, s_count - rows);
+            for (int r = 0; r < rows && top+r < s_count; ++r) {
+                int i = top+r, y = fy + r * row_h;
+                bool sel = (i == cursor);
+                uint16_t bg = sel ? T_SEL_BG : T_BG;
+                if (sel) d.fillRoundRect(2, y-1, SCR_W-4, row_h-1, 2, T_SEL_BG);
+                d.setTextColor(T_DIM, bg); d.setCursor(4, y+1); d.printf("%4d", s_devs[i].rssi);
+                d.setTextColor(T_WARN, bg); d.setCursor(32, y+1); d.printf("%-7s", s_devs[i].type_hint);
+                d.setTextColor(sel ? T_ACCENT : T_FG, bg); d.setCursor(78, y+1);
+                if (s_devs[i].name[0]) d.printf("%.20s", s_devs[i].name);
+                else d.printf("%02X:%02X:%02X:%02X", s_devs[i].addr[2], s_devs[i].addr[3],
+                              s_devs[i].addr[4], s_devs[i].addr[5]);
+            }
+            dirty = false;
         }
-        while (true) {
-            uint16_t k = input_poll();
-            if (k == PK_NONE) { delay(20); continue; }
-            if (k == PK_ESC) { s_selected = -1; return false; }
-            if (k == ';' || k == PK_UP)   { cursor = max(0, cursor-1); break; }
-            if (k == '.' || k == PK_DOWN) { cursor = min(s_count-1, cursor+1); break; }
-            if (k == 'r' || k == 'R')     { do_mitm_scan(); cursor = 0; break; }
-            if (k == PK_ENTER) { s_selected = cursor; sfx_select(); return true; }
-        }
+        uint16_t k = input_poll();
+        if (k == PK_NONE) { delay(20); continue; }
+        if (k == PK_ESC) { s_selected = -1; return false; }
+        if (k == ';' || k == PK_UP)   { int nc = max(0, cursor-1); if (nc != cursor) { cursor = nc; dirty = true; } }
+        else if (k == '.' || k == PK_DOWN) { int nc = min(s_count-1, cursor+1); if (nc != cursor) { cursor = nc; dirty = true; } }
+        else if (k == 'r' || k == 'R')     { do_mitm_scan(); cursor = 0; dirty = true; }
+        else if (k == PK_ENTER) { s_selected = cursor; sfx_select(); return true; }
     }
 }
 

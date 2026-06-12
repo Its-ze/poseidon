@@ -154,7 +154,48 @@ void feat_subghz_scan(void)
     uint32_t prev_edges = 0;
     subghz_decoded_t decoded = {};
 
+    /* Static chrome painted once; live fields overwrite in place. */
+    ui_force_clear_body();
+    ui_draw_status(radio_name(), "scan");
+    ui_text(4, BODY_Y + 2, T_ACCENT2, "SCAN %.3f MHz", freq);
+    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
+    ui_text(4, BODY_Y + 44, T_DIM, "waiting for signal...");
+    ui_text(4, BODY_Y + 56, T_DIM, "press a remote nearby");
+    ui_draw_footer("+-=freq A=autoscan ESC=exit");
+
+    /* Change-tracking so each field repaints only when its value moves,
+     * and the pulse plot only on a fresh capture. */
+    float    drawn_freq     = freq;
+    uint32_t drawn_captures = (uint32_t)-1;
+    uint32_t drawn_isr      = (uint32_t)-1;
+    int      drawn_rssi     = -9999;
+    uint32_t plotted        = 0;       /* capture# whose plot is on screen */
+    bool     drawn_has_cap  = false;
+    bool     repaint        = false;   /* set after an overlay covers body */
+
     while (true) {
+        /* An overlay (help / toast) covered the body — rebuild static
+         * chrome once and force every live field to repaint. */
+        if (repaint) {
+            repaint = false;
+            ui_force_clear_body();
+            ui_draw_status(radio_name(), "scan");
+            ui_text(4, BODY_Y + 2, T_ACCENT2, "SCAN %.3f MHz", freq);
+            d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
+            if (!has_capture) {
+                ui_text(4, BODY_Y + 44, T_DIM, "waiting for signal...");
+                ui_text(4, BODY_Y + 56, T_DIM, "press a remote nearby");
+            }
+            ui_draw_footer(has_capture ? "S=save R=replay +-=freq A=scan ESC=exit"
+                                       : "+-=freq A=autoscan ESC=exit");
+            drawn_freq = freq;
+            drawn_captures = (uint32_t)-1;
+            drawn_isr = (uint32_t)-1;
+            drawn_rssi = -9999;
+            drawn_has_cap = false;
+            plotted = (uint32_t)-1;
+            last_draw = 0;
+        }
         /* Check if ISR detected a burst of edges. Use rate-based
          * detection: if edges jumped significantly since last check. */
         uint32_t edges = s_isr_edges;
@@ -189,23 +230,40 @@ void feat_subghz_scan(void)
         uint32_t now = millis();
         if (now - last_draw > 300) {
             last_draw = now;
-            if (last_draw == 0) ui_clear_body();  /* first frame only */
             ui_draw_status(radio_name(), "scan");
 
-            ui_text(4, BODY_Y + 2, T_ACCENT2, "SCAN %.3f MHz", freq);
-            d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT2);
+            /* Title only repaints when the tuned freq actually moves. */
+            if (freq != drawn_freq) {
+                drawn_freq = freq;
+                ui_text(4, BODY_Y + 2, T_ACCENT2, "SCAN %.3f MHz", freq);
+            }
 
-            ui_text(4, BODY_Y + 18, T_FG, "captures: %lu  isr: %lu",
-                    (unsigned long)captures, (unsigned long)s_isr_edges);
-            ui_text(4, BODY_Y + 30, T_FG, "rssi: %d dBm", cc1101_get_rssi());
+            uint32_t isr_now = s_isr_edges;
+            if (captures != drawn_captures || isr_now != drawn_isr) {
+                drawn_captures = captures;
+                drawn_isr = isr_now;
+                ui_text(4, BODY_Y + 18, T_FG, "captures: %lu  isr: %lu",
+                        (unsigned long)captures, (unsigned long)isr_now);
+            }
+            int rssi_now = cc1101_get_rssi();
+            if (rssi_now != drawn_rssi) {
+                drawn_rssi = rssi_now;
+                ui_text(4, BODY_Y + 30, T_FG, "rssi: %d dBm", rssi_now);
+            }
 
-            if (has_capture) {
+            /* Capture readout + waveform: repaint only on a fresh capture
+             * (or the first time we leave the "waiting" state). */
+            if (has_capture && (!drawn_has_cap || plotted != captures)) {
+                drawn_has_cap = true;
+                plotted = captures;
                 if (decoded.valid) {
                     ui_text(4, BODY_Y + 44, T_GOOD, "%s  %lu (%u bit)",
                             decoded.protocol, (unsigned long)decoded.value, decoded.bits);
                 } else {
                     ui_text(4, BODY_Y + 44, T_WARN, "RAW %d pulses (no protocol match)", s_pulse_count);
                 }
+                /* Clear the "press a remote" hint line left from idle. */
+                ui_text_w(4, BODY_Y + 56, SCR_W - 8, T_BG, " ");
                 int mid = BODY_Y + 72;
                 d.fillRect(4, mid - 11, SCR_W - 8, 23, T_BG);
                 d.drawFastHLine(4, mid, SCR_W - 8, T_DIM);
@@ -218,18 +276,13 @@ void feat_subghz_scan(void)
                     d.fillRect(x, s_pulses[i] > 0 ? mid - 10 : mid + 1, pw, 10, c);
                     x += pw;
                 }
-            } else {
-                ui_text(4, BODY_Y + 44, T_DIM, "waiting for signal...");
-                ui_text(4, BODY_Y + 56, T_DIM, "press a remote nearby");
+                ui_draw_footer("S=save R=replay +-=freq A=scan ESC=exit");
             }
-
-            ui_draw_footer(has_capture ? "S=save R=replay +-=freq A=scan ESC=exit"
-                                       : "+-=freq A=autoscan ESC=exit");
         }
 
         uint16_t k = input_poll();
         if (k == PK_ESC) break;
-        if (k == '?') { ui_show_current_help(); }
+        if (k == '?') { ui_show_current_help(); repaint = true; }
         if (k == '+' || k == '=') {
             freq += 0.5f;
             ELECHOUSE_cc1101.setSidle();
@@ -269,6 +322,7 @@ void feat_subghz_scan(void)
             char msg[48];
             snprintf(msg, sizeof(msg), "%.3f MHz rssi %d", freq, best_rssi);
             ui_toast(msg, T_GOOD, 800);
+            repaint = true;
         }
         if ((k == 's' || k == 'S') && has_capture) {
             detachInterrupt(digitalPinToInterrupt(CC1101_GDO0));
@@ -278,6 +332,7 @@ void feat_subghz_scan(void)
                 ui_toast("save fail", T_BAD, 800);
             s_isr_edges = 0; prev_edges = 0;
             attachInterrupt(digitalPinToInterrupt(CC1101_GDO0), gdo0_isr, CHANGE);
+            repaint = true;
         }
         if ((k == 'r' || k == 'R') && has_capture) {
             detachInterrupt(digitalPinToInterrupt(CC1101_GDO0));
@@ -294,6 +349,7 @@ void feat_subghz_scan(void)
             s_isr_edges = 0; prev_edges = 0;
             attachInterrupt(digitalPinToInterrupt(CC1101_GDO0), gdo0_isr, CHANGE);
             ui_toast("replayed", T_GOOD, 400);
+            repaint = true;
         }
         delay(1);
     }

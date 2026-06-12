@@ -492,27 +492,90 @@ static void log_verdict(const wp_target_t &t, wp_verdict_t v)
 }
 
 /* --- UI ---------------------------------------------------------------- */
+static bool s_wp_picker_invalid = true;
+
+static void draw_picker_row(int r, int idx, int cursor)
+{
+    auto &d = M5Cardputer.Display;
+    int y = BODY_Y + 18 + r * 12;
+    if (idx >= s_tgt_n) {
+        d.fillRect(0, y - 1, SCR_W, 12, T_BG);
+        return;
+    }
+    const wp_target_t &t = s_tgt[idx];
+    bool sel = (idx == cursor);
+    uint16_t bg = sel ? 0x3007 : T_BG;
+    d.fillRect(0, y - 1, SCR_W, 12, bg);
+
+    /* Mode tag. */
+    uint16_t tag_col = (t.mode == WP_MODE_NONDISCOVERABLE) ? T_WARN : T_DIM;
+    d.setTextColor(tag_col, bg);
+    d.setCursor(4, y);
+    d.print(t.mode == WP_MODE_DISCOVERABLE    ? "PAIR"
+          : t.mode == WP_MODE_NONDISCOVERABLE ? "USE "
+                                              : "???");
+
+    /* Name. */
+    const char *nm = model_name(t.model_id);
+    d.setTextColor(sel ? 0xFFFF : T_FG, bg);
+    d.setCursor(34, y);
+    if (nm) d.printf("%.22s", nm);
+    else if (t.mode == WP_MODE_DISCOVERABLE)
+         d.printf("0x%06lX",      (unsigned long)t.model_id);
+    else d.printf("%02X:%02X:%02X:%02X", t.addr[5], t.addr[4], t.addr[3], t.addr[2]);
+
+    d.setTextColor(T_DIM, bg);
+    d.setCursor(SCR_W - 28, y);
+    d.printf("%4d", t.rssi);
+}
+
 static void draw_picker(int cursor, bool scanning)
 {
     auto &d = M5Cardputer.Display;
-    ui_clear_body();
-    d.setTextColor(T_ACCENT, T_BG);
-    d.setCursor(4, BODY_Y + 2); d.print("WHISPERPAIR  CVE-2025-36911");
-    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+    static int last_cursor = -1;
+    static int last_first = -1;
+    static int last_count = -1;
+    static bool last_empty = false;
+
+    if (s_wp_picker_invalid) {
+        s_wp_picker_invalid = false;
+        last_cursor = -1;
+        last_first = -1;
+        last_count = -1;
+        last_empty = false;
+    }
+
+    if (last_first < 0) {
+        d.fillRect(0, BODY_Y, SCR_W, 14, T_BG);
+        d.setTextColor(T_ACCENT, T_BG);
+        d.setCursor(4, BODY_Y + 2); d.print("WHISPERPAIR  CVE-2025-36911");
+        d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+    }
 
     if (s_tgt_n == 0) {
-        d.setTextColor(T_DIM, T_BG);
-        d.setCursor(4, BODY_Y + 24);
-        d.printf("scanning FE2C    %lu adv", (unsigned long)s_adv_seen_total);
-        d.setCursor(4, BODY_Y + 38);
-        d.print("Fast Pair is opt-in & only broadcasts");
-        d.setCursor(4, BODY_Y + 48);
-        d.print("when accessory is idle. Power-cycle");
-        d.setCursor(4, BODY_Y + 58);
-        d.print("or open the case — it'll advertise.");
-        d.setCursor(4, BODY_Y + 72);
-        d.setTextColor(T_ACCENT, T_BG);
-        d.print("R = rescan from zero");
+        if (!last_empty) {
+            d.fillRect(0, BODY_Y + 14, SCR_W, BODY_H - 14, T_BG);
+            d.setTextColor(T_DIM, T_BG);
+            d.setCursor(4, BODY_Y + 38);
+            d.print("Fast Pair is opt-in & only broadcasts");
+            d.setCursor(4, BODY_Y + 48);
+            d.print("when accessory is idle. Power-cycle");
+            d.setCursor(4, BODY_Y + 58);
+            d.print("or open the case — it'll advertise.");
+            d.setCursor(4, BODY_Y + 72);
+            d.setTextColor(T_ACCENT, T_BG);
+            d.print("R = rescan from zero");
+        }
+        static unsigned long last_adv = 0xFFFFFFFFul;
+        if (!last_empty || s_adv_seen_total != last_adv) {
+            ui_text_w(4, BODY_Y + 24, SCR_W - 8, T_DIM,
+                      "scanning FE2C    %lu adv", (unsigned long)s_adv_seen_total);
+            last_adv = s_adv_seen_total;
+        }
+        last_empty = true;
+        last_count = 0;
+        last_cursor = -1;
+        last_first = -1;
         return;
     }
 
@@ -523,34 +586,21 @@ static void draw_picker(int cursor, bool scanning)
     if (first < 0) first = 0;
     if (first + rows > s_tgt_n) first = max(0, s_tgt_n - rows);
 
-    for (int r = 0; r < rows && first + r < s_tgt_n; ++r) {
-        const wp_target_t &t = s_tgt[first + r];
-        int y = BODY_Y + 18 + r * 12;
-        bool sel = (first + r == cursor);
-        uint16_t bg = sel ? 0x3007 : T_BG;
-        if (sel) d.fillRect(0, y - 1, SCR_W, 12, bg);
-
-        /* Mode tag. */
-        uint16_t tag_col = (t.mode == WP_MODE_NONDISCOVERABLE) ? T_WARN : T_DIM;
-        d.setTextColor(tag_col, bg);
-        d.setCursor(4, y);
-        d.print(t.mode == WP_MODE_DISCOVERABLE    ? "PAIR"
-              : t.mode == WP_MODE_NONDISCOVERABLE ? "USE "
-                                                  : "???");
-
-        /* Name. */
-        const char *nm = model_name(t.model_id);
-        d.setTextColor(sel ? 0xFFFF : T_FG, bg);
-        d.setCursor(34, y);
-        if (nm) d.printf("%.22s", nm);
-        else if (t.mode == WP_MODE_DISCOVERABLE)
-             d.printf("0x%06lX",      (unsigned long)t.model_id);
-        else d.printf("%02X:%02X:%02X:%02X", t.addr[5], t.addr[4], t.addr[3], t.addr[2]);
-
-        d.setTextColor(T_DIM, bg);
-        d.setCursor(SCR_W - 28, y);
-        d.printf("%4d", t.rssi);
+    bool full = last_empty || last_first != first || last_count != s_tgt_n
+             || last_cursor < 0;
+    if (full) {
+        for (int r = 0; r < rows; ++r) draw_picker_row(r, first + r, cursor);
+    } else if (cursor != last_cursor) {
+        int pr = last_cursor - first;
+        int cr = cursor - first;
+        if (pr >= 0 && pr < rows) draw_picker_row(pr, first + pr, cursor);
+        if (cr >= 0 && cr < rows) draw_picker_row(cr, first + cr, cursor);
     }
+
+    last_empty = false;
+    last_count = s_tgt_n;
+    last_first = first;
+    last_cursor = cursor;
 }
 
 static void draw_probing(const wp_target_t &t)
@@ -643,12 +693,23 @@ void feat_ble_whisperpair(void)
     scan->setWindow(67);
     scan->start(0, false);
 
+    ui_force_clear_body();
     ui_draw_footer(";/.=move  ENTER=probe  R=rescan  `=back");
     ui_draw_status(radio_name(), "whisper");
+    s_wp_picker_invalid = true;
     int cursor = 0;
     uint32_t last = 0;
+    int last_drawn_cursor = -1;
+    int last_drawn_count = -1;
     while (true) {
-        if (millis() - last > 300) { last = millis(); draw_picker(cursor, true); }
+        if (millis() - last > 300 &&
+            (cursor != last_drawn_cursor || s_tgt_n != last_drawn_count ||
+             s_tgt_n == 0)) {
+            last = millis();
+            last_drawn_cursor = cursor;
+            last_drawn_count = s_tgt_n;
+            draw_picker(cursor, true);
+        }
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(20); continue; }
         if (k == PK_ESC) { scan->stop(); return; }
@@ -659,12 +720,19 @@ void feat_ble_whisperpair(void)
             s_tgt_n = 0;
             s_adv_seen_total = 0;
             cursor = 0;
+            s_wp_picker_invalid = true;
+            last_drawn_cursor = -1;
+            last_drawn_count = -1;
             scan->start(0, false);
         }
         if (k == '?') {
             scan->stop();
             ui_show_current_help();
+            ui_force_clear_body();
             ui_draw_footer(";/.=move  ENTER=probe  R=rescan  `=back");
+            s_wp_picker_invalid = true;
+            last_drawn_cursor = -1;
+            last_drawn_count = -1;
             scan->start(0, false);
         }
 
@@ -682,7 +750,11 @@ void feat_ble_whisperpair(void)
                 delay(30);
             }
             scan->start(0, false);
+            ui_force_clear_body();
             ui_draw_footer(";/.=move  ENTER=probe  R=rescan  `=back");
+            s_wp_picker_invalid = true;
+            last_drawn_cursor = -1;
+            last_drawn_count = -1;
         }
     }
 }

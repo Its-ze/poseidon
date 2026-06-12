@@ -150,23 +150,25 @@ void feat_ble_findmy(void)
     d.printf("FIND MY x%d", s_fm_tags);
     d.drawFastHLine(4, BODY_Y + 12, 130, T_BAD);
     ui_draw_footer("`=stop");
+    d.setTextColor(T_DIM, T_BG);
+    d.setCursor(4, BODY_Y + 48);
+    d.print("passing iPhones will relay");
+    d.setCursor(4, BODY_Y + 58);
+    d.print("these to icloud location svc");
 
     uint32_t last = 0;
+    uint32_t last_count = 0xFFFFFFFF, last_rot = 0xFFFFFFFF;
     while (true) {
         if (millis() - last > 300) {
             last = millis();
-            d.fillRect(0, BODY_Y + 20, 150, 60, T_BG);
-            d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 20);
-            d.printf("broadcasts: %lu", (unsigned long)s_fm_count);
-            d.setTextColor(T_GOOD, T_BG);
-            d.setCursor(4, BODY_Y + 32);
-            d.printf("identities: %lu", (unsigned long)s_fm_rotated);
-            d.setTextColor(T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 48);
-            d.print("passing iPhones will relay");
-            d.setCursor(4, BODY_Y + 58);
-            d.print("these to icloud location svc");
+            if (s_fm_count != last_count) {
+                ui_text_w(4, BODY_Y + 20, 150, T_FG, "broadcasts: %lu", (unsigned long)s_fm_count);
+                last_count = s_fm_count;
+            }
+            if (s_fm_rotated != last_rot) {
+                ui_text_w(4, BODY_Y + 32, 150, T_GOOD, "identities: %lu", (unsigned long)s_fm_rotated);
+                last_rot = s_fm_rotated;
+            }
             ui_draw_status(radio_name(), "findmy");
         }
         ui_matrix_rain(160, BODY_Y + 18, SCR_W - 160, BODY_H - 20, 0xF81F);

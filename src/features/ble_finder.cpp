@@ -91,33 +91,43 @@ class finder_cb : public NimBLEScanCallbacks {
 };
 static finder_cb s_cb_obj;
 
+static bool s_meter_invalid = true;
+
 static void draw_meter(void)
 {
     auto &d = M5Cardputer.Display;
-    ui_clear_body();
+    static const char *last_prox = nullptr;
+    static int8_t last_rssi = 127;
 
     /* Stale timeout: after 4s without a hit, show "no signal". */
     uint32_t age = millis() - s_lock_last;
     int8_t rssi = (age > 4000) ? -100 : s_lock_rssi;
 
-    /* Header — label (if any) on row 1, MAC on row 2. Label is set by
-     * the "hunt this scanned device" path; tracker-picker path leaves
-     * it empty and we just show "HUNT" + MAC like before. */
-    d.setTextColor(T_ACCENT, T_BG);
-    d.setCursor(4, BODY_Y + 2);
-    if (s_lock_label[0]) {
-        d.printf("HUNT  %.18s", s_lock_label);
-        d.setTextColor(T_DIM, T_BG);
-        d.setCursor(4, BODY_Y + 12);
-        d.printf("%02X:%02X:%02X:%02X:%02X:%02X",
-                 s_lock[0], s_lock[1], s_lock[2],
-                 s_lock[3], s_lock[4], s_lock[5]);
-        d.drawFastHLine(4, BODY_Y + 22, SCR_W - 8, T_ACCENT);
-    } else {
-        d.printf("HUNT  %02X:%02X:%02X:%02X:%02X:%02X",
-                 s_lock[0], s_lock[1], s_lock[2],
-                 s_lock[3], s_lock[4], s_lock[5]);
-        d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+    /* Static header drawn once — label (if any) on row 1, MAC on row 2.
+     * Label is set by the "hunt this scanned device" path; tracker-picker
+     * path leaves it empty and we just show "HUNT" + MAC like before. */
+    if (s_meter_invalid) {
+        d.fillRect(0, BODY_Y, SCR_W, BODY_H, T_BG);
+        d.setTextColor(T_ACCENT, T_BG);
+        d.setCursor(4, BODY_Y + 2);
+        if (s_lock_label[0]) {
+            d.printf("HUNT  %.18s", s_lock_label);
+            d.setTextColor(T_DIM, T_BG);
+            d.setCursor(4, BODY_Y + 12);
+            d.printf("%02X:%02X:%02X:%02X:%02X:%02X",
+                     s_lock[0], s_lock[1], s_lock[2],
+                     s_lock[3], s_lock[4], s_lock[5]);
+            d.drawFastHLine(4, BODY_Y + 22, SCR_W - 8, T_ACCENT);
+        } else {
+            d.printf("HUNT  %02X:%02X:%02X:%02X:%02X:%02X",
+                     s_lock[0], s_lock[1], s_lock[2],
+                     s_lock[3], s_lock[4], s_lock[5]);
+            d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+        }
+        d.drawRect(8, BODY_Y + 78, SCR_W - 16, 8, T_DIM);
+        last_prox = nullptr;
+        last_rssi = 127;
+        s_meter_invalid = false;
     }
 
     /* Big proximity label. */
@@ -130,64 +140,115 @@ static void draw_meter(void)
     else if (rssi > -84) { prox = "COOL";      prox_col = T_ACCENT;}
     else                 { prox = "COLD";      prox_col = T_DIM;  }
 
-    d.setTextColor(prox_col, T_BG);
-    d.setTextSize(3);
-    int w = d.textWidth(prox) * 3;
-    d.setCursor((SCR_W - w) / 2, BODY_Y + 22);
-    d.print(prox);
-    d.setTextSize(1);
+    if (prox != last_prox) {
+        d.fillRect(0, BODY_Y + 22, SCR_W, 24, T_BG);
+        d.setTextColor(prox_col, T_BG);
+        d.setTextSize(3);
+        int w = d.textWidth(prox) * 3;
+        d.setCursor((SCR_W - w) / 2, BODY_Y + 22);
+        d.print(prox);
+        d.setTextSize(1);
+        last_prox = prox;
+    }
 
     /* RSSI numeric readout. */
-    d.setTextColor(T_FG, T_BG);
-    d.setTextSize(2);
-    char rbuf[16];
-    if (rssi <= -99) snprintf(rbuf, sizeof(rbuf), "--- dBm");
-    else             snprintf(rbuf, sizeof(rbuf), "%d dBm", rssi);
-    int rw = d.textWidth(rbuf) * 2;
-    d.setCursor((SCR_W - rw) / 2, BODY_Y + 52);
-    d.print(rbuf);
-    d.setTextSize(1);
+    if (rssi != last_rssi) {
+        d.fillRect(0, BODY_Y + 52, SCR_W, 16, T_BG);
+        d.setTextColor(T_FG, T_BG);
+        d.setTextSize(2);
+        char rbuf[16];
+        if (rssi <= -99) snprintf(rbuf, sizeof(rbuf), "--- dBm");
+        else             snprintf(rbuf, sizeof(rbuf), "%d dBm", rssi);
+        int rw = d.textWidth(rbuf) * 2;
+        d.setCursor((SCR_W - rw) / 2, BODY_Y + 52);
+        d.print(rbuf);
+        d.setTextSize(1);
 
-    /* Signal bar, full width. */
-    int pct = (rssi + 100) * 100 / 70;
-    if (pct < 0) pct = 0; if (pct > 100) pct = 100;
-    int by = BODY_Y + 78;
-    d.drawRect(8, by, SCR_W - 16, 8, T_DIM);
-    d.fillRect(9, by + 1, (SCR_W - 18) * pct / 100, 6, prox_col);
+        /* Signal bar, full width — confined to inside the static frame. */
+        int pct = (rssi + 100) * 100 / 70;
+        if (pct < 0) pct = 0; if (pct > 100) pct = 100;
+        int by = BODY_Y + 78;
+        int fill = (SCR_W - 18) * pct / 100;
+        d.fillRect(9, by + 1, fill, 6, prox_col);
+        if (fill < SCR_W - 18) d.fillRect(9 + fill, by + 1, (SCR_W - 18) - fill, 6, T_BG);
+
+        last_rssi = rssi;
+    }
+}
+
+static bool s_picker_invalid = true;
+
+static void draw_picker_row(int i, int cursor)
+{
+    auto &d = M5Cardputer.Display;
+    int y = BODY_Y + 18 + i * 12;
+    if (i >= s_found_n) {
+        d.fillRect(0, y - 1, SCR_W, 12, T_BG);
+        return;
+    }
+    const found_t &f = s_found[i];
+    bool sel = (i == cursor);
+    uint16_t bg = sel ? 0x18C7 : T_BG;
+    d.fillRect(0, y - 1, SCR_W, 12, bg);
+    d.setTextColor(sel ? T_ACCENT : T_WARN, bg);
+    d.setCursor(4, y);
+    d.printf("%-9s", f.type);
+    d.setTextColor(sel ? T_ACCENT : T_FG, bg);
+    d.setCursor(68, y);
+    d.printf("%02X:%02X:%02X", f.addr[3], f.addr[4], f.addr[5]);
+    d.setTextColor(T_DIM, bg);
+    d.setCursor(140, y);
+    d.printf("%d/%d", f.rssi, f.best_rssi);
 }
 
 static void draw_picker(int cursor)
 {
     auto &d = M5Cardputer.Display;
-    ui_clear_body();
-    d.setTextColor(T_ACCENT, T_BG);
-    d.setCursor(4, BODY_Y + 2);
-    d.printf("FINDER  %d candidate%s", s_found_n, s_found_n == 1 ? "" : "s");
-    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+    static int last_cursor = -1;
+    static int last_count = -1;
+    static bool last_empty = false;
+
+    if (s_picker_invalid) {
+        s_picker_invalid = false;
+        last_cursor = -1;
+        last_count = -1;
+        last_empty = false;
+    }
+
+    if (s_found_n != last_count) {
+        d.fillRect(0, BODY_Y, SCR_W, 14, T_BG);
+        d.setTextColor(T_ACCENT, T_BG);
+        d.setCursor(4, BODY_Y + 2);
+        d.printf("FINDER  %d candidate%s", s_found_n, s_found_n == 1 ? "" : "s");
+        d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+    }
 
     if (s_found_n == 0) {
-        d.setTextColor(T_DIM, T_BG);
-        d.setCursor(4, BODY_Y + 28);
-        d.print("scanning for nearby trackers...");
-        d.setCursor(4, BODY_Y + 42);
-        d.print("AirTag / SmartTag / Tile");
+        if (!last_empty || last_count != 0) {
+            d.fillRect(0, BODY_Y + 14, SCR_W, BODY_H - 14, T_BG);
+            d.setTextColor(T_DIM, T_BG);
+            d.setCursor(4, BODY_Y + 28);
+            d.print("scanning for nearby trackers...");
+            d.setCursor(4, BODY_Y + 42);
+            d.print("AirTag / SmartTag / Tile");
+        }
+        last_empty = true;
+        last_count = 0;
+        last_cursor = -1;
         return;
     }
-    for (int i = 0; i < s_found_n && i < 7; ++i) {
-        const found_t &f = s_found[i];
-        int y = BODY_Y + 18 + i * 12;
-        bool sel = (i == cursor);
-        if (sel) d.fillRect(0, y - 1, SCR_W, 12, 0x18C7);
-        d.setTextColor(sel ? T_ACCENT : T_WARN, sel ? 0x18C7 : T_BG);
-        d.setCursor(4, y);
-        d.printf("%-9s", f.type);
-        d.setTextColor(sel ? T_ACCENT : T_FG, sel ? 0x18C7 : T_BG);
-        d.setCursor(68, y);
-        d.printf("%02X:%02X:%02X", f.addr[3], f.addr[4], f.addr[5]);
-        d.setTextColor(T_DIM, sel ? 0x18C7 : T_BG);
-        d.setCursor(140, y);
-        d.printf("%d/%d", f.rssi, f.best_rssi);
+
+    bool full = last_empty || last_count != s_found_n || last_cursor < 0;
+    if (full) {
+        for (int i = 0; i < 7; ++i) draw_picker_row(i, cursor);
+    } else if (cursor != last_cursor) {
+        if (last_cursor < 7) draw_picker_row(last_cursor, cursor);
+        if (cursor < 7)      draw_picker_row(cursor, cursor);
     }
+
+    last_empty = false;
+    last_count = s_found_n;
+    last_cursor = cursor;
 }
 
 /* Beep a tracker via BLE GATT connect + write. Apple's anti-stalking
@@ -324,11 +385,21 @@ void feat_ble_finder(void)
     scan->start(0, false);
 
     int cursor = 0;
+    ui_force_clear_body();
     ui_draw_footer(";/.=move  ENTER=hunt  B=beep  `=back");
 
+    s_picker_invalid = true;
     uint32_t last = 0;
+    int last_drawn_cursor = -1;
+    int last_drawn_count = -1;
     while (true) {
-        if (millis() - last > 250) { last = millis(); draw_picker(cursor); }
+        if (millis() - last > 250 &&
+            (cursor != last_drawn_cursor || s_found_n != last_drawn_count)) {
+            last = millis();
+            last_drawn_cursor = cursor;
+            last_drawn_count = s_found_n;
+            draw_picker(cursor);
+        }
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(20); continue; }
         if (k == PK_ESC) { scan->stop(); return; }
@@ -347,8 +418,12 @@ void feat_ble_finder(void)
             scan->setInterval(40);
             scan->setWindow(30);
             scan->start(0, false);
+            ui_force_clear_body();
             ui_draw_footer(";/.=move  ENTER=hunt  B=beep  `=back");
             last = 0;  /* force redraw */
+            last_drawn_cursor = -1;
+            last_drawn_count = -1;
+            s_picker_invalid = true;
         }
         if (k == PK_ENTER && s_found_n > 0) {
             memcpy(s_lock, s_found[cursor].addr, 6);
@@ -361,6 +436,7 @@ void feat_ble_finder(void)
 
     /* ---- Hunt loop ---- */
     ui_draw_footer("move around  `=back");
+    s_meter_invalid = true;
     uint32_t last_draw = 0;
     uint32_t last_beep = 0;
     while (true) {
@@ -426,6 +502,7 @@ void feat_ble_finder_hunt_mac(const uint8_t mac[6], const char *label)
     scan->start(0, false);
     ui_draw_footer("move around  `=back");
 
+    s_meter_invalid = true;
     uint32_t last_draw = 0;
     uint32_t last_beep = 0;
     while (true) {

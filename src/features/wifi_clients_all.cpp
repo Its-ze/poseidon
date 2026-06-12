@@ -156,6 +156,46 @@ static void broadcast_deauth(const uint8_t *bssid, uint8_t ch, int bursts)
     s_locked = prev_lock;
 }
 
+/* Paint one client-pair row in full: its own full-width background (so the
+ * prior row is overwritten without a body clear) then all columns on top.
+ * Shared by the scroll-window and cursor-move redraw paths. */
+static void draw_all_row(int r, int first, int cursor)
+{
+    auto &d = M5Cardputer.Display;
+    const acli_t &c = s_all[first + r];
+    int y = BODY_Y + 18 + r * 10;
+    bool sel = (first + r == cursor);
+    uint16_t bg = sel ? 0x18C7 : T_BG;
+    d.fillRect(0, y - 1, SCR_W, 10, bg);
+
+    uint32_t oui = ((uint32_t)c.sta[0] << 16) |
+                   ((uint32_t)c.sta[1] << 8)  |
+                    (uint32_t)c.sta[2];
+    const char *vendor   = ble_db_oui(oui);
+    const char *hostname = dhcp_hostname(c.sta);
+
+    /* Left column: hostname wins over vendor (more specific). */
+    if (hostname) {
+        d.setTextColor(sel ? T_ACCENT : T_GOOD, bg);
+        d.setCursor(2, y); d.printf("%-14.14s", hostname);
+    } else if (vendor) {
+        d.setTextColor(sel ? T_ACCENT : T_WARN, bg);
+        d.setCursor(2, y); d.printf("%-14.14s", vendor);
+    } else {
+        d.setTextColor(T_DIM, bg);
+        d.setCursor(2, y); d.printf("?");
+    }
+    d.setTextColor(sel ? T_ACCENT : T_FG, bg);
+    d.setCursor(88, y);
+    d.printf("%02X:%02X", c.sta[4], c.sta[5]);
+    d.setTextColor(T_DIM, bg);
+    d.setCursor(116, y);
+    d.printf("→%02X:%02X", c.bssid[4], c.bssid[5]);
+    d.setCursor(154, y); d.printf("ch%u", c.ch);
+    d.setTextColor(sel ? T_ACCENT : T_FG, bg);
+    d.setCursor(184, y); d.printf("%4d", c.rssi);
+}
+
 void feat_wifi_clients_all(void)
 {
     radio_switch(RADIO_WIFI);
@@ -179,67 +219,96 @@ void feat_wifi_clients_all(void)
 
     int cursor = 0;
     ui_draw_footer(";/.=move D=dth X=apkill L=lock H=hop `=back");
+
+    /* Static chrome painted once; the body never gets a blanket clear
+     * after this, so scrolling no longer flashes black. The header line
+     * (volatile channel/LOCK) is overwritten in place via ui_text_w. */
+    {
+        auto &d = M5Cardputer.Display;
+        ui_force_clear_body();
+        d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+    }
+
     uint32_t last = 0;
+    int last_count  = -1;
+    int last_cursor = -1;
+    int last_first  = -1;
     while (true) {
-        if (millis() - last > 300) {
+        const int rows = 8;
+        int first = 0;
+        if (s_all_n > 0) {
+            if (cursor < 0) cursor = 0;
+            if (cursor >= s_all_n) cursor = s_all_n - 1;
+            first = cursor - rows / 2;
+            if (first < 0) first = 0;
+            if (first + rows > s_all_n) first = max(0, s_all_n - rows);
+        }
+        bool count_changed  = (s_all_n != last_count);
+        bool cursor_changed = (cursor != last_cursor);
+        bool first_changed  = (first != last_first);
+
+        auto &d = M5Cardputer.Display;
+
+        if (cursor_changed && !first_changed && !count_changed &&
+            s_all_n > 0 && last_cursor >= 0) {
+            /* Cursor moved within the window — 2 rows, immediate (responsive). */
+            int old_r = last_cursor - first;
+            int new_r = cursor - first;
+            if (old_r >= 0 && old_r < rows && last_first + old_r < s_all_n)
+                draw_all_row(old_r, first, cursor);
+            if (new_r >= 0 && new_r < rows && first + new_r < s_all_n)
+                draw_all_row(new_r, first, cursor);
+            last_cursor = cursor;
+        } else if (first_changed) {
+            /* Scrolled to a new window — repaint it once, immediately. */
             last = millis();
-            auto &d = M5Cardputer.Display;
-            ui_clear_body();
-            d.setTextColor(T_ACCENT, T_BG);
-            d.setCursor(4, BODY_Y + 2);
-            d.printf("CLIENTS  %d  ch%u%s",
-                     s_all_n, s_all_ch, s_locked ? " LOCK" : "");
-            d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
-
+            ui_text_w(4, BODY_Y + 2, SCR_W - 8, T_ACCENT,
+                      "CLIENTS  %d  ch%u%s", s_all_n, s_all_ch,
+                      s_locked ? " LOCK" : "");
             if (s_all_n == 0) {
-                d.setTextColor(T_DIM, T_BG);
-                d.setCursor(4, BODY_Y + 24);
-                d.print("hopping all channels");
-                d.setCursor(4, BODY_Y + 36);
-                d.print("waiting for data frames...");
+                if (last_count != 0) {
+                    d.fillRect(0, BODY_Y + 18, SCR_W, BODY_H - 18, T_BG);
+                    d.setTextColor(T_DIM, T_BG);
+                    d.setCursor(4, BODY_Y + 24); d.print("hopping all channels");
+                    d.setCursor(4, BODY_Y + 36); d.print("waiting for data frames...");
+                }
             } else {
-                int rows = 8;
-                if (cursor < 0) cursor = 0;
-                if (cursor >= s_all_n) cursor = s_all_n - 1;
-                int first = cursor - rows / 2;
-                if (first < 0) first = 0;
-                if (first + rows > s_all_n) first = max(0, s_all_n - rows);
-
+                for (int r = 0; r < rows && first + r < s_all_n; ++r)
+                    draw_all_row(r, first, cursor);
+            }
+            last_count = s_all_n; last_cursor = cursor; last_first = first;
+            ui_draw_status(radio_name(), s_locked ? "lock" : "hunt");
+        } else if (millis() - last >= 250) {
+            /* Populate + live-RSSI, throttled to 4 Hz. A burst of newly
+             * captured clients used to repaint the whole list on every
+             * single arrival (tens of Hz) and strobed — the cap fixes it. */
+            last = millis();
+            ui_text_w(4, BODY_Y + 2, SCR_W - 8, T_ACCENT,
+                      "CLIENTS  %d  ch%u%s", s_all_n, s_all_ch,
+                      s_locked ? " LOCK" : "");
+            if (s_all_n == 0) {
+                if (last_count != 0) {
+                    d.fillRect(0, BODY_Y + 18, SCR_W, BODY_H - 18, T_BG);
+                    d.setTextColor(T_DIM, T_BG);
+                    d.setCursor(4, BODY_Y + 24); d.print("hopping all channels");
+                    d.setCursor(4, BODY_Y + 36); d.print("waiting for data frames...");
+                }
+            } else if (count_changed) {
+                for (int r = 0; r < rows && first + r < s_all_n; ++r)
+                    draw_all_row(r, first, cursor);
+            } else {
+                /* List unchanged — refresh only the volatile RSSI column. */
                 for (int r = 0; r < rows && first + r < s_all_n; ++r) {
                     const acli_t &c = s_all[first + r];
                     int y = BODY_Y + 18 + r * 10;
                     bool sel = (first + r == cursor);
-                    if (sel) d.fillRect(0, y - 1, SCR_W, 10, 0x18C7);
-
-                    uint32_t oui = ((uint32_t)c.sta[0] << 16) |
-                                   ((uint32_t)c.sta[1] << 8)  |
-                                    (uint32_t)c.sta[2];
-                    const char *vendor   = ble_db_oui(oui);
-                    const char *hostname = dhcp_hostname(c.sta);
-
-                    /* Left column: hostname wins over vendor (more specific). */
                     uint16_t bg = sel ? 0x18C7 : T_BG;
-                    if (hostname) {
-                        d.setTextColor(sel ? T_ACCENT : T_GOOD, bg);
-                        d.setCursor(2, y); d.printf("%-14.14s", hostname);
-                    } else if (vendor) {
-                        d.setTextColor(sel ? T_ACCENT : T_WARN, bg);
-                        d.setCursor(2, y); d.printf("%-14.14s", vendor);
-                    } else {
-                        d.setTextColor(T_DIM, bg);
-                        d.setCursor(2, y); d.printf("?");
-                    }
-                    d.setTextColor(sel ? T_ACCENT : T_FG, bg);
-                    d.setCursor(88, y);
-                    d.printf("%02X:%02X", c.sta[4], c.sta[5]);
-                    d.setTextColor(T_DIM, bg);
-                    d.setCursor(116, y);
-                    d.printf("→%02X:%02X", c.bssid[4], c.bssid[5]);
-                    d.setCursor(154, y); d.printf("ch%u", c.ch);
+                    d.fillRect(184, y, SCR_W - 184, 10, bg);
                     d.setTextColor(sel ? T_ACCENT : T_FG, bg);
                     d.setCursor(184, y); d.printf("%4d", c.rssi);
                 }
             }
+            last_count = s_all_n; last_cursor = cursor; last_first = first;
             ui_draw_status(radio_name(), s_locked ? "lock" : "hunt");
         }
 
@@ -266,6 +335,11 @@ void feat_wifi_clients_all(void)
             s_locked = false;
             ui_toast("hopping", T_GOOD, 400);
         }
+        /* Any of the above toasts painted over the body — force a full row
+         * repaint next iteration to wipe the residue. */
+        if (k == 'd' || k == 'D' || k == 'x' || k == 'X' ||
+            k == 'l' || k == 'L' || k == 'h' || k == 'H')
+            last_count = last_cursor = last_first = -1;
     }
 
     s_running = false;

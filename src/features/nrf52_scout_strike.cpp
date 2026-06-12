@@ -129,34 +129,36 @@ static void scout_phase(void) {
      * a body wipe. Only the list-row region gets cleared per cursor move. */
     ui_clear_body();
     d.drawFastHLine(4, BODY_Y+12, SCR_W-8, T_ACCENT2);
+    bool dirty = true;
     while (true) {
-        d.setTextColor(T_ACCENT, T_BG); d.setCursor(4, BODY_Y+2);
-        d.printf("SCOUT: %-4d targets", s_tcount);
-        /* Clear list region only. */
-        d.fillRect(0, fy, SCR_W, rows * row_h, T_BG);
-        int top = max(0, cursor - rows/2);
-        if (top + rows > s_tcount) top = max(0, s_tcount - rows);
-        for (int r = 0; r < rows && top+r < s_tcount; ++r) {
-            int i = top + r, y = fy + r * row_h;
-            bool sel = (i == cursor);
-            uint16_t bg = sel ? T_SEL_BG : T_BG;
-            if (sel) d.fillRoundRect(2, y-1, SCR_W-4, row_h-1, 2, T_SEL_BG);
-            d.setTextColor(T_DIM, bg); d.setCursor(4, y+1); d.printf("%4d", s_targets[i].rssi);
-            d.setTextColor(T_WARN, bg); d.setCursor(32, y+1); d.printf("%-7s", s_targets[i].type_hint);
-            d.setTextColor(sel ? T_ACCENT : T_FG, bg); d.setCursor(78, y+1);
-            if (s_targets[i].name[0]) d.printf("%.20s", s_targets[i].name);
-            else d.printf("%02X:%02X:%02X:%02X", s_targets[i].addr[2], s_targets[i].addr[3],
-                          s_targets[i].addr[4], s_targets[i].addr[5]);
+        if (dirty) {
+            d.setTextColor(T_ACCENT, T_BG); d.setCursor(4, BODY_Y+2);
+            d.printf("SCOUT: %-4d targets", s_tcount);
+            /* Clear list region only. */
+            d.fillRect(0, fy, SCR_W, rows * row_h, T_BG);
+            int top = max(0, cursor - rows/2);
+            if (top + rows > s_tcount) top = max(0, s_tcount - rows);
+            for (int r = 0; r < rows && top+r < s_tcount; ++r) {
+                int i = top + r, y = fy + r * row_h;
+                bool sel = (i == cursor);
+                uint16_t bg = sel ? T_SEL_BG : T_BG;
+                if (sel) d.fillRoundRect(2, y-1, SCR_W-4, row_h-1, 2, T_SEL_BG);
+                d.setTextColor(T_DIM, bg); d.setCursor(4, y+1); d.printf("%4d", s_targets[i].rssi);
+                d.setTextColor(T_WARN, bg); d.setCursor(32, y+1); d.printf("%-7s", s_targets[i].type_hint);
+                d.setTextColor(sel ? T_ACCENT : T_FG, bg); d.setCursor(78, y+1);
+                if (s_targets[i].name[0]) d.printf("%.20s", s_targets[i].name);
+                else d.printf("%02X:%02X:%02X:%02X", s_targets[i].addr[2], s_targets[i].addr[3],
+                              s_targets[i].addr[4], s_targets[i].addr[5]);
+            }
+            dirty = false;
         }
-        while (true) {
-            uint16_t k = input_poll();
-            if (k == PK_NONE) { delay(20); continue; }
-            if (k == PK_ESC) { s_selected = -1; return; }
-            if (k == ';' || k == PK_UP)   { cursor = max(0, cursor-1); break; }
-            if (k == '.' || k == PK_DOWN) { cursor = min(s_tcount-1, cursor+1); break; }
-            if (k == 'r' || k == 'R')     { do_nimble_scan(); cursor = 0; break; }
-            if (k == PK_ENTER)            { s_selected = cursor; sfx_select(); return; }
-        }
+        uint16_t k = input_poll();
+        if (k == PK_NONE) { delay(20); continue; }
+        if (k == PK_ESC) { s_selected = -1; return; }
+        if (k == ';' || k == PK_UP)   { int nc = max(0, cursor-1); if (nc != cursor) { cursor = nc; dirty = true; } }
+        else if (k == '.' || k == PK_DOWN) { int nc = min(s_tcount-1, cursor+1); if (nc != cursor) { cursor = nc; dirty = true; } }
+        else if (k == 'r' || k == 'R')     { do_nimble_scan(); cursor = 0; dirty = true; }
+        else if (k == PK_ENTER)            { s_selected = cursor; sfx_select(); return; }
     }
 }
 
@@ -235,13 +237,17 @@ static void strike_phase(void) {
             ui_clear_body(); ui_draw_status("Strike", "flooding");
             ui_draw_footer("ESC=stop");
             d.setTextColor(T_BAD, T_BG); d.setCursor(4, BODY_Y+2); d.print("STRIKE: ADV Flood");
-            uint32_t fc = 0;
+            uint32_t fc = 0, last_fc = (uint32_t)-1, fdraw = 0;
             while (true) {
                 while (NRF52Hardware::available()) { NRF52Hardware::read_line(); fc++; }
-                d.fillRect(0, BODY_Y+16, SCR_W, 20, T_BG);
-                d.setTextColor(T_ACCENT, T_BG); d.setCursor(4, BODY_Y+18);
-                d.printf("Spoofed: %lu", (unsigned long)fc);
-                ui_glitch(4, BODY_Y+40, SCR_W-8, 40);
+                if (millis() - fdraw > 150) {
+                    fdraw = millis();
+                    if (fc != last_fc) {
+                        last_fc = fc;
+                        ui_text_w(4, BODY_Y+18, SCR_W-8, T_ACCENT, "Spoofed: %lu", (unsigned long)fc);
+                    }
+                    ui_glitch(4, BODY_Y+40, SCR_W-8, 40);
+                }
                 if (input_poll() == PK_ESC) break;
                 delay(30);
             }

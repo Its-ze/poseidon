@@ -35,22 +35,34 @@ void feat_tool_sd_format(void)
     d.setTextColor(T_WARN, T_BG);
     d.setCursor(4, BODY_Y + 22); d.print("THIS WIPES EVERYTHING");
     d.setTextColor(T_FG, T_BG);
-    d.setCursor(4, BODY_Y + 38); d.print("type YES and enter");
-    ui_draw_footer("ENTER=confirm  `=cancel");
+    d.setCursor(4, BODY_Y + 36); d.print("Q = quick wipe (delete all)");
+    d.setCursor(4, BODY_Y + 48); d.print("F = TRUE FAT32 reformat");
+    d.setTextColor(T_DIM, T_BG);
+    d.setCursor(4, BODY_Y + 62); d.print("F recovers exFAT/corrupt cards");
+    ui_draw_footer("Q=quick  F=fat32  `=cancel");
+
+    bool force = false;
+    while (true) {
+        uint16_t k = input_poll();
+        if (k == PK_NONE) { delay(20); continue; }
+        if (k == PK_ESC) return;
+        if (k == 'q' || k == 'Q') { force = false; break; }
+        if (k == 'f' || k == 'F') { force = true;  break; }
+    }
+
+    /* Type-YES gate on either path — destructive + irreversible. */
     char buf[8];
-    if (!input_line("confirm:", buf, sizeof(buf))) return;
+    if (!input_line(force ? "FAT32 reformat - type YES:" : "wipe - type YES:",
+                    buf, sizeof(buf))) return;
     if (strcmp(buf, "YES") != 0) { ui_toast("cancelled", T_DIM, 500); return; }
 
-    ui_toast("formatting...", T_WARN, 0);
-    /* POS-AUDIT-284 / sys-014: delegate to sd_format() — the canonical
-     * single implementation of the recursive nuke now lives in
-     * sd_helper.cpp. The confirmation gate above (YES prompt + ENTER)
-     * is the contract sd_format's docstring requires of UI callers. */
-    if (!sd_format()) {
-        ui_toast("SD format failed", T_BAD, 1500);
+    ui_toast(force ? "reformatting FAT32..." : "wiping...", T_WARN, 0);
+    bool ok = force ? sd_force_format() : sd_format();
+    if (!ok) {
+        ui_toast(force ? "FAT32 format failed" : "SD wipe failed", T_BAD, 1500);
         return;
     }
-    ui_toast("done", T_GOOD, 800);
+    ui_toast(force ? "FAT32 done" : "wiped", T_GOOD, 900);
 }
 
 /* ================= Flashlight ================= */
@@ -100,21 +112,22 @@ void feat_tool_stopwatch(void)
     ui_draw_footer("SPACE=start/stop L=lap R=reset `=back");
     auto &d = M5Cardputer.Display;
 
+    d.setTextColor(T_ACCENT, T_BG);
+    d.setCursor(4, BODY_Y + 2); d.print("STOPWATCH");
+    d.drawFastHLine(4, BODY_Y + 12, 80, T_ACCENT);
+
     uint32_t start_ms = 0;
     uint32_t elapsed  = 0;
     bool running = false;
     char laps[4][16] = {{0}};
     int  lap_n = 0;
+    char shown_buf[16] = "";
+    bool shown_running = false;
+    int  shown_laps = -1;
 
     while (true) {
         uint32_t now = millis();
         uint32_t shown = running ? (elapsed + (now - start_ms)) : elapsed;
-
-        /* Redraw each tick. */
-        ui_clear_body();
-        d.setTextColor(T_ACCENT, T_BG);
-        d.setCursor(4, BODY_Y + 2); d.print("STOPWATCH");
-        d.drawFastHLine(4, BODY_Y + 12, 80, T_ACCENT);
 
         char buf[16];
         uint32_t s  = shown / 1000;
@@ -122,17 +135,25 @@ void feat_tool_stopwatch(void)
         snprintf(buf, sizeof(buf), "%02lu:%02lu.%02lu",
                  (unsigned long)(s / 60), (unsigned long)(s % 60),
                  (unsigned long)ms);
-        d.setTextColor(running ? T_GOOD : T_FG, T_BG);
-        d.setTextSize(3);
-        int w = d.textWidth(buf);
-        d.setCursor((SCR_W - w) / 2, BODY_Y + 24);
-        d.print(buf);
-        d.setTextSize(1);
+        if (strcmp(buf, shown_buf) != 0 || running != shown_running) {
+            strcpy(shown_buf, buf);
+            shown_running = running;
+            d.setTextColor(running ? T_GOOD : T_FG, T_BG);
+            d.setTextSize(3);
+            int w = d.textWidth(buf);
+            d.setCursor((SCR_W - w) / 2, BODY_Y + 24);
+            d.print(buf);
+            d.setTextSize(1);
+        }
 
-        d.setTextColor(T_DIM, T_BG);
-        for (int i = 0; i < lap_n; ++i) {
-            d.setCursor(4, BODY_Y + 60 + i * 10);
-            d.printf("L%d  %s", i + 1, laps[i]);
+        if (lap_n != shown_laps) {
+            shown_laps = lap_n;
+            d.fillRect(0, BODY_Y + 60, SCR_W, 40, T_BG);
+            d.setTextColor(T_DIM, T_BG);
+            for (int i = 0; i < lap_n; ++i) {
+                d.setCursor(4, BODY_Y + 60 + i * 10);
+                d.printf("L%d  %s", i + 1, laps[i]);
+            }
         }
 
         uint16_t k = input_poll();
@@ -164,28 +185,35 @@ void feat_tool_chance(void)
     int mode = 0;  /* 0=dice 1=coin 2=8ball */
     char last[48] = "roll...";
 
-    while (true) {
-        ui_clear_body();
-        d.setTextColor(T_ACCENT, T_BG);
-        d.setCursor(4, BODY_Y + 2);
-        d.print(mode == 0 ? "DICE (2d6)" : mode == 1 ? "COIN" : "8-BALL");
-        d.drawFastHLine(4, BODY_Y + 12, 80, T_ACCENT);
-
+    auto draw_result = [&]() {
+        d.fillRect(0, BODY_Y + 30, SCR_W, 16, T_BG);
         d.setTextColor(T_WARN, T_BG);
         d.setTextSize(2);
         int w = d.textWidth(last) * 2;
         d.setCursor((SCR_W - w) / 2, BODY_Y + 30);
         d.print(last);
         d.setTextSize(1);
+    };
+    auto draw_full = [&]() {
+        ui_clear_body();
+        d.setTextColor(T_ACCENT, T_BG);
+        d.setCursor(4, BODY_Y + 2);
+        d.print(mode == 0 ? "DICE (2d6)" : mode == 1 ? "COIN" : "8-BALL");
+        d.drawFastHLine(4, BODY_Y + 12, 80, T_ACCENT);
+
+        draw_result();
 
         d.setTextColor(T_DIM, T_BG);
         d.setCursor(4, BODY_Y + 70); d.print("SPACE=roll  M=mode");
         ui_draw_footer("SPACE=roll M=mode `=back");
+    };
+    draw_full();
 
+    while (true) {
         uint16_t k = PK_NONE;
         while (k == PK_NONE) { k = input_poll(); delay(20); }
         if (k == PK_ESC) return;
-        if (k == 'm' || k == 'M') { mode = (mode + 1) % 3; continue; }
+        if (k == 'm' || k == 'M') { mode = (mode + 1) % 3; draw_full(); continue; }
         if (k == PK_SPACE || k == PK_ENTER) {
             if (mode == 0) {
                 int a = 1 + (esp_random() % 6);
@@ -198,6 +226,7 @@ void feat_tool_chance(void)
                 snprintf(last, sizeof(last), "%s", s_8ball[esp_random() % n]);
             }
             M5Cardputer.Speaker.tone(1500, 60);
+            draw_result();
         }
     }
 }

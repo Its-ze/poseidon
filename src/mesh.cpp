@@ -109,8 +109,11 @@ static void send_hello(void)
     };
     strncpy(h.name, s_name, sizeof(h.name) - 1);
 
+    /* OPSEC: only beacon coordinates if the user explicitly enabled GPS.
+     * A valid fix alone is NOT consent — GPS may be running because another
+     * feature started it. Without the opt-in we broadcast no location. */
     const gps_fix_t &g = gps_get();
-    if (g.valid) {
+    if (gps_user_enabled() && g.valid) {
         h.has_gps = 1;
         h.lat = (float)g.lat_deg;
         h.lon = (float)g.lon_deg;

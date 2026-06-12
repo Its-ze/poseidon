@@ -13,22 +13,19 @@
               ≋≋≋   commander of the deep   ≋≋≋
 ```
 
-**Keyboard-first pentesting firmware for the M5Stack Cardputer-Adv**
+**Keyboard-first pentesting firmware for the M5Stack Cardputer-Advance**
 
 ![target](https://img.shields.io/badge/target-Cardputer--Adv-red?style=flat-square)
 ![platform](https://img.shields.io/badge/framework-Arduino%2FPlatformIO-blue?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![features](https://img.shields.io/badge/features-150+-magenta?style=flat-square)
+![features](https://img.shields.io/badge/features-163-magenta?style=flat-square)
 ![release](https://img.shields.io/github/v/release/GeneralDussDuss/poseidon?style=flat-square)
 ![version](https://img.shields.io/badge/version-0.6.1-cyan?style=flat-square)
 
-[**Download Latest .bin**](https://github.com/GeneralDussDuss/poseidon/releases/latest) — flash with M5Burner, the browser (Chrome/Edge), or esptool at offset 0x0
+**163 attacks in your pocket — WiFi, BLE, sub-GHz, 2.4 GHz, LoRa, IR, and LAN — driven by a real QWERTY keyboard.**
+POSEIDON turns the M5Stack Cardputer-Advance into a keyboard-first hacking deck: type to navigate, type your parameters, and watch **Argus** — an autonomous handshake-hunting gotchi with a 96x96 mood sprite — work the airwaves while you do. Same family as Flipper Zero, Bruce, Evil-M5Project, and Marauder, but built around a keyboard instead of a D-pad.
 
-**v0.6.1 shipped — Built-in sub-GHz library + ON-AIR TX indicator + Hydra hat pre-flight.** Forty baked OOK signals ship with the firmware across Cars / Pranks / Tesla / Home Auto categories — Tesla Charge Port + Frunk, garage codes (Princeton / CAME / NICE / Linear / Holtek / Multicode / Stanley / Liftmaster), doorbells, restaurant pagers, novelty bursts (cricket, TV-B-Gone, air horn), wireless outlet packs + ceiling fan + alarm sensor patterns. Baked signals merge into their natural category alongside any user recordings on SD. New **ON-AIR TX indicator** drops a big red badge with frequency + play counter on every transmit, green border flash on completion. **Hydra RF cap pre-flight** — six pre-arrival fixes audited against Bruce / bmorcelli SmartRC / PINGEQUA pin reference (nRF24 off the display bus, CC1101 reclaims pin 13 from GPS UART, Bruce's 6-pipe mousejack noise table, RMT 3 µs min pulse).
-
-**v0.6.0 — Argus & the visual overhaul.** The biggest single drop since 0.5. Triton finally has a real character — a 96x96 **Argus mood sprite** with twelve mood portraits (Watching, Pleased, Annoyed, Resigned, Calculating, Old Fury, Sleeping…) that maps live to hunt state. **Six themes** (POSEIDON, MATRIX, E-INK, SYNTHWAVE, PHANTOM, BLOOD), **seven idle screensavers** keyed off the active theme, **carousel menu style** with cyberpunk pictographs, **ambient procedural motion** painted behind every menu draw. WiFi raw-TX moves to a **STA-mode path** with `-Wl,-zmuldefs` linker override of `ieee80211_raw_frame_sanity_check` — Bruce-libs-safe. **Portal** gets a raw-IDF AP recipe that actually broadcasts. **BLE features** (Sour Apple, Spam, Karma, Flood, FindMy) refactored from broken `xTaskCreate` to cooperative ticks that actually fire. **IR LED polarity** finally corrected and the **full Samsung Smart Remote keymap** verified against Flipper-IRDB. New features: AP Signal Test, Evil Twin, BLE BlueDucky, SATCOM Tracker, Drone Remote ID, Surveillance Hunter, Defensive Monitor, four nRF52 hat features. **C5 protocol bumped to v3** with a critical 5G scan terminator fix. Full breakdown in [CHANGELOG](CHANGELOG.md).
-
-**TRIDENT web flasher** — ESP32-C5 isn't in M5Burner's chip list, so we put a one-click WebSerial flasher straight in the docs. Plug the C5 in, hit a button, done. Manual `esptool` + full ESP-IDF build-from-source instructions also live there.
+[**Flash it now →**](#quick-start--flash-it) · [Download latest .bin](https://github.com/GeneralDussDuss/poseidon/releases/latest) · [Web site](https://generaldussduss.github.io/poseidon) · [Changelog](CHANGELOG.md)
 
 </div>
 
@@ -36,34 +33,64 @@
 
 ## What is this?
 
-POSEIDON is a pentesting firmware for the M5Stack Cardputer-Adv (ESP32-S3). 150+ features across WiFi, BLE, sub-GHz, 2.4 GHz, LoRa, IR, network attacks, and more. In the same family as Flipper Zero, Bruce, Evil-M5Project, and ESP32Marauder — but built around a **real keyboard** with letter mnemonics, typed parameters, six swappable visual themes (POSEIDON cyberpunk, MATRIX, E-INK, SYNTHWAVE vaporwave, PHANTOM violet, BLOOD fsociety), a procedural ambient layer painted behind every menu, and Triton's 96x96 Argus mood sprite watching every handshake.
+POSEIDON is keyboard-first pentesting firmware for the **M5Stack Cardputer-Advance** (ESP32-S3, real QWERTY keyboard + 240x135 color screen). **163 features** span WiFi, Bluetooth LE, sub-GHz, 2.4 GHz, LoRa & Mesh, Infrared, LAN/network, BadUSB, and recon — all reachable by typing.
 
-Supports four hardware hats (one at a time):
-- **M5Stack CAP-LoRa1262** — LoRa (SX1262) + GNSS (GPS)
-- **PINGEQUA Hydra RF Cap 424** — CC1101 sub-GHz + nRF24L01+ 2.4 GHz
-- **ESP32-C5 companion node** — 5 GHz WiFi + Zigbee via ESP-NOW mesh
-- **W5500 SPI → Ethernet** — wired RJ45 for full RaspyJack / SaltyJack parity (DHCP starve, rogue DHCP, Responder, WPAD, NTLM harvest) over a LAN cable instead of WiFi STA
+It's in the same genre as Flipper Zero, Bruce, Evil-M5Project, and ESP32Marauder, but the keyboard changes everything:
 
-## Quick Start
+- **Letter-mnemonic menus** — every item has a hotkey, so you jump straight to it
+- **Typed parameters** — enter a channel, an SSID, a frequency directly, no thumb-stick scrolling
+- **Six swappable themes** + a procedural ambient motion layer painted behind every menu
+- **Argus** — a 96x96 mood-sprite gotchi that hunts handshakes on its own while you browse the menu
 
-**Easiest — web flasher** (Chrome / Edge / Opera, no toolchain):
+Runs standalone on the Cardputer-Advance. Optional snap-on satellites extend the radio range:
 
-- TRIDENT (ESP32-C5 satellite): <https://generaldussduss.github.io/poseidon/flash/>
-- POSEIDON mothership: <https://generaldussduss.github.io/poseidon/install.html>
+- **TRIDENT** — ESP32-C5 node over ESP-NOW: 5 GHz deauth, Zigbee/802.15.4 sniff, PMKID
+- **nRF52840 Feather** — BLE 5.0 features (proof-of-concept today, hardened in v0.7)
 
-**Build from source:**
+## Quick Start — Flash it
+
+Two ways onto the Cardputer-Advance, both browser-based, no toolchain. Pick one.
+
+### 1. Cardputer-Advance
+
+**A) M5Burner — one-click, easiest.** Open [M5Burner](https://docs.m5stack.com/en/download), search **POSEIDON**, hit **Burn**. Done.
+
+**B) Web flasher** (Chrome / Edge / Opera). Plug the Cardputer in over USB-C and open:
+
+> **<https://generaldussduss.github.io/poseidon/install.html>**
+
+Click **Connect**, pick the serial port, **Install** — the page flashes the current factory image at offset `0x0` for you.
+
+### 2. TRIDENT satellite (ESP32-C5)
+
+The C5 isn't in M5Burner's chip list, so it flashes with the Espressif **esptool-js** web flasher over WebSerial.
+
+1. Plug the C5 board into USB and open the Espressif flasher: **<https://espressif.github.io/esptool-js/>** (Chrome / Edge)
+2. **Connect** and select the C5's serial port
+3. Add the three TRIDENT bins from the [latest release](https://github.com/GeneralDussDuss/poseidon/releases/latest) at these offsets:
+
+   | Offset | File |
+   |---|---|
+   | `0x2000` | bootloader |
+   | `0x8000` | partition table |
+   | `0x10000` | TRIDENT application |
+
+4. **Program**. When it finishes, power-cycle the C5 — it pairs to POSEIDON over ESP-NOW automatically.
+
+> A one-click guided version of these steps also lives at **<https://generaldussduss.github.io/poseidon/flash/>**.
+
+### Build from source
 
 ```bash
+# Cardputer (ESP32-S3) — PlatformIO
 git clone https://github.com/GeneralDussDuss/poseidon.git
 cd poseidon
 pio run -t upload
-
-# Pre-built factory image (current release):
-esptool.py --chip esp32s3 write_flash 0x0 \
-  https://github.com/GeneralDussDuss/poseidon/releases/latest/download/poseidon-factory.bin
 ```
 
-## Feature Matrix (150+)
+The TRIDENT C5 firmware builds with **ESP-IDF** (`idf.py build flash`) — see the `trident/` directory for its README.
+
+## Feature Overview (163)
 
 ### WiFi (17)
 Scan · Clients (all-channel + per-AP) · Deauth · Deauth All · Deauth Detector · AP Clone · Evil Portal (4 templates) · Karma · Beacon Spam · Probe Sniff · PMKID + 4-Way Handshake Capture · 2.4 GHz Spectrum · GPS Wardrive (WiGLE CSV) · Connect · **CIW Zeroclick** (157 SSID payloads: cmd injection, Log4Shell, XSS, buffer overflow)
@@ -92,11 +119,11 @@ TV-B-Gone · Samsung Smart Remote (~40 buttons, full D-pad) · Multi-profile Clo
 ### BadUSB (1)
 USB-HID payload runner with DuckyScript-lite
 
-### Triton — Autonomous Gotchi
-Cyberpunk helmet face with visor + trident crown. Hunts handshakes autonomously. RL channel picker persisted to SD. 4 modes: HUNT, STEALTH, SURGICAL, STORM. Bordered speech bubble, RL sparkline, TX indicator, HS flash.
+### Argus — Autonomous Gotchi
+96x96 **mood sprite** with twelve portraits that map live to hunt state. Hunts handshakes autonomously. RL channel-picker brain persisted to SD. 4 modes: HUNT, STEALTH, SURGICAL, STORM. Bordered speech bubble, RL sparkline, TX indicator, HS flash.
 
-### C5 Remote Nodes
-ESP32-C5 companion for **5 GHz WiFi** + **802.15.4 Zigbee/Thread**. Dual-band scan, remote deauth, Zigbee sniff — all over ESP-NOW mesh. WS2812 NeoPixel status LED.
+### TRIDENT — ESP32-C5 Satellite
+ESP32-C5 companion over ESP-NOW for **5 GHz WiFi** + **802.15.4 Zigbee/Thread**. Dual-band scan, remote 5 GHz deauth, Zigbee sniff, PMKID. WS2812 NeoPixel status LED.
 
 ### Mesh
 PigSync ESP-NOW presence beacon — foundation for multi-device coordination.
@@ -115,6 +142,16 @@ Flashlight · Stopwatch · Dice/Coin/8-Ball · Morse · MAC Randomizer · Calcul
 | BLOOD | fsociety tactical red on pure black — reads as "device is attacking" |
 
 Plus a procedural ambient motion layer (`ui_ambient_tick`) painted behind every menu draw, theme-aware. Live preview at `System → Ambient Preview`. Theme-matched screensavers kick in at 2 min idle.
+
+## Signature Features
+
+**Argus — the handshake-hunter that lives on your deck.** Argus is an autonomous gotchi with a 96x96 mood sprite (twelve portraits — Watching, Pleased, Annoyed, Calculating, Old Fury, Sleeping…) that reacts in real time to what it's catching. Under the cute face is a reinforcement-learning channel picker that learns which channels pay off and persists its brain to SD. Leave POSEIDON in your pocket and Argus keeps hunting handshakes across HUNT / STEALTH / SURGICAL / STORM modes.
+
+**TRIDENT — snap on a second band.** A pocket-sized ESP32-C5 satellite that pairs to POSEIDON over ESP-NOW and adds the radios the S3 can't do alone: **5 GHz deauth**, **Zigbee / 802.15.4 sniffing**, and **PMKID** capture. Flash it once with the web flasher, power it up, and it auto-pairs — your Cardputer stays the keyboard, TRIDENT becomes the antenna.
+
+**SaltyJack — a pocket LAN attack arsenal.** Drop POSEIDON onto a network (WiFi STA or wired W5500) and run the kind of attacks that usually need a laptop and a Pi: **DHCP starvation**, **rogue DHCP**, **Responder** (LLMNR/NBT-NS → NTLM), **WPAD** and **Autodiscover** credential capture, plus an **on-device NTLMv2 cracker**. A faithful port that proudly credits [@7h30th3r0n3](https://github.com/7h30th3r0n3)'s RaspyJack and Evil-M5Project — go star both.
+
+**Six themes + ambient motion.** POSEIDON (cyberpunk), MATRIX (green rain), E-INK (daylight paper), SYNTHWAVE (vaporwave), PHANTOM (violet), BLOOD (fsociety red). Each theme repaints the whole UI, drives its own procedural ambient layer behind every menu, and brings a matched screensaver. Switch live in `System → Theme Picker`.
 
 ## Hardware
 
@@ -168,7 +205,7 @@ Plus a procedural ambient motion layer (`ui_ambient_tick`) painted behind every 
 |  | POSEIDON | Flipper Zero | Evil-M5 | Marauder | Bruce |
 |---|---|---|---|---|---|
 | Keyboard | native QWERTY | D-pad | native QWERTY | none | varies |
-| Features | 150+ | 50+ | 87 | 30+ | 40+ |
+| Features | 163 | 50+ | 87 | 30+ | 40+ |
 | Sub-GHz | CC1101 | CC1101 | CC1101 | none | CC1101 |
 | 2.4 GHz RF | nRF24 | none | none | none | nRF24 |
 | LoRa | SX1262 | none | none | none | SX1262 |
@@ -181,7 +218,7 @@ Plus a procedural ambient motion layer (`ui_ambient_tick`) painted behind every 
 | DHCP Attacks | starve+rogue+hijack | none | starve+rogue | none | none |
 | WPAD/Autodiscover | NTLM capture | none | yes | none | none |
 | CIW Zeroclick | 157 payloads | none | yes | none | none |
-| Gotchi/Pet | Triton (RL brain) | Dolphin | none | none | none |
+| Gotchi/Pet | Argus (RL brain) | Dolphin | none | none | none |
 | Themes | 6 palettes | 1 | 1 | 1 | 1 |
 
 ## Massive Shoutouts
@@ -193,6 +230,7 @@ Plus a procedural ambient motion layer (`ui_ambient_tick`) painted behind every 
 - **[@justcallmekoko](https://github.com/justcallmekoko)** → [ESP32Marauder](https://github.com/justcallmekoko/ESP32Marauder) — WiFi promisc attack patterns
 - **[@bmorcelli](https://github.com/bmorcelli) / [@pr3y](https://github.com/pr3y)** → [Bruce](https://github.com/pr3y/Bruce) — CC1101/nRF24 feature reference
 - **[@ECTO-1A](https://github.com/ECTO-1A)** → [AppleJuice](https://github.com/ECTO-1A/AppleJuice) — CVE-2023-42941 research
+- **COSIC — KU Leuven** — WhisperPair CVE research (BLE pairing probe)
 - **[@SpiderLabs](https://github.com/SpiderLabs)** → [Responder](https://github.com/SpiderLabs/Responder) — LLMNR/NBT-NS protocol
 - **[@UberGuidoZ](https://github.com/UberGuidoZ)** → [Flipper](https://github.com/UberGuidoZ/Flipper) — Sub-GHz signal library (3,190+ .sub files)
 - **[@h2zero](https://github.com/h2zero)** → [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) — BLE stack
@@ -204,10 +242,7 @@ Plus a procedural ambient motion layer (`ui_ambient_tick`) painted behind every 
 
 ## Roadmap
 
-Full release history in [CHANGELOG.md](CHANGELOG.md). Current shipped version is **v0.6.0** (Argus mood sprite + visual overhaul + raw-IDF AP path + BLE cooperative tick + C5 protocol v3). What's next:
-
-### v0.6.1 — Hydra RF Hat regression sweep (tomorrow)
-The Hydra RF hat lands on the bench tomorrow. Any sub-GHz bugs surfaced during v0.6.0 testing get fixed the moment the hardware is here.
+Full release history in [CHANGELOG.md](CHANGELOG.md). Current shipped version is **v0.6.1** (Hydra RF hat sub-GHz regression sweep, on top of the v0.6.0 Argus mood sprite + visual overhaul + raw-IDF AP path + BLE cooperative tick + C5 protocol v3). What's next:
 
 ### v0.7 — nRF52840 BLE 5.0 dongle (planned)
 The nRF52840 is the real BLE chip — full BLE 5.0 with long range, coded PHY, and direction finding. The four nRF52 features that landed in v0.6.0 ride an Adafruit Feather as proof-of-concept; v0.7 hardens the path with a dedicated dongle.

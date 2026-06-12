@@ -148,7 +148,12 @@ void ui_draw_status(const char *radio, const char *extra)
 
     const char *rr = radio ? radio : "idle";
     const char *ee = (extra && *extra) ? extra : "";
-    uint32_t heap_bucket = (esp_get_free_heap_size() / 1024) / 4; /* 4 KB bucket */
+    /* 32 KB bucket: BLE/WiFi scan churn swings free heap by several KB
+     * continuously; a 4 KB bucket flipped constantly and repainted the
+     * status-bar gradient every tick (a slow top-bar flicker on every
+     * live-scan screen). Coarser bucket = the bar only repaints on a
+     * real, lasting heap shift. */
+    uint32_t heap_bucket = (esp_get_free_heap_size() / 1024) / 32;
     int c5_n = c5_any_online() ? c5_peer_count() : 0;
 
     bool changed = !s_st_valid

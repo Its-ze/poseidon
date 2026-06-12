@@ -62,6 +62,7 @@ void feat_lora_scan(void)
     if (lora_st != RADIOLIB_ERR_NONE) {
         char msg[32]; snprintf(msg, sizeof(msg), "LoRa err %d", lora_st);
         ui_toast(msg, T_BAD, 2000);
+        lora_end();
         radio_switch(RADIO_NONE);
         return;
     }
@@ -91,6 +92,18 @@ void feat_lora_scan(void)
     char last_hex[97] = "(waiting)";
 
     auto &d = M5Cardputer.Display;
+
+    /* Static chrome once — only the live fields repaint per tick (via
+     * ui_text_w in-place overwrite) so the body never blanks. */
+    ui_force_clear_body();
+    ui_draw_status(radio_name(), lora_band_name(b));
+    d.setTextColor(T_ACCENT, T_BG);
+    d.setCursor(4, BODY_Y + 2); d.printf("LoRa RX %.3f MHz", cfg.freq_mhz);
+    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+    d.setTextColor(T_DIM, T_BG);
+    d.setCursor(4, BODY_Y + 58); d.printf("last:");
+    ui_draw_footer("ESC=stop");
+
     uint32_t last_draw = 0;
     while (true) {
         if (s_lora_rx_flag) {
@@ -118,20 +131,12 @@ void feat_lora_scan(void)
         uint32_t now = millis();
         if (now - last_draw > 250) {
             last_draw = now;
-            ui_clear_body();
             ui_draw_status(radio_name(), lora_band_name(b));
-            d.setTextColor(T_ACCENT, T_BG);
-            d.setCursor(4, BODY_Y + 2); d.printf("LoRa RX %.3f MHz", cfg.freq_mhz);
-            d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
-            d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 18); d.printf("pkts %lu", (unsigned long)pkts);
-            d.setCursor(4, BODY_Y + 30); d.printf("rssi %d dBm", last_rssi);
-            d.setCursor(4, BODY_Y + 42); d.printf("snr  %.1f dB", last_snr);
-            d.setTextColor(T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 58); d.printf("last:");
-            d.setCursor(4, BODY_Y + 70); d.printf("%.*s", 40, last_hex);
-            d.setCursor(4, BODY_Y + 82); d.printf("%.*s", 40, last_hex + 40);
-            ui_draw_footer("ESC=stop");
+            ui_text_w(4, BODY_Y + 18, SCR_W - 8, T_FG, "pkts %lu", (unsigned long)pkts);
+            ui_text_w(4, BODY_Y + 30, SCR_W - 8, T_FG, "rssi %d dBm", last_rssi);
+            ui_text_w(4, BODY_Y + 42, SCR_W - 8, T_FG, "snr  %.1f dB", last_snr);
+            ui_text_w(4, BODY_Y + 70, SCR_W - 8, T_DIM, "%.*s", 40, last_hex);
+            ui_text_w(4, BODY_Y + 82, SCR_W - 8, T_DIM, "%.*s", 40, last_hex + 40);
         }
 
         uint16_t k = input_poll();
@@ -155,6 +160,7 @@ void feat_lora_beacon(void)
     lora_config_t cfg = lora_preset(b);
     if (lora_begin(cfg) != RADIOLIB_ERR_NONE) {
         ui_toast("LoRa init fail", T_BAD, 1500);
+        lora_end();
         radio_switch(RADIO_NONE);
         return;
     }
@@ -166,6 +172,16 @@ void feat_lora_beacon(void)
 
     auto &d = M5Cardputer.Display;
     uint32_t last_draw = 0;
+
+    /* Static chrome once — freq + power don't change this session. */
+    ui_force_clear_body();
+    ui_status_invalidate();
+    d.setTextColor(T_ACCENT, T_BG);
+    d.setCursor(4, BODY_Y + 2); d.printf("LoRa TX %.3f MHz", cfg.freq_mhz);
+    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+    ui_text_w(4, BODY_Y + 30, SCR_W - 8, T_FG, "power:   %d dBm", cfg.power);
+    ui_draw_footer("ESC=stop");
+
     while (true) {
         uint32_t now = millis();
         if (now - last_tx > 3000) {
@@ -185,21 +201,12 @@ void feat_lora_beacon(void)
 
         if (now - last_draw > 200) {
             last_draw = now;
-            ui_clear_body();
             ui_draw_status(radio_name(), lora_band_name(b));
-            d.setTextColor(T_ACCENT, T_BG);
-            d.setCursor(4, BODY_Y + 2); d.printf("LoRa TX %.3f MHz", cfg.freq_mhz);
-            d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
-            d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 18); d.printf("beacons: %lu", (unsigned long)beacons);
-            d.setCursor(4, BODY_Y + 30); d.printf("power:   %d dBm", cfg.power);
-            d.setTextColor(last_st == 0 ? T_GOOD : T_BAD, T_BG);
-            d.setCursor(4, BODY_Y + 42); d.printf("last tx: %s",
-                                                   last_st == 0 ? "OK" : "ERR");
+            ui_text_w(4, BODY_Y + 18, SCR_W - 8, T_FG, "beacons: %lu", (unsigned long)beacons);
+            ui_text_w(4, BODY_Y + 42, SCR_W - 8, last_st == 0 ? T_GOOD : T_BAD,
+                      "last tx: %s", last_st == 0 ? "OK" : "ERR");
             uint32_t until = (last_tx + 3000 > now) ? (last_tx + 3000 - now) : 0;
-            d.setTextColor(T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 58); d.printf("next in %lu ms", (unsigned long)until);
-            ui_draw_footer("ESC=stop");
+            ui_text_w(4, BODY_Y + 58, SCR_W - 8, T_DIM, "next in %lu ms", (unsigned long)until);
         }
 
         uint16_t k = input_poll();
@@ -219,6 +226,7 @@ void feat_lora_meshtastic(void)
     lora_config_t cfg = lora_preset(LORA_BAND_MESHTASTIC_US);
     if (lora_begin(cfg) != RADIOLIB_ERR_NONE) {
         ui_toast("LoRa init fail", T_BAD, 1500);
+        lora_end();
         radio_switch(RADIO_NONE);
         return;
     }
@@ -319,43 +327,56 @@ void feat_gps_fix(void)
     gps_ensure_running();
     auto &d = M5Cardputer.Display;
     uint32_t last_draw = 0;
+
+    /* Static chrome once; live fields repaint in place via ui_text_w so
+     * the body never blanks. The HLine and the per-state static labels
+     * are redrawn only when the valid-state flips. */
+    ui_force_clear_body();
+    d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
+    int chrome_valid = -1;  /* -1 = not yet drawn; forces first-pass chrome */
+
     while (true) {
         uint32_t now = millis();
         if (now - last_draw > 250) {
             last_draw = now;
-            ui_clear_body();
             ui_draw_status(radio_name(), "gps");
             const gps_fix_t &g = gps_get();
             const gps_diag_t &dg = gps_diag();
-            d.setTextColor(g.valid ? T_GOOD : T_WARN, T_BG);
-            d.setCursor(4, BODY_Y + 2);
-            d.printf("GNSS: %s  baud %lu",
-                     g.valid ? "FIX" : "searching",
-                     (unsigned long)gps_current_baud());
-            d.drawFastHLine(4, BODY_Y + 12, SCR_W - 8, T_ACCENT);
-            if (g.valid) {
-                d.setTextColor(T_GOOD, T_BG);
-                d.setCursor(4, BODY_Y + 18); d.printf("lat  %.6f", g.lat_deg);
-                d.setCursor(4, BODY_Y + 30); d.printf("lon  %.6f", g.lon_deg);
-                d.setCursor(4, BODY_Y + 42); d.printf("alt  %.1f m", g.alt_m);
-                d.setCursor(4, BODY_Y + 54); d.printf("sats %u  hdop %.1f", g.sats, g.hdop);
-                d.setCursor(4, BODY_Y + 66); d.printf("spd  %.1f kt", g.speed_kts);
-                d.setCursor(4, BODY_Y + 78); d.printf("utc  %s", g.utc);
-            } else {
-                d.setTextColor(T_WARN, T_BG);
-                d.setCursor(4, BODY_Y + 18); d.print("waiting for fix...");
-                d.setTextColor(dg.bytes ? T_GOOD : T_BAD, T_BG);
-                d.setCursor(4, BODY_Y + 32); d.printf("bytes %lu", (unsigned long)dg.bytes);
-                d.setTextColor(dg.lines ? T_GOOD : T_BAD, T_BG);
-                d.setCursor(4, BODY_Y + 44); d.printf("lines %lu  GGA %lu  RMC %lu",
-                    (unsigned long)dg.lines, (unsigned long)dg.gga, (unsigned long)dg.rmc);
-                d.setTextColor(T_DIM, T_BG);
-                d.setCursor(4, BODY_Y + 58); d.printf("%.*s", 40, dg.last[0] ? dg.last : "(no NMEA yet)");
-                d.setCursor(4, BODY_Y + 70); d.printf("%.*s", 40, dg.last[0] ? dg.last + 40 : "");
-                d.setTextColor(T_DIM, T_BG);
-                d.setCursor(4, BODY_Y + 88); d.print("bytes=0? try B to retry baud");
+
+            /* Repaint per-state chrome (static labels + footer) only on a
+             * valid-state transition; the HLine is permanent. */
+            if (chrome_valid != (int)g.valid) {
+                chrome_valid = (int)g.valid;
+                d.fillRect(0, BODY_Y + 16, SCR_W, BODY_H - 16, T_BG);
+                if (!g.valid) {
+                    ui_text_w(4, BODY_Y + 18, SCR_W - 8, T_WARN, "waiting for fix...");
+                    ui_text_w(4, BODY_Y + 88, SCR_W - 8, T_DIM, "bytes=0? try B to retry baud");
+                }
+                ui_draw_footer(g.valid ? "ESC=back" : "ESC=back  B=cycle baud");
             }
-            ui_draw_footer(g.valid ? "ESC=back" : "ESC=back  B=cycle baud");
+
+            ui_text_w(4, BODY_Y + 2, SCR_W - 8, g.valid ? T_GOOD : T_WARN,
+                      "GNSS: %s  baud %lu",
+                      g.valid ? "FIX" : "searching",
+                      (unsigned long)gps_current_baud());
+            if (g.valid) {
+                ui_text_w(4, BODY_Y + 18, SCR_W - 8, T_GOOD, "lat  %.6f", g.lat_deg);
+                ui_text_w(4, BODY_Y + 30, SCR_W - 8, T_GOOD, "lon  %.6f", g.lon_deg);
+                ui_text_w(4, BODY_Y + 42, SCR_W - 8, T_GOOD, "alt  %.1f m", g.alt_m);
+                ui_text_w(4, BODY_Y + 54, SCR_W - 8, T_GOOD, "sats %u  hdop %.1f", g.sats, g.hdop);
+                ui_text_w(4, BODY_Y + 66, SCR_W - 8, T_GOOD, "spd  %.1f kt", g.speed_kts);
+                ui_text_w(4, BODY_Y + 78, SCR_W - 8, T_GOOD, "utc  %s", g.utc);
+            } else {
+                ui_text_w(4, BODY_Y + 32, SCR_W - 8, dg.bytes ? T_GOOD : T_BAD,
+                          "bytes %lu", (unsigned long)dg.bytes);
+                ui_text_w(4, BODY_Y + 44, SCR_W - 8, dg.lines ? T_GOOD : T_BAD,
+                          "lines %lu  GGA %lu  RMC %lu",
+                          (unsigned long)dg.lines, (unsigned long)dg.gga, (unsigned long)dg.rmc);
+                ui_text_w(4, BODY_Y + 58, SCR_W - 8, T_DIM, "%.*s", 40,
+                          dg.last[0] ? dg.last : "(no NMEA yet)");
+                ui_text_w(4, BODY_Y + 70, SCR_W - 8, T_DIM, "%.*s", 40,
+                          dg.last[0] ? dg.last + 40 : "");
+            }
         }
         uint16_t k = input_poll();
         if (k == PK_ESC) break;

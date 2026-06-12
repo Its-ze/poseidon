@@ -220,14 +220,11 @@ void feat_net_responder(void)
     while (true) {
         if (millis() - last > 250) {
             last = millis();
-            d.fillRect(0, BODY_Y + 48, 160, 40, T_BG);
-            d.setTextColor(T_FG, T_BG);
-            d.setCursor(4, BODY_Y + 48); d.printf("queries: %lu", (unsigned long)s_queries);
-            d.setCursor(4, BODY_Y + 58); d.printf("replies: %lu", (unsigned long)s_replies);
-            d.setTextColor(s_hashes ? T_GOOD : T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 68); d.printf("hashes:  %lu", (unsigned long)s_hashes);
-            d.setTextColor(T_DIM, T_BG);
-            d.setCursor(4, BODY_Y + 82); d.print("/poseidon/ntlm.log");
+            ui_text_w(4, BODY_Y + 48, 150, T_FG, "queries: %lu", (unsigned long)s_queries);
+            ui_text_w(4, BODY_Y + 58, 150, T_FG, "replies: %lu", (unsigned long)s_replies);
+            ui_text_w(4, BODY_Y + 68, 150, s_hashes ? T_GOOD : T_DIM,
+                      "hashes:  %lu", (unsigned long)s_hashes);
+            ui_text_w(4, BODY_Y + 82, 150, T_DIM, "/poseidon/ntlm.log");
             ui_draw_status(radio_name(), "respond");
         }
         ui_waves(200, BODY_Y + 56, 30, T_GOOD);

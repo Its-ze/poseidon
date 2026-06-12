@@ -11,10 +11,10 @@ This firmware turns a C5 into a remote radio for POSEIDON (running on the Cardpu
 ```
 struct posei_msg_t {
     uint32_t magic;       // 0x504F5345 "POSE"
-    uint8_t  version;     // 2
+    uint8_t  version;     // 3
     uint8_t  type;         // see POSEI_TYPE_*
     uint16_t seq;
-    uint8_t  payload[244];
+    uint8_t  payload[230];
     uint8_t  payload_len;
 } __packed;
 ```
@@ -36,7 +36,7 @@ Types:
 
 ## Building
 
-Requires ESP-IDF v5.2 or newer (first version with C5 support).
+Requires ESP-IDF v5.2 or newer (first version with C5 support). This firmware builds against v5.5.4.
 
 ```bash
 . $IDF_PATH/export.sh
@@ -48,4 +48,10 @@ idf.py -p /dev/ttyUSB0 flash monitor
 
 ## Status
 
-Skeleton. Implements HELLO + PING + basic 5 GHz scan. Zigbee sniffer is scaffolded but not wired in yet.
+Shipped and hardware-verified (protocol **v3**). Implements HELLO/PING, 5 GHz
+scan, **5 GHz deauth**, **PMKID capture**, and **Zigbee / 802.15.4 sniff**, all
+driven from POSEIDON over ESP-NOW, plus 2.4 GHz scan and GPS passthrough.
+
+Known limitation: full 4-way handshake capture over ESP-NOW is constrained by
+the 230-byte payload (large EAPOL frames must be fragmented) — 5 GHz scan,
+PMKID, and deauth are unaffected.

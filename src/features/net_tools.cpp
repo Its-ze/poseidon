@@ -57,21 +57,19 @@ void feat_net_portscan(void)
 
     draw_waiting("PORT SCAN", host);
     ui_draw_footer("`=stop");
-    auto &d = M5Cardputer.Display;
     int y = BODY_Y + 36;
 
     int open_count = 0;
+    uint32_t last_draw = 0;
     for (int p = lo; p <= hi; ++p) {
-        d.fillRect(0, BODY_Y + 22, SCR_W, 12, T_BG);
-        d.setTextColor(T_DIM, T_BG);
-        d.setCursor(4, BODY_Y + 22);
-        d.printf("port %d...", p);
+        if (millis() - last_draw >= 150) {
+            ui_text_w(4, BODY_Y + 22, SCR_W - 8, T_DIM, "port %d...", p);
+            last_draw = millis();
+        }
         WiFiClient c;
         c.setTimeout(300);
         if (c.connect(ip, p)) {
-            d.setTextColor(T_GOOD, T_BG);
-            d.setCursor(4, y);
-            d.printf("OPEN %d", p);
+            ui_text(4, y, T_GOOD, "OPEN %d", p);
             y += 10;
             if (y > FOOTER_Y - 12) y = BODY_Y + 36;
             open_count++;
@@ -80,10 +78,7 @@ void feat_net_portscan(void)
         uint16_t k = input_poll();
         if (k == PK_ESC) break;
     }
-    d.fillRect(0, BODY_Y + 22, SCR_W, 12, T_BG);
-    d.setTextColor(T_ACCENT, T_BG);
-    d.setCursor(4, BODY_Y + 22);
-    d.printf("done. %d open.", open_count);
+    ui_text_w(4, BODY_Y + 22, SCR_W - 8, T_ACCENT, "done. %d open.", open_count);
     while (true) {
         uint16_t k = input_poll();
         if (k == PK_NONE) { delay(20); continue; }
@@ -106,11 +101,8 @@ void feat_net_ping(void)
     while (true) {
         bool ok = Ping.ping(host, 1);
         int rtt = ok ? (int)Ping.averageTime() : -1;
-        d.fillRect(0, y, SCR_W, 12, T_BG);
-        d.setTextColor(ok ? T_GOOD : T_BAD, T_BG);
-        d.setCursor(4, y);
-        if (ok) d.printf("seq=%d rtt=%dms", seq, rtt);
-        else    d.printf("seq=%d TIMEOUT", seq);
+        if (ok) ui_text_w(4, y, SCR_W - 8, T_GOOD, "seq=%d rtt=%dms", seq, rtt);
+        else    ui_text_w(4, y, SCR_W - 8, T_BAD, "seq=%d TIMEOUT", seq);
         y += 10;
         if (y > FOOTER_Y - 12) { d.fillRect(0, BODY_Y + 36, SCR_W, FOOTER_Y - BODY_Y - 36, T_BG); y = BODY_Y + 36; }
         ++seq;
