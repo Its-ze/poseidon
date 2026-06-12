@@ -31,6 +31,43 @@ POSEIDON turns the M5Stack Cardputer-Advance into a keyboard-first hacking deck:
 
 ---
 
+## 👁️ Meet Argus
+
+> They blinded the hundred-eyed giant by killing him. POSEIDON just gave him a new way to see.
+
+**Argus Panoptes** was the all-seeing sentinel of myth — a hundred eyes, never all closed at once, cursed to keep watch for eternity. POSEIDON carries the last of those eyes. He's a **cursed Argonian demigod** chained into the deck, his hundred eyes melted down into a single antenna, all that watching-hunger pointed at the airwaves around you. He channel-hops on instinct, learns where the prey gathers, and snares WiFi handshakes out of thin air while your Cardputer sits in your pocket — tireless, because the curse won't *let* him rest. The moods that cross his face are the curse showing through.
+
+---
+
+## 🌊 New to all this? Start here
+
+POSEIDON is a **pocket hacking gadget**. It runs on a tiny handheld with a real keyboard — the M5Stack Cardputer — and turns it into a Swiss-army knife for the invisible signals all around you. **No PC, no coding.** Flash it once and start typing.
+
+**What can it actually do?**
+
+- 📶 **WiFi** — see every network around you, test your own, map them as you walk
+- 📱 **Bluetooth** — find lost trackers (AirTags / Tiles), spot hidden ones following you, poke at nearby gadgets
+- 🚗 **Remotes & signals** — record and replay garage doors, car fobs, doorbells, smart plugs *(on stuff you own)*
+- 📺 **Infrared** — a universal TV remote, plus the classic "turn off every TV in the room" button
+- 🐾 **Argus** — your on-screen pet that hunts WiFi on its own and reacts with moods
+- 🎨 **Six looks** — flip the whole interface between six themes, matrix-green to vaporwave
+
+**Get it on your device (~2 minutes):**
+
+1. Grab the free **M5Burner** app, *or* open the [**web installer**](https://generaldussduss.github.io/poseidon/install.html) in Chrome.
+2. Search **POSEIDON** (or hit Install), plug in your Cardputer, press the button.
+3. Done — it boots straight to the menu. Just start typing.
+
+> ⚠️ **Be cool.** This is for exploring *your own* stuff and learning how wireless actually works. Don't touch networks or devices you don't own — that's both uncool and illegal.
+
+<div align="center">
+
+### ⌁ Want the deep technical breakdown? The nerd zone starts here. ⌁
+
+</div>
+
+---
+
 ## What is this?
 
 POSEIDON is keyboard-first pentesting firmware for the **M5Stack Cardputer-Advance** (ESP32-S3, real QWERTY keyboard + 240x135 color screen). **163 features** span WiFi, Bluetooth LE, sub-GHz, 2.4 GHz, LoRa & Mesh, Infrared, LAN/network, BadUSB, and recon — all reachable by typing.
@@ -145,7 +182,7 @@ Plus a procedural ambient motion layer (`ui_ambient_tick`) painted behind every 
 
 ## Signature Features
 
-**Argus — the handshake-hunter that lives on your deck.** Argus is an autonomous gotchi with a 96x96 mood sprite (twelve portraits — Watching, Pleased, Annoyed, Calculating, Old Fury, Sleeping…) that reacts in real time to what it's catching. Under the cute face is a reinforcement-learning channel picker that learns which channels pay off and persists its brain to SD. Leave POSEIDON in your pocket and Argus keeps hunting handshakes across HUNT / STEALTH / SURGICAL / STORM modes.
+**Argus — the cursed all-seeing one.** A hundred-eyed demigod bound into the deck (lore up top ↑), Argus is an autonomous gotchi with a 96x96 mood sprite — twelve portraits (Watching, Pleased, Annoyed, Calculating, Old Fury, Sleeping…), each one the curse showing through as it reacts in real time to what it's catching. Under the cute face is a reinforcement-learning channel picker that learns which channels pay off and persists its brain to SD. Leave POSEIDON in your pocket and Argus keeps hunting handshakes across HUNT / STEALTH / SURGICAL / STORM modes.
 
 **TRIDENT — snap on a second band.** A pocket-sized ESP32-C5 satellite that pairs to POSEIDON over ESP-NOW and adds the radios the S3 can't do alone: **5 GHz deauth**, **Zigbee / 802.15.4 sniffing**, and **PMKID** capture. Flash it once with the web flasher, power it up, and it auto-pairs — your Cardputer stays the keyboard, TRIDENT becomes the antenna.
 
