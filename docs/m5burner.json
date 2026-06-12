@@ -3,9 +3,23 @@
   "author": "GeneralDussDuss",
   "homepage": "https://generaldussduss.github.io/poseidon/",
   "repo": "https://github.com/GeneralDussDuss/poseidon",
-  "description": "Commander of the Deep — keyboard-first pentesting firmware for M5Stack Cardputer-Adv. 150+ features across WiFi / BLE / sub-GHz / 2.4 GHz / LoRa / IR / RJ45. Argus — the watchful mood-sprite gotchi. Six themes (POSEIDON / MATRIX / E-INK / SYNTHWAVE / PHANTOM / BLOOD) + ambient procedural motion. SaltyJack LAN arsenal (DHCP starve, Responder, WPAD, on-device NTLMv2 cracker). TRIDENT (ESP32-C5 satellite over ESP-NOW) for 5 GHz deauth, Zigbee sniff, PMKID capture.",
+  "description": "Commander of the Deep — keyboard-first pentesting firmware for M5Stack Cardputer-Adv. 163 features across WiFi / BLE / sub-GHz / 2.4 GHz / LoRa / IR / RJ45. Argus — the watchful mood-sprite gotchi. Six themes (POSEIDON / MATRIX / E-INK / SYNTHWAVE / PHANTOM / BLOOD) + ambient procedural motion. SaltyJack LAN arsenal (DHCP starve, Responder, WPAD, on-device NTLMv2 cracker). TRIDENT (ESP32-C5 satellite over ESP-NOW) for 5 GHz deauth, Zigbee sniff, PMKID capture.",
   "icon": "https://generaldussduss.github.io/poseidon/assets/icon.png",
   "firmware": [
+    {
+      "name": "POSEIDON v0.6.2",
+      "version": "0.6.2",
+      "chip": "esp32s3",
+      "target": "M5Cardputer-Adv",
+      "flash_size": "8MB",
+      "psram": true,
+      "url": "https://github.com/GeneralDussDuss/poseidon/releases/download/v0.6.2/poseidon-factory.bin",
+      "offset": "0x0",
+      "description": "Sub-GHz analyzer overhaul: new peak-hold, radar scope, persistence and blip-sonar visual modes plus a full-screen waterfall, all in a neon palette. Argus (the handshake-hunter gotchi) now hunts 5 GHz handshakes through the TRIDENT C5 satellite, and got a proper cursed-demigod character pass. Mass Storage mode reads the SD over USB. Stability: fixed NimBLE heap-leak reboots in Defensive Monitor + Drone Remote ID, plus a Defensive Monitor BLE-phase heap guard. New gas-station and drug-store sub-GHz signal categories. Full website + docs refresh.",
+      "date": "2026-06-11",
+      "changelog": "https://github.com/GeneralDussDuss/poseidon/blob/master/CHANGELOG.md",
+      "license": "MIT"
+    },
     {
       "name": "POSEIDON v0.6.1",
       "version": "0.6.1",

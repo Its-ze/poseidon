@@ -29,7 +29,7 @@
   <div class="boot-lines"><div class="boot-line"><span class="dim">[LOAD]</span> roadmap.html <span class="ok">OK</span></div></div>
 </div>
 <div id="scrollProgress"></div>
-<div id="hud"><div class="hud-row"><span class="hud-dot"></span>ROADMAP · v0.6.1 current</div></div>
+<div id="hud"><div class="hud-row"><span class="hud-dot"></span>ROADMAP · v0.6.2 current</div></div>
 
 <nav id="mainNav">
   <a href="index.html" class="nav-logo"><span class="icon">P</span><span>POSEIDON</span></a>
@@ -53,8 +53,8 @@
 <div class="console-strip">
   <div class="console-bar">
     <span class="ck">[TIMELINE]</span>
-    <span>shipped=<span class="nm">v0.1 → v0.6.1</span></span>
-    <span>current=<span class="ck">v0.6.1</span></span>
+    <span>shipped=<span class="nm">v0.1 → v0.6.2</span></span>
+    <span>current=<span class="ck">v0.6.2</span></span>
     <span>next=<span class="vk">v0.7 nRF52840 BLE 5.0 dongle</span></span>
     <span>after=<span class="vk">v0.8 on-device WPA2 crack</span></span>
     <span class="blink">▸</span>
@@ -187,16 +187,30 @@
       </div>
     </div>
 
-    <div class="rm-item shipped current reveal-left">
+    <div class="rm-item shipped reveal-left">
       <div class="rm-card">
         <div class="rm-head">
           <span class="rm-ver">v0.6.1</span>
           <span class="rm-date">Shipped 2026-05-29</span>
-          <span class="rm-tag shipped">Live</span>
+          <span class="rm-tag shipped">Shipped</span>
         </div>
         <div class="rm-title">Built-in sub-GHz library (40 baked signals) · ON-AIR TX indicator · Hydra hat pre-flight</div>
         <div class="rm-body">
           Forty baked OOK signals ship with the firmware — no SD recordings required. Tesla Charge Port + Frunk, garage codes (Princeton / CAME / NICE / Linear / Holtek / Multicode / Stanley / Liftmaster pre-rolling), doorbells, restaurant pagers, keychain panic alarms, novelty bursts (cricket / TV-B-Gone / air horn), wireless outlet packs + master ALL ON/OFF, ceiling fan (low/med/high/off), smoke alarm test, window/PIR/glass-break sensor alerts. Baked signals merge into their natural category alongside any user recordings dropped into <code>/poseidon/signals/&lt;cat&gt;/</code>. New <b>ON-AIR TX indicator</b> drops a big red badge + frequency + play counter over the broadcast screen during every CC1101 transmit, with a green border flash on completion so you can tell "frame stuck" from "TX actually fired." <b>Hydra RF hat pre-flight</b> — six pre-arrival fixes audited against Bruce / bmorcelli's SmartRC fork / PINGEQUA pin reference: nRF24 driver moved off the FSPI display bus, CC1101 reclaims pin 13 from GPS UART, <code>Init()</code> return value checked, mousejack sniffer ports Bruce's 6-pipe noise-address table, RMT min-pulse 20 µs → 3 µs to catch fast Manchester edges. Hydra regression sweep happens the moment the hat lands.
+        </div>
+      </div>
+    </div>
+
+    <div class="rm-item shipped current reveal-left">
+      <div class="rm-card">
+        <div class="rm-head">
+          <span class="rm-ver">v0.6.2</span>
+          <span class="rm-date">Shipped 2026-06-11</span>
+          <span class="rm-tag shipped">Live</span>
+        </div>
+        <div class="rm-title">Sub-GHz analyzer modes · full-screen waterfall · Argus 5 GHz hunting · Mass Storage · stability</div>
+        <div class="rm-body">
+          The sub-GHz analyzer gains four new visual modes on the CC1101 — <b>peak-hold</b>, a <b>radar PPI scope</b>, digital-phosphor <b>persistence</b>, and a <b>blip sonar</b> — plus a <b>waterfall that fills the whole screen</b> and scales to available heap, all in a neon palette. <b>Argus</b> now hunts 5 GHz handshakes through the TRIDENT C5 when one is online, and got a proper cursed-demigod character pass. <b>Mass Storage</b> mode exposes the SD card over USB. Stability: fixed NimBLE heap-leak reboots in Defensive Monitor + Drone Remote ID (missing <code>setMaxResults(0)</code>), plus a defmon BLE-phase heap-fragmentation guard that degrades to WiFi-only instead of resetting. New gas-station + drug-store sub-GHz signal categories. Capped off with a full website + docs refresh: magenta cyberpunk re-skin, glitch accordions, and a two-lane README.
         </div>
       </div>
     </div>

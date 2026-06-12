@@ -6,7 +6,36 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-(empty — new work since 0.6.1 lands here)
+(empty — new work since 0.6.2 lands here)
+
+## [0.6.2] - 2026-06-11
+
+### Added
+
+- **Sub-GHz analyzer visual modes.** Four new modes on the CC1101 — peak-hold,
+  radar PPI scope, digital-phosphor persistence, and a blip sonar — plus a
+  full-screen waterfall that scales to available heap. Neon palette throughout.
+- **Mass Storage mode.** Exposes the SD card over USB (TinyUSB MSC).
+- **Gas Station + Drug Store** sub-GHz signal categories in the broadcast library.
+
+### Changed
+
+- **Argus** (the handshake-hunter gotchi) now hunts 5 GHz handshakes via the
+  TRIDENT C5 satellite when one is online, and got a cursed-demigod character
+  + lore pass.
+- Full website + docs refresh: magenta cyberpunk re-skin, glitch accordions,
+  two-lane README (newcomers + nerds), self-hosted Cardputer web-flash bin,
+  six previously-uncredited devs added to the credits wall.
+
+### Fixed
+
+- **NimBLE heap-leak reboots** in Defensive Monitor + Drone Remote ID — a
+  missing `setMaxResults(0)` let the scan accumulate advertisements until the
+  device reset (~550 in). Callback-only now.
+- **Defensive Monitor BLE-phase heap guard** — when the heap is too fragmented
+  to re-init NimBLE, it stays WiFi-only for that cycle instead of crashing.
+- Argus STORM-mode lightning overlay no longer paints over the status bar.
+- GPS / LoRa audit fixes.
 
 ## [0.6.1] - 2026-05-29
 
