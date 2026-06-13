@@ -20,7 +20,7 @@
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![features](https://img.shields.io/badge/features-163-magenta?style=flat-square)
 ![release](https://img.shields.io/github/v/release/GeneralDussDuss/poseidon?style=flat-square)
-![version](https://img.shields.io/badge/version-0.6.2-cyan?style=flat-square)
+![version](https://img.shields.io/badge/version-0.6.3-cyan?style=flat-square)
 
 **163 attacks in your pocket — WiFi, BLE, sub-GHz, 2.4 GHz, LoRa, IR, and LAN — driven by a real QWERTY keyboard.**
 POSEIDON turns the M5Stack Cardputer-Advance into a keyboard-first hacking deck: type to navigate, type your parameters, and watch **Argus** — an autonomous handshake-hunting gotchi with a 96x96 mood sprite — work the airwaves while you do. Same family as Flipper Zero, Bruce, Evil-M5Project, and Marauder, but built around a keyboard instead of a D-pad.
@@ -279,7 +279,7 @@ Plus a procedural ambient motion layer (`ui_ambient_tick`) painted behind every 
 
 ## Roadmap
 
-Full release history in [CHANGELOG.md](CHANGELOG.md). Current shipped version is **v0.6.2** (sub-GHz analyzer visual modes — radar / persistence / sonar, full-screen waterfall, Argus 5 GHz hunting via TRIDENT, Mass Storage, and a batch of stability fixes, on top of the v0.6.1 baked sub-GHz library + ON-AIR indicator). What's next:
+Full release history in [CHANGELOG.md](CHANGELOG.md). Current shipped version is **v0.6.3** (sub-GHz analyzer visual modes — radar / persistence / sonar, full-screen waterfall, Argus 5 GHz hunting via TRIDENT, Mass Storage, and a batch of stability fixes, on top of the v0.6.1 baked sub-GHz library + ON-AIR indicator). What's next:
 
 ### v0.7 — nRF52840 BLE 5.0 dongle (planned)
 The nRF52840 is the real BLE chip — full BLE 5.0 with long range, coded PHY, and direction finding. The four nRF52 features that landed in v0.6.0 ride an Adafruit Feather as proof-of-concept; v0.7 hardens the path with a dedicated dongle.

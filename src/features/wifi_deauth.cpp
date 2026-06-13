@@ -261,6 +261,8 @@ void feat_wifi_deauth(void)
     bool     last_paused = !paused;
     uint32_t last_errs   = 0xFFFFFFFF;
     int      last_sta    = -1;
+    int      last_rc_shown = -98765;
+    int      last_hwch     = -1;
     while (true) {
         uint32_t now = millis();
         if (now - last > 250) {
@@ -294,6 +296,24 @@ void feat_wifi_deauth(void)
                 last_errs = s_errs; last_sta = s_learned_n;
                 ui_text_w(4, BODY_Y + 60, 150, s_errs > 0 ? T_BAD : T_DIM,
                           "drops : %lu  sta:%d", (unsigned long)s_errs, s_learned_n);
+            }
+
+            /* Diagnostic line: the raw esp_wifi_80211_tx return code + the
+             * ACTUAL hardware channel (vs the intended s_channel above). If
+             * hw-ch != channel, deauth is TXing on the wrong channel; if
+             * rc != 0 the frame never left the driver. rc 0=OK 257=NO_MEM
+             * 258=filtered(override lost) 12289=wifi-not-init. */
+            {
+                extern volatile int wifi_deauth_last_rc;
+                uint8_t hw_ch = 0; wifi_second_chan_t hw_sec = WIFI_SECOND_CHAN_NONE;
+                esp_wifi_get_channel(&hw_ch, &hw_sec);
+                int rc = wifi_deauth_last_rc;
+                if (repaint_static || rc != last_rc_shown || (int)hw_ch != last_hwch) {
+                    last_rc_shown = rc; last_hwch = (int)hw_ch;
+                    uint16_t col = (rc > 0) ? T_BAD : (rc == 0 ? T_GOOD : T_DIM);
+                    ui_text_w(4, BODY_Y + 70, 150, col,
+                              "tx rc:%d  hw-ch:%u", rc, (unsigned)hw_ch);
+                }
             }
 
             ui_freq_bars(SCR_W - 70, BODY_Y + 16, 4, 36);

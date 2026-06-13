@@ -29,7 +29,7 @@
   <div class="boot-lines"><div class="boot-line"><span class="dim">[LOAD]</span> roadmap.html <span class="ok">OK</span></div></div>
 </div>
 <div id="scrollProgress"></div>
-<div id="hud"><div class="hud-row"><span class="hud-dot"></span>ROADMAP · v0.6.2 current</div></div>
+<div id="hud"><div class="hud-row"><span class="hud-dot"></span>ROADMAP · v0.6.3 current</div></div>
 
 <nav id="mainNav">
   <a href="index.html" class="nav-logo"><span class="icon">P</span><span>POSEIDON</span></a>
@@ -53,8 +53,8 @@
 <div class="console-strip">
   <div class="console-bar">
     <span class="ck">[TIMELINE]</span>
-    <span>shipped=<span class="nm">v0.1 → v0.6.2</span></span>
-    <span>current=<span class="ck">v0.6.2</span></span>
+    <span>shipped=<span class="nm">v0.1 → v0.6.3</span></span>
+    <span>current=<span class="ck">v0.6.3</span></span>
     <span>next=<span class="vk">v0.7 nRF52840 BLE 5.0 dongle</span></span>
     <span>after=<span class="vk">v0.8 on-device WPA2 crack</span></span>
     <span class="blink">▸</span>
@@ -201,16 +201,30 @@
       </div>
     </div>
 
-    <div class="rm-item shipped current reveal-left">
+    <div class="rm-item shipped reveal-left">
       <div class="rm-card">
         <div class="rm-head">
           <span class="rm-ver">v0.6.2</span>
           <span class="rm-date">Shipped 2026-06-11</span>
-          <span class="rm-tag shipped">Live</span>
+          <span class="rm-tag shipped">Shipped</span>
         </div>
         <div class="rm-title">Sub-GHz analyzer modes · full-screen waterfall · Argus 5 GHz hunting · Mass Storage · stability</div>
         <div class="rm-body">
           The sub-GHz analyzer gains four new visual modes on the CC1101 — <b>peak-hold</b>, a <b>radar PPI scope</b>, digital-phosphor <b>persistence</b>, and a <b>blip sonar</b> — plus a <b>waterfall that fills the whole screen</b> and scales to available heap, all in a neon palette. <b>Argus</b> now hunts 5 GHz handshakes through the TRIDENT C5 when one is online, and got a proper cursed-demigod character pass. <b>Mass Storage</b> mode exposes the SD card over USB. Stability: fixed NimBLE heap-leak reboots in Defensive Monitor + Drone Remote ID (missing <code>setMaxResults(0)</code>), plus a defmon BLE-phase heap-fragmentation guard that degrades to WiFi-only instead of resetting. New gas-station + drug-store sub-GHz signal categories. Capped off with a full website + docs refresh: magenta cyberpunk re-skin, glitch accordions, and a two-lane README.
+        </div>
+      </div>
+    </div>
+
+    <div class="rm-item shipped current reveal-left">
+      <div class="rm-card">
+        <div class="rm-head">
+          <span class="rm-ver">v0.6.3</span>
+          <span class="rm-date">Shipped 2026-06-13</span>
+          <span class="rm-tag shipped">Live</span>
+        </div>
+        <div class="rm-title">Hotfix · deauth transmits reliably · spectrum flat-line fix · Argus overlay cleanup</div>
+        <div class="rm-body">
+          Community hotfix off the first wave of real-user reports. <b>Deauth now actually lands on-air</b> — <code>esp_wifi_80211_tx</code> was returning <code>ESP_ERR_NO_MEM</code> under burst load and silently dropping ~half the frames; a retry-on-NO_MEM makes every frame resend until it sends, so handshake capture works (GitHub #7). <b>Spectrum analyzer flat-line fixed</b> — every mode re-enters RX after each frequency hop instead of reading a stale RSSI. <b>Argus</b> lost the lightning + glitch overlays that bled over his face. Covers Deauth / Deauth All / Clients / Argus hunt.
         </div>
       </div>
     </div>

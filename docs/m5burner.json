@@ -7,6 +7,20 @@
   "icon": "https://generaldussduss.github.io/poseidon/assets/icon.png",
   "firmware": [
     {
+      "name": "POSEIDON v0.6.3",
+      "version": "0.6.3",
+      "chip": "esp32s3",
+      "target": "M5Cardputer-Adv",
+      "flash_size": "8MB",
+      "psram": true,
+      "url": "https://github.com/GeneralDussDuss/poseidon/releases/download/v0.6.3/poseidon-factory.bin",
+      "offset": "0x0",
+      "description": "Hotfix on top of v0.6.2. Deauth now reliably transmits — fixed a NO_MEM buffer issue that was silently dropping ~half the frames, so handshake capture works now. Spectrum analyzer flat-line fixed (re-enters RX after each frequency hop). Removed the Argus lightning/glitch overlays that bled over his face.",
+      "date": "2026-06-13",
+      "changelog": "https://github.com/GeneralDussDuss/poseidon/blob/master/CHANGELOG.md",
+      "license": "MIT"
+    },
+    {
       "name": "POSEIDON v0.6.2",
       "version": "0.6.2",
       "chip": "esp32s3",

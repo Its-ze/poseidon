@@ -6,7 +6,22 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-(empty — new work since 0.6.2 lands here)
+(empty — new work since 0.6.3 lands here)
+
+## [0.6.3] - 2026-06-13
+
+### Fixed
+
+- **Deauth now actually transmits.** `esp_wifi_80211_tx` was returning
+  `ESP_ERR_NO_MEM` (257) under burst load — the lean 4/4 WiFi TX buffer pool
+  filling up silently dropped ~half the frames (GitHub #7, the deauth /
+  handshake-capture report). Added a NO_MEM retry so each frame resends until
+  it lands. Covers Deauth, Deauth All, Clients, and Argus's hunt.
+- **Spectrum analyzer flat-line fix.** Every mode swept frequency but never
+  re-entered RX after `setMHZ`, so `getRssi()` read a stale flat value. Now
+  re-strobes RX after each hop — real signal across all analyzer modes.
+- **Argus overlay cleanup.** Removed the OLD_FURY lightning + ANNOYED glitch
+  overlays that bled over his face and the status bar.
 
 ## [0.6.2] - 2026-06-11
 

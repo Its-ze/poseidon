@@ -72,7 +72,7 @@ static void run_bar_spectrum(const freq_range_t &range)
 
     while (true) {
         for (int i = 0; i < bins; ++i) {
-            cc1101_set_freq(range.start + i * step);
+            cc1101_set_freq(range.start + i * step); cc1101_set_rx();
             delayMicroseconds(800);
             int raw = cc1101_get_rssi();
             /* EMA: 30% new, 70% old. Fast enough to track bursts,
@@ -209,7 +209,7 @@ static void run_waterfall(const freq_range_t &range)
         /* Sweep one full row of freq bins. */
         uint16_t *row = &ring[head * GW];
         for (int i = 0; i < GW; ++i) {
-            cc1101_set_freq(range.start + i * step);
+            cc1101_set_freq(range.start + i * step); cc1101_set_rx();
             delayMicroseconds(500);
             row[i] = rssi_color(cc1101_get_rssi());
         }
@@ -242,7 +242,7 @@ static void run_waveform(float freq)
      * shows activity when a car key transmits: a burst of square-wave
      * pulses even though RSSI only nudges. */
     auto &d = M5Cardputer.Display;
-    cc1101_set_freq(freq);
+    cc1101_set_freq(freq); cc1101_set_rx();
     cc1101_set_rx();
 
     const int GX = 24;
@@ -358,8 +358,8 @@ static void run_waveform(float freq)
                 if (have_canvas) canvas.deleteSprite();
                 return;
             }
-            if (k == '+' || k == '=') { freq += 0.5f; cc1101_set_freq(freq); }
-            if (k == '-')             { freq -= 0.5f; cc1101_set_freq(freq); }
+            if (k == '+' || k == '=') { freq += 0.5f; cc1101_set_freq(freq); cc1101_set_rx(); }
+            if (k == '-')             { freq -= 0.5f; cc1101_set_freq(freq); cc1101_set_rx(); }
         }
     }
 }
@@ -415,7 +415,7 @@ static void run_peak_hold(const freq_range_t &range)
 
     while (true) {
         for (int i = 0; i < BINS; ++i) {
-            cc1101_set_freq(range.start + i * step);
+            cc1101_set_freq(range.start + i * step); cc1101_set_rx();
             delayMicroseconds(500);
             int raw = cc1101_get_rssi();
             smooth[i] = smooth[i] * 0.65f + raw * 0.35f;
@@ -575,7 +575,7 @@ static void run_radar(const freq_range_t &range)
             }
 
             float mhz = range.start + sec * step;
-            cc1101_set_freq(mhz);
+            cc1101_set_freq(mhz); cc1101_set_rx();
             delayMicroseconds(500);
             int rssi = cc1101_get_rssi();
 
@@ -733,7 +733,7 @@ static void run_persistence(const freq_range_t &range)
 
     while (true) {
         for (int x = 0; x < GW; ++x) {
-            cc1101_set_freq(range.start + x * step);
+            cc1101_set_freq(range.start + x * step); cc1101_set_rx();
             delayMicroseconds(500);
             int rssi = cc1101_get_rssi();
 
@@ -826,7 +826,7 @@ static void run_blip_sonar(const freq_range_t &range)
         int   strongest_i = 0;
         int   strongest_v = -127;
         for (int i = 0; i < BINS; ++i) {
-            cc1101_set_freq(range.start + i * step);
+            cc1101_set_freq(range.start + i * step); cc1101_set_rx();
             delayMicroseconds(500);
             int rssi = cc1101_get_rssi();
 

