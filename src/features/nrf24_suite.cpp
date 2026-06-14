@@ -800,7 +800,7 @@ void feat_nrf24_jammer(void)
                 rf.setPALevel(RF24_PA_MAX);
                 rf.setDataRate(RF24_2MBPS);
                 rf.setCRCLength(RF24_CRC_DISABLED);
-                if (jam_mode == 0) rf.startConstCarrier(RF24_PA_MAX, PRESETS[sel].chs[0]);
+                if (jam_mode == 0) rf.startConstCarrier(RF24_PA_MAX, PRESETS[sel].chs ? PRESETS[sel].chs[0] : 0);   /* full-band: chs=nullptr -> prime on ch 0, sweep takes over */
                 else rf.stopListening();
             }
         }
