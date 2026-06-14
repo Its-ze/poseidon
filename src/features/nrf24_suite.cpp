@@ -738,7 +738,7 @@ void feat_nrf24_jammer(void)
 
             if (!active) {
                 for (int i = 0; i < JAM_PRESET_COUNT; i++) {
-                    int y = BODY_Y + 16 + i * 12;
+                    int y = BODY_Y + 16 + i * 11;
                     bool s = (i == sel);
                     if (s) d.fillRoundRect(2, y - 1, SCR_W - 4, 11, 2, T_SEL_BG);
                     else   d.fillRect(2, y - 1, SCR_W - 4, 11, T_BG);
@@ -746,8 +746,12 @@ void feat_nrf24_jammer(void)
                     d.setCursor(6, y);
                     d.printf("%s (%uch)", PRESETS[i].name, PRESETS[i].count);
                 }
-                ui_text(4, BODY_Y + 102, T_DIM, "mode: %s  (M=toggle)",
-                        jam_mode == 0 ? "CW carrier" : "data flood");
+                if (sel == 0)
+                    ui_text(4, BODY_Y + 106, T_ACCENT2, "%s - all 2.4GHz, close range",
+                            jam_mode == 0 ? "CW" : "flood");
+                else
+                    ui_text(4, BODY_Y + 106, T_DIM, "mode: %s  (M=toggle)",
+                            jam_mode == 0 ? "CW carrier" : "data flood");
                 ui_draw_footer(";/.=sel M=mode ENTER=start ESC=quit");
             } else {
                 uint32_t el = (now - jam_start) / 1000;
