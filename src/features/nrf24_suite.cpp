@@ -644,6 +644,7 @@ static const uint8_t CH_DRONE[] = {1,3,5,7,11,15,20,25,30,35,40,45,50,55,60,65,7
 static const uint8_t CH_HID[] = {5,15,25,35,45,55,65,74};
 
 static const jam_preset_t PRESETS[] = {
+    {"FULL BAND - all 2.4GHz", nullptr, 126},   /* chs=nullptr -> sweep 0..125 */
     {"BLE Advertising", CH_BLE, 3},
     {"WiFi ch 1",       CH_WIFI1, 22},
     {"WiFi ch 6",       CH_WIFI6, 22},
@@ -652,7 +653,7 @@ static const jam_preset_t PRESETS[] = {
     {"Drone/RC",        CH_DRONE, 23},
     {"Wireless HID",    CH_HID, 8},
 };
-#define JAM_PRESET_COUNT 7
+#define JAM_PRESET_COUNT 8
 #define JAM_MAX_MS 20000
 
 void feat_nrf24_jammer(void)
@@ -704,16 +705,17 @@ void feat_nrf24_jammer(void)
                  * called setChannel() and the carrier sat locked to
                  * chs[0] the entire time. */
                 for (int i = 0; i < p.count; i++) {
+                    uint8_t ch = p.chs ? p.chs[i] : (uint8_t)i;   /* nullptr = full-band sweep 0..125 */
                     rf.stopConstCarrier();
-                    rf.setChannel(p.chs[i]);
-                    rf.startConstCarrier(RF24_PA_MAX, p.chs[i]);
+                    rf.setChannel(ch);
+                    rf.startConstCarrier(RF24_PA_MAX, ch);
                     delayMicroseconds(esp_random() % 60 + 20);
                 }
             } else {
                 /* Data flood. */
                 rf.stopListening();
                 for (int i = 0; i < p.count; i++) {
-                    rf.setChannel(p.chs[i]);
+                    rf.setChannel(p.chs ? p.chs[i] : (uint8_t)i);   /* nullptr = full-band sweep */
                     rf.writeFast(noise, 32);
                     noise[i % 32] ^= esp_random();
                 }
