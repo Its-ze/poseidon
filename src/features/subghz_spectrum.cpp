@@ -18,11 +18,12 @@
 
 struct freq_range_t { float start; float end; const char *name; };
 static const freq_range_t RANGES[] = {
+    { 426.0f, 440.0f, "433 MHz" },   /* default — centers on 433 (ISM band) */
     { 300.0f, 348.0f, "300-348" },
     { 387.0f, 464.0f, "387-464" },
     { 779.0f, 928.0f, "779-928" },
 };
-#define RANGE_COUNT 3
+#define RANGE_COUNT 4
 
 /* OLED Neon Rose heat ramp: black -> indigo -> magenta -> neon rose ->
  * hot pink/white. Replaces the generic blue->red so every analyzer mode
@@ -943,7 +944,7 @@ void feat_subghz_spectrum(void)
     }
 
     auto &d = M5Cardputer.Display;
-    int mode = 0, range = 1;
+    int mode = 0, range = 0;   /* default to the 433 MHz band */
     const char *modes[] = {
         "Bar Spectrum", "Waterfall", "Oscilloscope",
         "Peak Hold", "Radar Scope", "Persistence", "Blip Sonar"
