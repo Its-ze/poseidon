@@ -175,13 +175,9 @@ void argus_draw(argus_mood_t mood, int x, int y)
         s_last_y    = y;
     }
 
-    /* OLD_FURY lightning + ANNOYED glitch overlays removed — they bled
-     * over Argus's face and the status bar. Mood still reads from the
-     * per-mood sprite; the contained zzz/scan-line overlays stay. */
-    (void)src;
-    switch (cur) {
-    case ARGUS_SLEEPING:    overlay_zzz(x, y + sway, now);        break;
-    case ARGUS_CALCULATING: overlay_scan_line(x, y + sway, now);  break;
-    default: break;
-    }
+    /* ALL face overlays removed. The sprite is cached and only re-pushes
+     * on a mood change (sway=0), so ANYTHING drawn over it persists as a
+     * trail — lightning, glitch, the scan-line, and the floating zzz all
+     * bled over him. Mood now reads entirely from the per-mood sprite. */
+    (void)src; (void)now;
 }
