@@ -678,6 +678,7 @@ void feat_nrf24_jammer(void)
     int last_sel = -1;
     int last_active = -1;
     uint32_t last_draw = 0;
+    uint8_t fb_cur = 0;   /* rolling cursor for the full-band sweep */
 
     while (true) {
         uint32_t now = millis();
@@ -704,21 +705,31 @@ void feat_nrf24_jammer(void)
                  * Bug from audit 2026-05-25: previously the loop just
                  * called setChannel() and the carrier sat locked to
                  * chs[0] the entire time. */
-                for (int i = 0; i < p.count; i++) {
-                    uint8_t ch = p.chs ? p.chs[i] : (uint8_t)i;   /* nullptr = full-band sweep 0..125 */
+                /* Full-band (chs=nullptr) sweeps a small chunk per pass via a
+                 * rolling cursor — doing all 126 stop/start carrier cycles in
+                 * one pass starved the scheduler/supply and hard-reset the
+                 * device. 18/pass covers the whole band every ~7 passes. */
+                int n = p.chs ? p.count : 18;
+                for (int i = 0; i < n; i++) {
+                    uint8_t ch = p.chs ? p.chs[i]
+                                       : (uint8_t)(fb_cur = (uint8_t)((fb_cur + 1) % 126));
                     rf.stopConstCarrier();
                     rf.setChannel(ch);
                     rf.startConstCarrier(RF24_PA_MAX, ch);
                     delayMicroseconds(esp_random() % 60 + 20);
                 }
+                delay(1);   /* yield to scheduler / feed WDT once per pass */
             } else {
                 /* Data flood. */
                 rf.stopListening();
-                for (int i = 0; i < p.count; i++) {
-                    rf.setChannel(p.chs ? p.chs[i] : (uint8_t)i);   /* nullptr = full-band sweep */
+                int n = p.chs ? p.count : 18;
+                for (int i = 0; i < n; i++) {
+                    rf.setChannel(p.chs ? p.chs[i]
+                                        : (uint8_t)(fb_cur = (uint8_t)((fb_cur + 1) % 126)));
                     rf.writeFast(noise, 32);
                     noise[i % 32] ^= esp_random();
                 }
+                delay(1);   /* yield per pass */
             }
         }
 
