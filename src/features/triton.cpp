@@ -225,8 +225,13 @@ static void capture_flush(void)
             wrote = true;
         }
     }
+    /* Flush captures to the card almost immediately (was 3 s). Handshakes
+     * are rare + precious — a 3 s window meant an OOM crash OR a user
+     * powering off without ESC lost everything still in the FatFS buffer
+     * (GitHub: "not saving shakes to SD"). 500 ms still coalesces a
+     * post-deauth reconnect burst so we don't thrash HSPI per line. */
     uint32_t now = millis();
-    if (wrote && s_file && now - s_last_flush_ms > 3000) {
+    if (wrote && s_file && now - s_last_flush_ms > 500) {
         s_file.flush();
         s_last_flush_ms = now;
     }
