@@ -156,11 +156,17 @@ const TARGETS = {
   s3: {
     chip: "ESP32-S3",
     label: "POSEIDON · Cardputer-Adv",
+    // S3 stub flash-detect works, so keep the factory image's own geometry.
+    flashSize: "keep", flashMode: "keep", flashFreq: "keep",
     parts: [{ url: "bin/cardputer/poseidon-factory.bin", offset: 0x0 }],
   },
   c5: {
     chip: "ESP32-C5",
     label: "TRIDENT · C5 satellite",
+    // C5 stub flash-detect fails ("Flash ID: 0"); "keep" then defaults to ~1 MB
+    // and the write dies crossing 0x100000. Pin geometry to the known-good
+    // `esptool --flash_size 4MB --flash_mode dio --flash_freq 80m`.
+    flashSize: "4MB", flashMode: "dio", flashFreq: "80m",
     parts: [
       { url: "bin/trident-c5/bootloader.bin",       offset: 0x2000  },
       { url: "bin/trident-c5/partition-table.bin",  offset: 0x8000  },
@@ -192,8 +198,12 @@ function renderPlan(){
   $("plan").textContent = `Chip: ${t.chip}\nWrite:\n${lines}` +
     (eraseCb.checked ? "\nErase: full chip erase before write" : "");
 }
-targetSel.addEventListener("change", renderPlan);
+// The C5's USB-serial is unreliable above 115200 during long writes, so drop
+// the baud when TRIDENT is picked; the S3 Cardputer is fine at the fast default.
+function syncBaudToTarget(){ if (targetSel.value === "c5") baudSel.value = "115200"; }
+targetSel.addEventListener("change", () => { syncBaudToTarget(); renderPlan(); });
 eraseCb.addEventListener("change", renderPlan);
+syncBaudToTarget();
 renderPlan();
 
 if (!("serial" in navigator)) {
@@ -263,9 +273,9 @@ programBtn.addEventListener("click", async () => {
     setStatus("Flashing… do not unplug.", "warn");
     await esploader.writeFlash({
       fileArray,
-      flashSize: "keep",
-      flashMode: "keep",
-      flashFreq: "keep",
+      flashSize: t.flashSize,
+      flashMode: t.flashMode,
+      flashFreq: t.flashFreq,
       eraseAll: eraseCb.checked,
       compress: true,
       reportProgress: (fileIndex, written, total) => {

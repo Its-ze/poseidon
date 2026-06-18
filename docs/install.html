@@ -292,8 +292,13 @@ btn.addEventListener("click", async () => {
       fileArray.push({ data: str, address: p.offset });
     }
     setStatus("Flashing… do not unplug.", "warn");
+    // Pin the C5 flash geometry instead of "keep". On this chip, stub flash
+    // auto-detect fails ("Flash ID: 0"), so "keep" falls back to a ~1 MB size
+    // and the write dies the instant it crosses 0x100000 (seq ~28). 4MB/dio/80m
+    // matches the known-good `esptool --flash_size 4MB --flash_mode dio
+    // --flash_freq 80m` command in the Advanced section below.
     await esploader.writeFlash({
-      fileArray, flashSize: "keep", flashMode: "keep", flashFreq: "keep",
+      fileArray, flashSize: "4MB", flashMode: "dio", flashFreq: "80m",
       eraseAll: false, compress: true,
       reportProgress: (i, written, total) => {
         const pct = Math.round((written / total) * 100);
