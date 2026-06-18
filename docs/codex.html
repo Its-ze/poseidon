@@ -87,7 +87,7 @@
     100%{transform:scaleY(.002) scaleX(1.35);filter:brightness(9);opacity:0}}
 
   /* ---- detail overlay (level 2) ---- */
-  #overlay{position:fixed;inset:0;z-index:61;overflow-y:auto;background:linear-gradient(180deg,rgba(4,6,12,.86),rgba(4,6,12,.97));
+  #overlay{position:fixed;inset:0;z-index:61;overflow-y:auto;background:linear-gradient(180deg,#06080f,#02030a);
     opacity:0;pointer-events:none;transition:opacity .5s ease}
   #overlay.show{opacity:1;pointer-events:auto}
   .det{max-width:1100px;margin:0 auto;padding:clamp(4rem,8vw,6rem) 1.5rem 4rem}
@@ -332,9 +332,12 @@ const muteBtn  = document.getElementById('crt-mute');
 // Audio only ever starts inside the radio-click gesture, so autoplay policy
 // is satisfied. Honors a persisted mute + prefers-reduced-motion.
 let actx = null, hum = null;
-let muted = localStorage.getItem('codexMute') === '1';
+// Mute is shared with the site-wide ambience engine (assets/site.js) so the
+// CRT's ♪ button and the global toggle stay in lockstep.
+let muted = window.PoseidonSound ? PoseidonSound.isMuted() : localStorage.getItem('poseidonMuted') === '1';
 function setMuteUI(){ muteBtn.textContent = muted ? '♪ OFF' : '♪ ON'; muteBtn.style.opacity = muted ? '.5' : '1'; }
 setMuteUI();
+addEventListener('poseidon-mute', e => { muted = e.detail; setMuteUI(); if (muted) stopHum(); });
 function audio(){
   if (REDUCED) return null;
   if (!actx){ try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return null; } }
@@ -377,8 +380,9 @@ function stopHum(){ if (!hum) return; const a = audio();
   hum = null; }
 muteBtn.addEventListener('click', e => {
   e.stopPropagation();
-  muted = !muted; localStorage.setItem('codexMute', muted ? '1' : '0'); setMuteUI();
-  if (muted) stopHum();
+  // Drive the shared engine; the 'poseidon-mute' listener above syncs our UI.
+  if (window.PoseidonSound) { PoseidonSound.setMuted(!muted); }
+  else { muted = !muted; localStorage.setItem('poseidonMuted', muted ? '1' : '0'); setMuteUI(); if (muted) stopHum(); }
 });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 

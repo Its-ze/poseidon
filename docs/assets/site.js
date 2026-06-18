@@ -366,3 +366,107 @@ document.querySelectorAll('[data-count]').forEach(el => counterObs.observe(el));
     }
   });
 })();
+
+/* ===== Site-wide ambience: CRT scanline overlay + synthesized audio bed =====
+ * One global engine for the whole suite — a low ambient hum, soft UI click
+ * ticks, and a boot sweep on first entry. All audio is generated live (Web
+ * Audio, no asset files) and only starts inside the first user gesture, so
+ * autoplay policy is satisfied. One persisted mute (shared with the codex
+ * boot FX via window.PoseidonSound + a 'poseidon-mute' event). Honors
+ * prefers-reduced-motion: no audio, no scanline motion. */
+(function ambience() {
+  // --- inject the global scanline overlay + toggle styles once ---
+  if (!document.getElementById('fxScanStyle')) {
+    const st = document.createElement('style');
+    st.id = 'fxScanStyle';
+    st.textContent =
+      '#fxScan{position:fixed;inset:0;z-index:9000;pointer-events:none;opacity:.05;' +
+      'background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.55) 2px 3px);' +
+      'mix-blend-mode:overlay;animation:fxFlick 5s ease-in-out infinite}' +
+      '@keyframes fxFlick{0%,100%{opacity:.05}50%{opacity:.035}}' +
+      '#fxToggle{position:fixed;left:14px;bottom:14px;z-index:9100;cursor:pointer;' +
+      'font-family:var(--font-mono,ui-monospace,monospace);font-size:.64rem;letter-spacing:.12em;' +
+      'background:rgba(4,8,16,.72);border:1px solid rgba(120,200,255,.5);color:#bfe9ff;' +
+      'border-radius:8px;padding:.34rem .56rem;backdrop-filter:blur(4px);opacity:.66;transition:opacity .2s}' +
+      '#fxToggle:hover{opacity:1}' +
+      '@media(prefers-reduced-motion:reduce){#fxScan{display:none}}';
+    document.head.appendChild(st);
+  }
+
+  const MUTE_KEY = 'poseidonMuted';
+  let muted = localStorage.getItem(MUTE_KEY) === '1';
+  let actx = null, hum = null, started = false;
+
+  function ctx() {
+    if (POSEIDON_REDUCED) return null;
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return null; } }
+    if (actx.state === 'suspended') actx.resume();
+    return actx;
+  }
+  function blip({ f = 440, type = 'square', d = .05, g = .03, to = null, delay = 0 }) {
+    const a = ctx(); if (!a || muted) return;
+    const o = a.createOscillator(), gn = a.createGain(), t0 = a.currentTime + delay;
+    o.type = type; o.frequency.setValueAtTime(f, t0);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + d);
+    gn.gain.setValueAtTime(.0001, t0);
+    gn.gain.linearRampToValueAtTime(g, t0 + .006);
+    gn.gain.exponentialRampToValueAtTime(.0001, t0 + d);
+    o.connect(gn).connect(a.destination); o.start(t0); o.stop(t0 + d + .03);
+  }
+  function noise(d = .1, g = .04) {
+    const a = ctx(); if (!a || muted) return;
+    const n = (a.sampleRate * d) | 0, b = a.createBuffer(1, n, a.sampleRate), ch = b.getChannelData(0);
+    for (let i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const s = a.createBufferSource(); s.buffer = b;
+    const gn = a.createGain(); gn.gain.value = g; s.connect(gn).connect(a.destination); s.start();
+  }
+  // Layered low hum — two slightly detuned sines + an octave, faded in.
+  function startHum() {
+    const a = ctx(); if (!a || muted || hum) return;
+    const mk = (f, g) => {
+      const o = a.createOscillator(), gn = a.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      gn.gain.setValueAtTime(.0001, a.currentTime);
+      gn.gain.linearRampToValueAtTime(g, a.currentTime + 1.6);
+      o.connect(gn).connect(a.destination); o.start(); return { o, gn };
+    };
+    hum = [mk(55, .016), mk(58.4, .012), mk(110, .006)];
+  }
+  function stopHum() {
+    if (!hum) return; const a = ctx();
+    hum.forEach(h => { try { h.gn.gain.exponentialRampToValueAtTime(.0001, a.currentTime + .4); h.o.stop(a.currentTime + .5); } catch {} });
+    hum = null;
+  }
+  const clickTick = () => blip({ f: 480 + Math.random() * 120, type: 'triangle', d: .03, g: .03, to: 220 });
+  const loadSweep = () => { blip({ f: 180, type: 'sine', d: .55, g: .04, to: 560 }); noise(.16, .02); };
+
+  // Start audio on the first user gesture (autoplay policy).
+  function firstGesture() {
+    if (started) return; started = true;
+    ctx(); if (!muted) { startHum(); loadSweep(); }
+  }
+  ['pointerdown', 'keydown', 'touchstart'].forEach(ev => addEventListener(ev, firstGesture, { once: true, passive: true }));
+
+  // Soft tick on any interactive click, site-wide.
+  addEventListener('pointerdown', e => {
+    if (muted || !started) return;
+    if (e.target.closest && e.target.closest('a,button,.mod,[role="button"],.tool,summary,input,select,.nav-links a')) clickTick();
+  }, { passive: true });
+
+  // Mute toggle (bottom-left), shared across the suite.
+  const tgl = document.createElement('button');
+  tgl.id = 'fxToggle'; tgl.type = 'button'; tgl.setAttribute('aria-label', 'Toggle ambient sound');
+  const paint = () => { tgl.textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON'; tgl.style.opacity = muted ? '.4' : '.66'; };
+  function setMuted(m) {
+    muted = m; localStorage.setItem(MUTE_KEY, m ? '1' : '0'); paint();
+    if (m) stopHum(); else { ctx(); startHum(); }
+    window.dispatchEvent(new CustomEvent('poseidon-mute', { detail: muted }));
+  }
+  tgl.addEventListener('click', e => { e.stopPropagation(); started = true; setMuted(!muted); });
+  paint();
+  const mount = () => { if (!document.getElementById('fxToggle') && document.body) { document.body.appendChild(tgl); if (!document.getElementById('fxScan')) { const s = document.createElement('div'); s.id = 'fxScan'; s.setAttribute('aria-hidden', 'true'); document.body.appendChild(s); } } };
+  if (document.body) mount(); else addEventListener('DOMContentLoaded', mount);
+
+  // Shared API so per-page FX (e.g. the codex CRT) can read/drive mute state.
+  window.PoseidonSound = { isMuted: () => muted, setMuted, blip, noise, tick: clickTick };
+})();
