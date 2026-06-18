@@ -68,6 +68,22 @@
   .legal-note,.legal-note + *{margin-left:auto;margin-right:auto}
   .legal-note a{color:var(--coral,#f97316)}
   @media (prefers-reduced-motion: reduce){ #rain{display:none} #overlay,.tool{transition:none} }
+
+  /* ===== Mobile optimization (added 2026-06-18) — scoped; desktop untouched ===== */
+  @media (max-width:768px){
+    .codex-head{padding:5rem 1rem .75rem}
+    .modules{margin:1rem auto 2.5rem;padding:0 1rem;grid-template-columns:1fr;gap:.9rem}
+    .mod{min-height:140px;padding:1.3rem 1.15rem 1.1rem}
+    .mod:hover,.mod:focus-visible{transform:none}        /* no lift on touch */
+    .det{padding:4.5rem 1rem 3rem}
+    .det-grid{grid-template-columns:1fr}
+    .det-top .cnt{margin-left:0;flex-basis:100%}
+    .back{min-height:44px;display:inline-flex;align-items:center}
+    .legal-note{margin:0 1rem 1.25rem}
+  }
+  @media (max-width:480px){
+    .modules{grid-template-columns:1fr}
+  }
 </style>
 </head>
 <body>
@@ -253,7 +269,8 @@ BANDS.forEach((b, i) => {
 const rainCv = document.getElementById('rain');
 const rctx = rainCv.getContext('2d');
 const GLYPHS = "アカサタナハマヤラ0123456789ABCDEF<>/{}=+*".split("");
-let rainAnim = null, cols = [], cw = 14;
+// Mobile perf: wider columns (fewer of them) on phones so the decrypt rain stays light.
+let rainAnim = null, cols = [], cw = matchMedia('(max-width:768px)').matches ? 22 : 14;
 function sizeRain(){ rainCv.width = innerWidth; rainCv.height = innerHeight;
   cols = new Array(Math.ceil(innerWidth/cw)).fill(0).map(()=> Math.random()*-50); }
 function runRain(color, ms){

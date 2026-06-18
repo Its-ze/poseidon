@@ -416,3 +416,94 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9998;o
   /* decorative full-screen canvases: stop the perpetual draw loops visually */
   #particles,#heroCanvas,#causticLayer{display:none!important}
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  MOBILE OPTIMIZATION PASS — added 2026-06-18
+ *  Everything below is gated behind mobile media queries so the desktop
+ *  experience is byte-for-byte visually identical. Do NOT add desktop
+ *  (unscoped) rules here.
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/* --- Hamburger toggle button (injected by site.js).
+ *     Hidden by default at all widths; only the mobile query reveals it. --- */
+.nav-toggle{display:none}
+
+@media(max-width:768px){
+  /* Nav becomes a hamburger-driven dropdown. The existing rule above
+   * (.nav-links{display:none}) hides the list; we show it when .open. */
+  nav{padding:.85rem 1.1rem}
+  .nav-toggle{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:44px;height:44px;flex-shrink:0;
+    background:rgba(6,8,16,.6);border:1px solid rgba(217,70,239,.3);
+    border-radius:8px;color:var(--ocean-vivid);cursor:pointer;
+    -webkit-tap-highlight-color:transparent;backdrop-filter:blur(8px);
+    transition:border-color .2s,box-shadow .2s}
+  .nav-toggle:hover,.nav-toggle:focus-visible{border-color:var(--ocean-bright);box-shadow:var(--glow-subtle);outline:none}
+  .nav-toggle .nt-bars,.nav-toggle .nt-bars::before,.nav-toggle .nt-bars::after{
+    content:'';display:block;width:20px;height:2px;background:currentColor;
+    border-radius:2px;transition:transform .25s var(--ease-smooth),opacity .2s}
+  .nav-toggle .nt-bars{position:relative}
+  .nav-toggle .nt-bars::before{position:absolute;top:-6px;left:0}
+  .nav-toggle .nt-bars::after{position:absolute;top:6px;left:0}
+  .nav-toggle[aria-expanded="true"] .nt-bars{background:transparent}
+  .nav-toggle[aria-expanded="true"] .nt-bars::before{transform:translateY(6px) rotate(45deg)}
+  .nav-toggle[aria-expanded="true"] .nt-bars::after{transform:translateY(-6px) rotate(-45deg)}
+
+  /* When toggled open, the nav list drops down as a full-width panel. */
+  #mainNav .nav-links.open{
+    display:flex;flex-direction:column;align-items:stretch;gap:0;
+    position:absolute;top:100%;left:0;right:0;
+    background:rgba(0,0,0,.96);backdrop-filter:blur(20px) saturate(1.2);
+    border-bottom:1px solid rgba(217,70,239,.18);
+    box-shadow:0 18px 40px -18px rgba(0,0,0,.8);
+    padding:.4rem .9rem 1rem;max-height:calc(100vh - 60px);overflow-y:auto}
+  #mainNav .nav-links.open li{width:100%}
+  #mainNav .nav-links.open a{
+    display:flex;align-items:center;min-height:44px;width:100%;
+    padding:.55rem .25rem;font-size:.95rem;
+    border-bottom:1px solid rgba(217,70,239,.08)}
+  #mainNav{position:relative}
+
+  /* --- Fluid type / hero --- */
+  .hero-epithet{letter-spacing:.3em}
+  .hero-sub{font-size:1rem}
+  .hero-prompt{max-width:100%;white-space:normal;word-break:break-word}
+
+  /* --- Generic grid stacking: one column on phones --- */
+  .feature-grid,.teaser-grid,.hw-grid,.test-grid,.theme-grid{grid-template-columns:1fr}
+
+  /* --- Tap targets ≥44px on interactive chrome --- */
+  .btn,.cta-section .btn-primary{min-height:44px}
+  .nav-links a,.suite-links a,.teaser .t-arrow{min-height:44px;display:flex;align-items:center}
+  footer .suite-links{gap:.25rem 1.5rem}
+  footer .suite-links a{padding:.35rem .5rem}
+
+  /* --- Reduced section / cta / footer padding --- */
+  .cta-section{padding:4.5rem 1.25rem}
+  .cta-section .btn-primary{font-size:1.05rem;padding:.95rem 2rem}
+  footer{padding:3rem 1.25rem 1.75rem}
+
+  /* --- Wide tables (hardware.html) become horizontally scrollable --- */
+  .hw-card{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .hw-card table{min-width:0}
+  .stream-panel{overflow-x:auto}
+
+  /* --- Roadmap: tighten the timeline gutter --- */
+  .roadmap{padding-left:2rem}
+}
+
+@media(max-width:480px){
+  nav{padding:.7rem .9rem}
+  .nav-logo{font-size:.8rem}
+  .page-head{padding:5.5rem 1rem 1.75rem}
+  section{padding:3.5rem 1rem}
+  .section-desc,.page-head .lede,.testers-intro{font-size:1rem}
+  .hero-stats{gap:1rem}
+  .hero-stat{min-width:0;flex:1 0 40%}
+}
+
+/* --- Touch devices: disable cursor-follow spotlight regardless of width --- */
+@media(pointer:coarse){
+  #spotlight{display:none!important}
+}
