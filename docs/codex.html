@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Codex — POSEIDON</title>
-<meta name="description" content="The POSEIDON Codex: pick a radio, watch the rain, read every tool — what it does in plain English and how it works under the hood.">
+<meta name="description" content="The POSEIDON Codex: pick a radio, boot its console, read every tool — what it does in plain English and how it works under the hood.">
 <meta property="og:title" content="POSEIDON Codex">
 <meta property="og:description" content="Pick a radio. Decrypt the arsenal. Every tool, what it does and how it works.">
 <meta property="og:type" content="website">
@@ -40,8 +40,20 @@
   .mod .mcount::after{content:"DECRYPT ▸";color:var(--acc);margin-left:auto;opacity:0;transform:translateX(-6px);transition:.2s}
   .mod:hover .mcount::after{opacity:1;transform:translateX(0)}
 
+  /* ---- per-radio boot terminal (level 1.5 transition) ---- */
+  #bootterm{position:fixed;inset:0;z-index:60;display:none;overflow:auto;
+    background:radial-gradient(120% 80% at 50% 0,rgba(10,16,32,.96),#04060c)}
+  #bootterm.show{display:block}
+  #bootpre{font-family:var(--font-mono);margin:0;color:#9fb3d1;
+    padding:clamp(3rem,9vh,6rem) clamp(1.1rem,6vw,5rem);
+    font-size:clamp(8.5px,1.6vw,14px);line-height:1.4}
+  #bootpre > div{white-space:pre}
+  #bootpre .b{color:var(--bacc,#38bdf8);text-shadow:0 0 9px var(--bacc,#38bdf8)}
+  #bootpre .ok{color:#5effc8}
+  #bootpre .cur{animation:bootcur 1s steps(2,end) infinite}
+  @keyframes bootcur{50%{opacity:0}}
+
   /* ---- detail overlay (level 2) ---- */
-  #rain{position:fixed;inset:0;z-index:60;display:block;background:#04060c}
   #overlay{position:fixed;inset:0;z-index:61;overflow-y:auto;background:linear-gradient(180deg,rgba(4,6,12,.86),rgba(4,6,12,.97));
     opacity:0;pointer-events:none;transition:opacity .5s ease}
   #overlay.show{opacity:1;pointer-events:auto}
@@ -67,7 +79,7 @@
   .legal-note{font-size:.8rem;color:#7587a8;border:1px solid rgba(249,115,22,.3);border-radius:10px;padding:.7rem 1rem;margin:0 1.5rem 1.5rem;max-width:1100px}
   .legal-note,.legal-note + *{margin-left:auto;margin-right:auto}
   .legal-note a{color:var(--coral,#f97316)}
-  @media (prefers-reduced-motion: reduce){ #rain{display:none} #overlay,.tool{transition:none} }
+  @media (prefers-reduced-motion: reduce){ #overlay,.tool{transition:none} }
 
   /* ===== Mobile optimization (added 2026-06-18) — scoped; desktop untouched ===== */
   @media (max-width:768px){
@@ -109,14 +121,14 @@
 <header class="codex-head">
   <div class="kicker">01b // CODEX</div>
   <h1>Decrypt the Arsenal</h1>
-  <p class="lede">Pick a radio. Watch it crack open. Every tool on that chip — what it does, and how it actually works.</p>
+  <p class="lede">Pick a radio. Boot its console. Every tool on that chip — what it does, and how it actually works.</p>
 </header>
 
 <div class="legal-note">Reference only. Several tools transmit on regulated bands or simulate networks — use them solely on hardware and networks you own or are authorized to test. See <a href="legal.html">Legal &amp; Responsible Use</a>.</div>
 
 <div class="modules" id="modules"></div>
 
-<canvas id="rain" aria-hidden="true"></canvas>
+<div id="bootterm" aria-hidden="true"><div id="bootpre"></div></div>
 <div id="overlay" role="dialog" aria-modal="true" aria-label="Module tools"><div class="det" id="det"></div></div>
 
 <footer>
@@ -265,39 +277,75 @@ BANDS.forEach((b, i) => {
   grid.appendChild(el);
 });
 
-// ---- matrix rain ----
-const rainCv = document.getElementById('rain');
-const rctx = rainCv.getContext('2d');
-const GLYPHS = "アカサタナハマヤラ0123456789ABCDEF<>/{}=+*".split("");
-// Mobile perf: wider columns (fewer of them) on phones so the decrypt rain stays light.
-let rainAnim = null, cols = [], cw = matchMedia('(max-width:768px)').matches ? 22 : 14;
-function sizeRain(){ rainCv.width = innerWidth; rainCv.height = innerHeight;
-  cols = new Array(Math.ceil(innerWidth/cw)).fill(0).map(()=> Math.random()*-50); }
-function runRain(color, ms){
-  if (REDUCED) return Promise.resolve();
-  sizeRain(); rainCv.style.opacity = '1';
-  const start = performance.now();
-  return new Promise(res=>{
-    function frame(t){
-      rctx.fillStyle = 'rgba(4,6,12,0.18)'; rctx.fillRect(0,0,rainCv.width,rainCv.height);
-      rctx.font = cw+'px JetBrains Mono, monospace';
-      for(let i=0;i<cols.length;i++){
-        const x=i*cw, y=cols[i]*cw;
-        rctx.fillStyle = '#dffaff'; rctx.fillText(GLYPHS[(Math.random()*GLYPHS.length)|0], x, y);
-        rctx.fillStyle = color; rctx.fillText(GLYPHS[(Math.random()*GLYPHS.length)|0], x, y-cw);
-        cols[i] = (y > rainCv.height && Math.random()>0.975) ? 0 : cols[i]+1;
-      }
-      const k = (t-start)/ms;
-      if (k < 1) { rainAnim = requestAnimationFrame(frame); }
-      else { res(); }
+// ---- per-radio boot terminal ----
+// Replaces the old generic matrix rain: clicking a radio boots *that* radio's
+// console — named banner + an ASCII motif for the protocol, then a boot log.
+const bootterm = document.getElementById('bootterm');
+const bootpre  = document.getElementById('bootpre');
+
+// Per-radio ASCII motif (kept narrow so it fits a phone in monospace).
+const ART = {
+  wifi:    ["        )))   )))", "      (( (( o )) ))", "        )))   )))"],
+  ble:     ["       *  |  *", "        \\ | /", "      --[ B ]--", "        / | \\"],
+  subghz:  ["    _/\\__/\\__/\\__/\\_", "    O O K  /  F S K"],
+  nrf24:   ["     >>·  ( ( ) )  ·<<", "    enhanced  shockburst"],
+  lora:    ["     ((( · ))) ~chirp~", "      SF7 ...... SF12"],
+  network: ["    [::]==<#>==<#>==[::]", "      e t h e r n e t"],
+  ir:      ["     >>>------- ▸ ------->", "        3 8 k H z"],
+  hunt:    ["         o", "        o )", "       o ) )  geiger", "      o ) ) )"],
+  trident: ["       \\   |   /", "      --=[  Y  ]=--   5GHz", "       /   |   \\    802.15.4"],
+};
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+function bootLines(b){
+  const art = (ART[b.id] || []).map(a => ({ t:a, c:'b' }));
+  return [
+    { t:"╔══════════════════════════════════════╗", c:'b' },
+    { t:"  POSEIDON // " + b.name.toUpperCase(),     c:'b' },
+    { t:"  " + b.chip + "  ·  " + b.sub,             c:'b' },
+    { t:"╚══════════════════════════════════════╝", c:'b' },
+    { t:"" },
+    ...art,
+    { t:"" },
+    { t:"> mounting " + b.chip + " front-end ......... [ OK ]", c:'ok' },
+    { t:"> link " + b.sub + " ......... [ OK ]",                c:'ok' },
+    { t:"> loading arsenal (" + b.count + ") ......... [ OK ]", c:'ok' },
+    { t:"> decrypting modules  ██████████  100%",              c:'ok' },
+    { t:"> " + b.name + " online. ready_",                     c:'b' },
+  ];
+}
+
+function bootSequence(b){
+  bootpre.innerHTML = '';
+  bootterm.style.setProperty('--bacc', b.acc);
+  bootterm.classList.add('show'); bootterm.scrollTop = 0;
+  const lines = bootLines(b);
+  return new Promise(res => {
+    if (REDUCED){
+      bootpre.innerHTML = lines.map(l => `<div class="${l.c||''}">${esc(l.t||' ')}</div>`).join('');
+      setTimeout(res, 160); return;
     }
-    rainAnim = requestAnimationFrame(frame);
+    let i = 0;
+    (function step(){
+      if (i < lines.length){
+        const l = lines[i++];
+        const div = document.createElement('div');
+        if (l.c) div.className = l.c;
+        div.textContent = l.t || ' ';
+        bootpre.appendChild(div);
+        bootterm.scrollTop = bootterm.scrollHeight;
+        // log lines tick a touch slower than the banner art for a "running" feel
+        setTimeout(step, (l.t && l.t[0] === '>') ? 95 : 34);
+      } else {
+        const cur = document.createElement('span');
+        cur.className = 'cur'; cur.textContent = '█';
+        bootpre.lastChild.appendChild(cur);
+        setTimeout(res, 260);
+      }
+    })();
   });
 }
-function fadeRain(){ // dim to faint ambient behind detail, then stop
-  cancelAnimationFrame(rainAnim);
-  rainCv.style.transition='opacity .6s'; rainCv.style.opacity = REDUCED ? '0' : '0.10';
-}
+function hideBoot(){ bootterm.classList.remove('show'); }
 
 // ---- open / close detail ----
 const overlay = document.getElementById('overlay');
@@ -328,11 +376,11 @@ async function openModule(b){
   });
   det.appendChild(g);
 
-  // rain transition → reveal
-  await runRain(b.acc, 850);
+  // per-radio boot terminal → reveal
+  await bootSequence(b);
   overlay.classList.add('show');
   overlay.scrollTop = 0;
-  fadeRain();
+  hideBoot();
   back.focus();
   // stagger the tool cards in
   const cards=[...g.querySelectorAll('.tool')];
@@ -340,11 +388,10 @@ async function openModule(b){
 }
 function closeModule(){
   overlay.classList.remove('show');
-  rainCv.style.opacity='0';
+  hideBoot();
   if (lastFocus) lastFocus.focus();
 }
 addEventListener('keydown', e=>{ if(e.key==='Escape' && overlay.classList.contains('show')) closeModule(); });
-addEventListener('resize', ()=>{ if(rainCv.style.opacity==='1') sizeRain(); });
 </script>
 </body>
 </html>
