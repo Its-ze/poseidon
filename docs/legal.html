@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Legal & Responsible Use — POSEIDON</title>
+<meta name="description" content="POSEIDON is for authorized security testing only. Radio-regulation, computer-misuse, captured-data, and responsible-disclosure terms for the firmware and its tools.">
+<meta property="og:title" content="POSEIDON — Legal & Responsible Use">
+<meta property="og:description" content="Authorized testing only. Know the rules before you transmit.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://generaldussduss.github.io/poseidon/legal.html">
+<meta property="og:image" content="https://generaldussduss.github.io/poseidon/assets/og.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .legal-wrap{max-width:860px;margin:0 auto;padding:clamp(5rem,9vw,8rem) 1.5rem 4rem}
+  .legal-wrap h2{font-family:var(--font-display);color:var(--ocean-vivid);font-size:clamp(1.3rem,2.4vw,1.7rem);margin:2.4rem 0 .6rem;letter-spacing:.02em}
+  .legal-wrap p,.legal-wrap li{font-family:var(--font-body);font-size:1.05rem;line-height:1.7;color:#cbd5e1}
+  .legal-wrap strong{color:var(--ocean-white)}
+  .legal-wrap ul{padding-left:1.2rem}
+  .legal-wrap li{margin:.35rem 0}
+  .legal-callout{border:1px solid rgba(249,115,22,.45);background:linear-gradient(135deg,rgba(249,115,22,.10),rgba(6,10,22,.2));
+    border-radius:14px;padding:1.2rem 1.4rem;margin:1.5rem 0}
+  .legal-callout .k{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.22em;text-transform:uppercase;color:var(--coral)}
+  .legal-wrap a{color:var(--ocean-vivid)}
+</style>
+</head>
+<body>
+
+<div id="scrollProgress"></div>
+<div id="hud"><div class="hud-row"><span class="hud-dot"></span>LEGAL · authorized testing only</div></div>
+
+<nav id="mainNav">
+  <a href="index.html" class="nav-logo"><span class="icon">P</span><span>POSEIDON</span></a>
+  <ul class="nav-links">
+    <li><a href="arsenal.html">Arsenal</a></li>
+    <li><a href="codex.html">Codex</a></li>
+    <li><a href="hardware.html">Hardware</a></li>
+    <li><a href="roadmap.html">Roadmap</a></li>
+    <li><a href="install.html">Install</a></li>
+    <li><a href="testers.html">Testers</a></li>
+    <li><a href="credits.html">Credits</a></li>
+    <li><a href="legal.html" class="active">Legal</a></li>
+    <li><a href="https://github.com/GeneralDussDuss/poseidon" target="_blank">GitHub</a></li>
+  </ul>
+</nav>
+
+<div class="legal-wrap">
+  <div class="section-label reveal">★ · LEGAL &amp; RESPONSIBLE USE</div>
+  <h1 class="section-title reveal" style="font-size:clamp(2.2rem,5vw,3.4rem)">Read this before you transmit.</h1>
+
+  <div class="legal-callout reveal">
+    <div class="k">★ The one rule</div>
+    <p style="margin:.4rem 0 0">POSEIDON can receive and (when explicitly armed) transmit on
+    regulated radio bands and can simulate networks. Use it <strong>only</strong> on devices and
+    networks you own or have <strong>written authorization</strong> to test. Unauthorized use is a
+    crime in most jurisdictions — and not the point of this project.</p>
+  </div>
+
+  <h2 class="reveal">Your responsibilities</h2>
+  <ul class="reveal">
+    <li><strong>Authorization.</strong> Get explicit, written permission before testing any system,
+      device, vehicle, or network you don't own. "I was just curious" is not a defense.</li>
+    <li><strong>Radio regulations.</strong> Transmitting on sub-GHz / ISM / 2.4 GHz / 5 GHz / LoRa
+      bands is regulated. You are responsible for complying with your local regime — e.g.
+      <strong>FCC</strong> (US), <strong>Ofcom</strong> (UK), <strong>ETSI/CE</strong> (EU), or your
+      national equivalent — including band, power, and duty-cycle limits. Some operations require a
+      licence. <strong>Jamming and deauthentication against networks you don't control are illegal</strong>
+      in most places.</li>
+    <li><strong>Safety-critical systems.</strong> Never target systems where interference could
+      endanger people or property — vehicles in motion, medical, industrial, aviation, emergency.</li>
+    <li><strong>Data you capture.</strong> Handshakes, hashes, and Fast-Pair probes can contain other
+      people's credentials and personal data. Handle, store, and dispose of captures lawfully; don't
+      retain or share data you're not authorized to hold.</li>
+  </ul>
+
+  <h2 class="reveal">Built-in safety posture</h2>
+  <p class="reveal">POSEIDON ships safety-by-design: transmit-capable actions are gated behind a
+  deliberate arm step, defaults are conservative, and identifying defaults are suppressed. <strong>Do
+  not remove or weaken these gates.</strong> They exist to prevent accidental or unattended
+  transmission — they protect you as much as anyone nearby.</p>
+
+  <h2 class="reveal">Responsible disclosure</h2>
+  <p class="reveal">Tools like the WhisperPair probe (CVE-2025-36911) are built on top of published
+  research and are intended as demonstration and self-check tools. If you discover a vulnerability
+  using POSEIDON, follow coordinated disclosure: report it to the vendor and give them time to fix it
+  before going public. Credit the researchers whose work you build on — see the
+  <a href="credits.html">Credits</a> page.</p>
+
+  <h2 class="reveal">License &amp; no warranty</h2>
+  <p class="reveal">POSEIDON is released under the <strong>MIT License</strong> (see the
+  <a href="https://github.com/GeneralDussDuss/poseidon/blob/master/LICENSE" target="_blank" rel="noopener">LICENSE</a>
+  on GitHub). It is provided <strong>"as is", without warranty of any kind</strong>. The authors are
+  not liable for misuse or for any damage arising from use of this software. By using POSEIDON you
+  accept full responsibility for operating it lawfully and ethically.</p>
+
+  <p class="reveal" style="margin-top:2.5rem;font-style:italic;opacity:.8">Not legal advice. Laws vary
+  by country and change over time — when in doubt, consult a qualified professional and your local
+  regulator before transmitting.</p>
+</div>
+
+<footer>
+  <div class="foot-glyph">⟠</div>
+  <div class="suite-label">PART OF THE SUITE</div>
+  <div class="suite-links">
+    <a href="https://generaldussduss.github.io/suite/">THE SUITE</a>
+    <a href="https://generaldussduss.github.io/aether/">AETHER</a>
+    <a href="https://generaldussduss.github.io/charon/">CHARON</a>
+    <a href="https://generaldussduss.github.io/hydra/">HYDRA</a>
+    <a href="https://generaldussduss.github.io/faceless/">FACELESS</a>
+    <a href="https://generaldussduss.github.io/prometheus/">PROMETHEUS</a>
+  </div>
+  <div class="copy">&copy; 2026 POSEIDON &mdash; commander of the deep &mdash; MIT</div>
+</footer>
+
+<canvas id="particles" style="position:fixed;inset:0;z-index:-1;pointer-events:none" aria-hidden="true"></canvas>
+<script src="assets/site.js"></script>
+</body>
+</html>

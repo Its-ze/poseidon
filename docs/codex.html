@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Codex — POSEIDON</title>
+<meta name="description" content="The POSEIDON Codex: every tool explained by radio type — what it does in plain English and how it works under the hood. For noobs and nerds alike.">
+<meta property="og:title" content="POSEIDON Codex">
+<meta property="og:description" content="Every tool, explained — by radio type, what it does and how it works.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://generaldussduss.github.io/poseidon/codex.html">
+<meta property="og:image" content="https://generaldussduss.github.io/poseidon/assets/og.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .codex-wrap{max-width:1100px;margin:0 auto;padding:1rem 1.5rem 4rem}
+  .codex-controls{position:sticky;top:64px;z-index:4;background:linear-gradient(180deg,var(--bg-surface) 70%,rgba(6,8,16,0));
+    padding:1rem 0 1.2rem;display:flex;flex-direction:column;gap:.8rem}
+  #codex-search{width:100%;font-family:var(--font-mono);font-size:.95rem;color:var(--ocean-white);
+    background:var(--bg-card);border:1px solid var(--line, #1a2740);border-radius:10px;padding:.8rem 1rem}
+  #codex-search::placeholder{color:var(--muted,#7587a8)}
+  .band-nav{display:flex;flex-wrap:wrap;gap:.5rem}
+  .band-nav a{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;
+    text-decoration:none;color:var(--ocean-vivid);border:1px solid rgba(56,189,248,.4);border-radius:999px;padding:.35rem .8rem}
+  .band-nav a:hover{background:rgba(56,189,248,.12)}
+  .band{margin:2.4rem 0;scroll-margin-top:150px}
+  .band-head{display:flex;align-items:baseline;gap:.7rem;border-bottom:1px solid rgba(56,189,248,.18);padding-bottom:.5rem;margin-bottom:.3rem}
+  .band-head h2{font-family:var(--font-display);font-size:clamp(1.4rem,3vw,2rem);margin:0;letter-spacing:.01em}
+  .band-head .chip{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.16em;text-transform:uppercase;
+    border:1px solid currentColor;border-radius:999px;padding:.2rem .6rem;opacity:.85}
+  .band-head .cnt{margin-left:auto;font-family:var(--font-mono);font-size:.75rem;color:var(--muted,#7587a8)}
+  .band-intro{font-family:var(--font-body);font-size:1.02rem;color:#cbd5e1;margin:.5rem 0 1.2rem}
+  .tool-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:1rem}
+  .tool{background:var(--bg-card,#0d1628);border:1px solid rgba(56,189,248,.14);border-left:3px solid var(--acc,#38bdf8);
+    border-radius:10px;padding:1rem 1.1rem}
+  .tool h3{font-family:var(--font-display);font-size:1.02rem;margin:0 0 .5rem;color:var(--ocean-white)}
+  .tool .lab{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--acc,#38bdf8)}
+  .tool .what{font-family:var(--font-body);font-size:1rem;line-height:1.5;color:#e2e8f0;margin:.15rem 0 .7rem}
+  .tool .how{font-family:var(--font-mono);font-size:.82rem;line-height:1.55;color:#9fb3d1}
+  .tool code{background:rgba(0,0,0,.35);padding:.05rem .35rem;border-radius:4px;color:var(--ocean-vivid)}
+  .nomatch{color:var(--muted,#7587a8);font-style:italic;padding:1rem 0}
+  .legal-note{font-size:.8rem;color:var(--muted,#7587a8);border:1px solid rgba(249,115,22,.3);
+    border-radius:10px;padding:.7rem 1rem;margin:.4rem 0 0}
+  .legal-note a{color:var(--coral,#f97316)}
+</style>
+</head>
+<body>
+
+<div id="scrollProgress"></div>
+<div id="hud"><div class="hud-row"><span class="hud-dot"></span>CODEX · every tool, explained</div></div>
+
+<nav id="mainNav">
+  <a href="index.html" class="nav-logo"><span class="icon">P</span><span>POSEIDON</span></a>
+  <ul class="nav-links">
+    <li><a href="arsenal.html">Arsenal</a></li>
+    <li><a href="codex.html" class="active">Codex</a></li>
+    <li><a href="hardware.html">Hardware</a></li>
+    <li><a href="roadmap.html">Roadmap</a></li>
+    <li><a href="install.html">Install</a></li>
+    <li><a href="testers.html">Testers</a></li>
+    <li><a href="credits.html">Credits</a></li>
+    <li><a href="legal.html">Legal</a></li>
+    <li><a href="https://github.com/GeneralDussDuss/poseidon" target="_blank">GitHub</a></li>
+  </ul>
+</nav>
+
+<header class="page-head" style="padding:5.5rem 1.5rem 0;text-align:center">
+  <div class="kicker">01b // CODEX</div>
+  <h1 style="margin:.3rem 0">Every Tool, Explained</h1>
+  <p class="lede" style="max-width:760px;margin:.6rem auto 0">The Arsenal lists what POSEIDON carries. The Codex tells you what each tool
+  <em>does</em> and how it actually works — plain English up top, the under-the-hood detail right below. Skim by radio, or search.</p>
+</header>
+
+<div class="codex-wrap">
+  <div class="codex-controls">
+    <input id="codex-search" type="search" placeholder="Search tools — e.g. deauth, PMKID, mousejack, NTLM, jam…" autocomplete="off">
+    <div class="band-nav" id="band-nav"></div>
+  </div>
+  <div class="legal-note">Reference only. Several tools transmit on regulated bands or simulate networks — use them solely on hardware and networks you own or are authorized to test. See <a href="legal.html">Legal &amp; Responsible Use</a>.</div>
+  <div id="codex"></div>
+  <div id="nomatch" class="nomatch" hidden>No tool matches that search.</div>
+</div>
+
+<footer>
+  <div class="foot-glyph">⟠</div>
+  <div class="suite-label">PART OF THE SUITE</div>
+  <div class="suite-links">
+    <a href="https://generaldussduss.github.io/suite/">THE SUITE</a>
+    <a href="https://generaldussduss.github.io/aether/">AETHER</a>
+    <a href="https://generaldussduss.github.io/charon/">CHARON</a>
+    <a href="https://generaldussduss.github.io/hydra/">HYDRA</a>
+    <a href="https://generaldussduss.github.io/faceless/">FACELESS</a>
+    <a href="https://generaldussduss.github.io/prometheus/">PROMETHEUS</a>
+  </div>
+  <div class="copy">&copy; 2026 POSEIDON &mdash; commander of the deep &mdash; MIT</div>
+</footer>
+
+<canvas id="particles" style="position:fixed;inset:0;z-index:-1;pointer-events:none" aria-hidden="true"></canvas>
+<script src="assets/site.js"></script>
+<script>
+// Data-driven so it stays cohesive and easy to extend. Each tool: name / what (plain) / how (technical).
+const BANDS = [
+ { id:"wifi", name:"WiFi (2.4 GHz, ESP32-S3)", chip:"802.11", acc:"#38bdf8", count:"17 tools",
+   intro:"Scan, capture, and disrupt 2.4 GHz WiFi. The deauth core is built to actually land frames on-air.",
+   tools:[
+   {n:"Network scan",w:"Lists nearby WiFi networks and the clients on them.",h:"Monitor-mode capture of 802.11 beacon and probe frames → SSID, BSSID, channel, RSSI, encryption."},
+   {n:"Deauth",w:"Kicks devices off a network (one you control) to force reconnects.",h:"Spoofs 802.11 deauth/disassoc management frames for the AP↔client pair with correct sequence counters; sniffs associated clients first so it targets real stations, not the void."},
+   {n:"PMKID + 4-way handshake",w:"Grabs the crypto material needed to crack a WiFi password offline.",h:"Captures the PMKID from EAPOL message 1, or the full 4-way handshake, and saves it in hashcat <code>22000</code> format on SD."},
+   {n:"Evil Portal",w:"Stands up a fake login page to see what users would type.",h:"SoftAP + catch-all DNS + HTTP server serving a captive credential page; submissions logged to SD."},
+   {n:"Karma",w:"Answers devices hunting for their saved networks.",h:"Replies to client probe requests for any SSID, impersonating remembered APs so devices auto-associate."},
+   {n:"Beacon spam",w:"Fills the air with fake network names.",h:"Broadcasts many crafted beacon frames with varied SSIDs/BSSIDs/channels."},
+   {n:"Probe sniff",w:"Reveals which networks nearby phones are looking for.",h:"Captures 802.11 probe-request frames and logs the SSIDs clients leak."},
+   {n:"Evil Twin",w:"Clones a real AP to lure its clients.",h:"Copies a target's SSID/security shell on a SoftAP, optionally paired with deauth to push clients over."},
+   {n:"Wardrive + GPS",w:"Maps WiFi networks as you walk or drive.",h:"Logs APs with GNSS coordinates to SD as Wigle-style CSV."},
+   {n:"CIW zero-click injection",w:"Injects crafted frames at nearby clients with no interaction needed.",h:"Builds raw 802.11 frames and transmits through the raw-frame TX path."},
+   {n:"AP Signal Test",w:"Measures how strong an AP is from where you stand.",h:"Live RSSI readout for a chosen BSSID."},
+   {n:"Argus — handshake-hunter gotchi",w:"An autonomous pet that hunts WiFi handshakes for you.",h:"RL channel-picker hops bands, fires deauths and captures handshakes unattended; 96×96 mood sprite reflects hunt state; progress SD-persisted. Modes: HUNT / STEALTH / SURGICAL / STORM."},
+ ]},
+ { id:"ble", name:"Bluetooth LE (ESP32-S3, NimBLE)", chip:"BLE", acc:"#a78bfa", count:"15 tools",
+   intro:"Identify, spam, clone, and probe BLE — including a real CVE check.",
+   tools:[
+   {n:"Classifying scan",w:"Lists nearby Bluetooth devices and what they actually are.",h:"Parses BLE advertisements and matches OUI, Apple Continuity, and Google Fast Pair databases to name the device type."},
+   {n:"Spam (Apple/Samsung/Google/Windows)",w:"Pops fake pairing popups on nearby phones and PCs.",h:"Broadcasts vendor advertising payloads (Continuity / Fast Pair / Swift Pair) that trigger the OS pairing UI. Cooperative-tick scheduled so every nearby device sees it."},
+   {n:"Sour Apple (CVE-2023-42941)",w:"Floods nearby iPhones with pairing prompts to lock them up.",h:"Emits malformed Apple proximity-pairing adverts that overload iOS BLE handling."},
+   {n:"WhisperPair probe (CVE-2025-36911)",w:"Checks Fast Pair earbuds/speakers for a takeover bug.",h:"Sends a real Key-Based Pairing write (secp256r1 ECDH + AES-128-ECB) to in-use Fast Pair accessories; a response when not in pairing mode = vulnerable, and the hidden BR/EDR MAC can be lifted."},
+   {n:"Bad-KB HID",w:"Acts as a Bluetooth keyboard to type into a paired host.",h:"Emulates a BLE HID keyboard and streams keystroke reports (DuckyScript-style)."},
+   {n:"Tracker detect",w:"Finds AirTags/Tiles that might be following you.",h:"Scans for known tracker advertisement signatures and flags ones that persist around you."},
+   {n:"GATT explorer",w:"Browses what a BLE device exposes.",h:"Connects and enumerates GATT services/characteristics for read/write."},
+   {n:"Find-My emulator",w:"Makes the device look like an Apple Find My beacon.",h:"Broadcasts Find My-format advertisements."},
+   {n:"Clone",w:"Mimics a target BLE device's advertisement.",h:"Captures and re-broadcasts the advertising payload/address."},
+   {n:"Flood",w:"Saturates an area with BLE advertisements.",h:"High-rate advertising across many randomized addresses."},
+ ]},
+ { id:"subghz", name:"Sub-GHz (CC1101, 300–928 MHz)", chip:"CC1101", acc:"#fbbf24", count:"10 tools",
+   intro:"Capture, decode, and replay garage/car/sensor remotes, plus a big signal library.",
+   tools:[
+   {n:"Capture + protocol decoder",w:"Records a remote and tells you which protocol it is.",h:"CC1101 demodulates OOK/FSK; the pulse train is timed and decoded for fixed-code protocols (Princeton PT2262, CAME, NICE, Linear)."},
+   {n:"RAW record (RMT)",w:"Records any sub-GHz signal exactly, even unknown ones.",h:"Captures edge timings via the ESP32 RMT peripheral for low-jitter RAW pulses."},
+   {n:"Replay .sub",w:"Re-transmits a recorded signal; Flipper-compatible.",h:"Reads Flipper <code>.sub</code> pulse data and transmits it on the captured frequency/modulation (armed-gated)."},
+   {n:"Signal library (3,190+)",w:"A built-in catalog of ready-to-send signals.",h:"Bundled <code>.sub</code> files organized by category (cars, garages, gas-station, etc.)."},
+   {n:"Spectrum analyzer",w:"Shows which frequencies are active right now.",h:"Sweeps RSSI across channels and plots a live waterfall / peak-hold / radar scope."},
+   {n:"Brute force",w:"Tries every code for simple fixed-code remotes.",h:"Iterates a de-Bruijn keyspace of fixed codes and transmits each."},
+   {n:"Jammer",w:"Blocks a sub-GHz frequency.",h:"Continuous-carrier (CW) transmit on the target frequency. Illegal in most places — see Legal."},
+   {n:"Jam detect",w:"Warns you when a band is being jammed.",h:"Monitors the RSSI floor for sustained abnormal energy."},
+ ]},
+ { id:"nrf24", name:"2.4 GHz (nRF24L01+)", chip:"nRF24", acc:"#22d3ee", count:"6 tools",
+   intro:"Sniff and inject Nordic Enhanced ShockBurst — wireless mice/keyboards and more.",
+   tools:[
+   {n:"Promiscuous ESB sniffer",w:"Sniffs 2.4 GHz wireless keyboards, mice, and other Nordic gear.",h:"Uses the Goodspeed pseudo-promiscuous trick (illegal address + short preamble) to capture Enhanced ShockBurst frames."},
+   {n:"MouseJack injection",w:"Injects keystrokes into vulnerable wireless mice/keyboards.",h:"Targets unauthenticated Nordic dongles by injecting crafted ESB HID keystroke frames."},
+   {n:"nRF24 BLE spam",w:"Sends BLE advertisements from a cheap nRF24 radio.",h:"Hand-builds BLE-compatible packets with manual CRC24 + whitening on advertising channels 37/38/39."},
+   {n:"Spectrum analyzer",w:"Visualizes 2.4 GHz channel activity.",h:"Reads received-power-detector across channels for an energy map."},
+   {n:"CW jammer",w:"Blocks a 2.4 GHz channel.",h:"Constant-carrier output on a chosen channel. Illegal in most places — see Legal."},
+ ]},
+ { id:"lora", name:"LoRa & Mesh (SX1262)", chip:"SX1262", acc:"#34d399", count:"8 tools",
+   intro:"Long-range LoRa scan/TX, GNSS, and a full Meshtastic leaf node.",
+   tools:[
+   {n:"Multi-band scan",w:"Listens for LoRa traffic on 433 / 868 / 915 MHz.",h:"Configures SX1262 spreading-factor/bandwidth/coding-rate and logs packets with RSSI/SNR."},
+   {n:"Beacon TX + GPS",w:"Broadcasts your position over LoRa.",h:"Transmits a LoRa frame carrying GNSS coordinates."},
+   {n:"Meshtastic leaf node",w:"Join and chat on a Meshtastic mesh from your pocket.",h:"Implements the LongFast preset + protocol: chat, node list, paging, and position."},
+   {n:"LoRa analyzer",w:"Live capture and inspection of LoRa packets.",h:"Streams decoded headers/payloads as they arrive."},
+   {n:"GPS fix",w:"Gets a location lock for wardrive/beacon.",h:"Parses NMEA from the GNSS module with automatic baud detection."},
+ ]},
+ { id:"network", name:"LAN / Network + SaltyJack (wired/WiFi)", chip:"RJ45 / IP", acc:"#f59e0b", count:"18 tools",
+   intro:"A full wired/wireless LAN suite, including the SaltyJack credential arsenal — no PC or Pi needed.",
+   tools:[
+   {n:"Port scan",w:"Finds open ports on a host or across the LAN.",h:"TCP connect scan over the wired (W5500) or WiFi link."},
+   {n:"Ping / DNS",w:"Basic reachability and name-lookup checks.",h:"ICMP echo + DNS resolution."},
+   {n:"SSDP poisoner",w:"Interferes with UPnP device discovery.",h:"Spoofs SSDP responses to discovery queries."},
+   {n:"Honeypot",w:"Fake service that catches whoever's scanning.",h:"Opens listening ports and logs connection attempts."},
+   {n:"Reverse TCP tunnel",w:"Phone-home channel for remote access.",h:"Outbound TCP to a listener you control."},
+   {n:"UART shell",w:"Serial command console to the device.",h:"Interactive shell over USB-CDC / UART."},
+   {n:"SaltyJack — DHCP starvation",w:"Drains a network's pool of IP addresses.",h:"Floods DHCP Discover/Request with random MACs until exhaustion (auto-detects on NAK ≥ 20)."},
+   {n:"SaltyJack — Rogue DHCP",w:"Hands clients poisoned network settings.",h:"Races the real server (STA) or serves DHCP on our SoftAP (AP), setting attacker gateway + DNS for MitM."},
+   {n:"SaltyJack — Responder",w:"Captures Windows logins on the LAN.",h:"LLMNR + NBT-NS name-poisoning plus SMB NTLMv2 challenge; hashes saved in hashcat-5600 format."},
+   {n:"SaltyJack — WPAD NTLM",w:"Tricks Windows into handing over proxy creds.",h:"Serves a PAC file on :80 + HTTP 407 Proxy-Authenticate; domain clients auto-authenticate."},
+   {n:"SaltyJack — on-device cracker",w:"Cracks captured NTLMv2 hashes on the device itself.",h:"Pure-C HMAC-MD5 wordlist runner over hashcat-5600 lines — no PC tether."},
+ ]},
+ { id:"ir", name:"IR · BadUSB · System (ESP32-S3)", chip:"IR / USB", acc:"#7dd3fc", count:"12 tools",
+   intro:"HID payloads, IR remotes, and the pocket utilities that make it a daily-carry.",
+   tools:[
+   {n:"USB-HID payload runner (BadUSB)",w:"Types a scripted payload into any computer.",h:"Enumerates as a USB HID keyboard over native USB-C and runs DuckyScript."},
+   {n:"TV-B-Gone",w:"Powers off most TVs in range.",h:"Blasts a database of TV power IR codes."},
+   {n:"Samsung remote",w:"Control Samsung TVs.",h:"Sends the Samsung IR keymap (active-HIGH LED, verified vs Flipper-IRDB)."},
+   {n:"MAC randomizer",w:"Changes the device's WiFi MAC.",h:"Sets a consumer-OUI random MAC for OPSEC."},
+   {n:"Utilities",w:"Flashlight, stopwatch, calculator, morse, SD format, file browser.",h:"Standalone pocket tools."},
+   {n:"Theme engine",w:"Six swappable color schemes.",h:"POSEIDON / PHANTOM / MATRIX / AMBER (synthwave) / E-INK / TRON, persisted to NVS, with ambient procedural motion + idle screensavers."},
+ ]},
+ { id:"hunt", name:"Recon & Defense — HUNT", chip:"multi-radio", acc:"#f0abfc", count:"4 tools",
+   intro:"One proximity-hunting submenu that homes in on an emitter across any radio, geiger-style.",
+   tools:[
+   {n:"BLE tracker hunt",w:"Hot/cold homing on a chosen BLE device.",h:"Maps RSSI to a proximity meter that beeps faster as you close in."},
+   {n:"Passive tracker scan",w:"Finds trackers around you without engaging them.",h:"Listens for tracker advert signatures and ranks by signal."},
+   {n:"CC1101 finder",w:"Homes in on a sub-GHz emitter.",h:"Geiger-style RSSI tracking on a chosen frequency."},
+   {n:"nRF24 finder",w:"Homes in on a 2.4 GHz Nordic emitter.",h:"Geiger-style RSSI tracking; the HUNT menu switches the radio to match the target automatically."},
+ ]},
+ { id:"trident", name:"TRIDENT — ESP32-C5 satellite (5 GHz)", chip:"ESP32-C5", acc:"#34d399", count:"satellite",
+   intro:"A plug-in C5 node over ESP-NOW that does the 5 GHz / 802.15.4 work the S3 can't.",
+   tools:[
+   {n:"5 GHz deauth",w:"Deauth on 5 GHz networks (the Cardputer's S3 can't reach 5 GHz).",h:"C5 raw 802.11 frames with a binary patch bypassing <code>ieee80211_raw_frame_sanity_check</code>; targeted + broadcast."},
+   {n:"802.15.4 Zigbee sniffer",w:"Captures Zigbee / Thread radio traffic.",h:"C5 802.15.4 PHY capture."},
+   {n:"5 GHz PMKID",w:"Handshake capture on 5 GHz networks.",h:"PMKID / EAPOL capture on the C5 radio."},
+   {n:"Dual-band scan",w:"Lists 2.4 + 5 GHz networks with their security.",h:"Scans both bands and red-flags WPA3; results stream to POSEIDON over ESP-NOW (auto-pairs on channel 1)."},
+ ]},
+];
+
+const codex = document.getElementById('codex');
+const bandNav = document.getElementById('band-nav');
+const esc = (s) => s; // content is authored, not user input
+for (const b of BANDS) {
+  const a = document.createElement('a'); a.href = '#' + b.id; a.textContent = b.name.split(' (')[0]; bandNav.appendChild(a);
+  const sec = document.createElement('section'); sec.className = 'band'; sec.id = b.id; sec.style.setProperty('--acc', b.acc);
+  const head = document.createElement('div'); head.className = 'band-head';
+  const h2 = document.createElement('h2'); h2.textContent = b.name; h2.style.color = b.acc;
+  const chip = document.createElement('span'); chip.className = 'chip'; chip.textContent = b.chip; chip.style.color = b.acc;
+  const cnt = document.createElement('span'); cnt.className = 'cnt'; cnt.textContent = b.count;
+  head.append(h2, chip, cnt); sec.appendChild(head);
+  const intro = document.createElement('p'); intro.className = 'band-intro'; intro.textContent = b.intro; sec.appendChild(intro);
+  const grid = document.createElement('div'); grid.className = 'tool-grid';
+  for (const t of b.tools) {
+    const card = document.createElement('div'); card.className = 'tool'; card.style.setProperty('--acc', b.acc);
+    card.dataset.search = (t.n + ' ' + t.w + ' ' + t.h + ' ' + b.name).toLowerCase();
+    const lab = document.createElement('div'); lab.className = 'lab'; lab.textContent = b.chip;
+    const h3 = document.createElement('h3'); h3.textContent = t.n;
+    const what = document.createElement('div'); what.className = 'what'; what.textContent = t.w;
+    const how = document.createElement('div'); how.className = 'how';
+    how.innerHTML = '<b style="color:' + b.acc + '">How:</b> ' + t.h; // t.h is authored markup (code tags), not user input
+    card.append(lab, h3, what, how); grid.appendChild(card);
+  }
+  sec.appendChild(grid); codex.appendChild(sec);
+}
+
+// Live search filter.
+const search = document.getElementById('codex-search');
+const nomatch = document.getElementById('nomatch');
+search.addEventListener('input', () => {
+  const q = search.value.trim().toLowerCase();
+  let anyVisible = false;
+  for (const sec of codex.querySelectorAll('.band')) {
+    let secVisible = false;
+    for (const card of sec.querySelectorAll('.tool')) {
+      const hit = !q || card.dataset.search.includes(q);
+      card.style.display = hit ? '' : 'none';
+      if (hit) secVisible = true;
+    }
+    sec.style.display = secVisible ? '' : 'none';
+    if (secVisible) anyVisible = true;
+  }
+  nomatch.hidden = anyVisible;
+});
+</script>
+</body>
+</html>

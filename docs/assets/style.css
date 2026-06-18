@@ -406,3 +406,13 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9998;o
 .hero-title{filter:drop-shadow(0 0 32px rgba(217,70,239,.5))!important}
 .hero-badge{border-color:rgba(217,70,239,.35)!important;background:rgba(217,70,239,.06)!important}
 .console-strip,.ticker{border-color:rgba(217,70,239,.2)!important}
+
+/* ===== Global reduced-motion (a11y) — added 2026-06-17 ===== */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms!important;animation-iteration-count:1!important;
+    transition-duration:.001ms!important;scroll-behavior:auto!important;
+  }
+  /* decorative full-screen canvases: stop the perpetual draw loops visually */
+  #particles,#heroCanvas,#causticLayer{display:none!important}
+}

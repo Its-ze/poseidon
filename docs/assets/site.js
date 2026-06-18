@@ -1,6 +1,10 @@
 /* POSEIDON site script. Null-guarded so subpages can share it
  * even when they don't have hero / particles / caustic canvases. */
 
+// Decorative canvases are presentation-only — hide from assistive tech (a11y, 2026-06-17).
+addEventListener('DOMContentLoaded',function(){document.querySelectorAll('canvas').forEach(function(c){c.setAttribute('aria-hidden','true');});});
+
+
 // Boot sequence
 window.addEventListener('load', () => {
   setTimeout(() => {
