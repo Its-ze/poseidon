@@ -1,0 +1,872 @@
+[
+{
+"id": "k000",
+"source": "codex/wifi",
+"title": "WiFi radio (802.11)",
+"text": "WiFi (802.11, 2.4 GHz · ESP32-S3) — 17 tools. Scan, capture, and disrupt 2.4 GHz WiFi. The deauth core is built to actually land frames on-air."
+},
+{
+"id": "k001",
+"source": "codex/wifi",
+"title": "WiFi > Network scan",
+"text": "Network scan (a WiFi / 802.11 tool). What it does: Lists nearby WiFi networks and the clients on them. How it works: Monitor-mode capture of 802.11 beacon and probe frames → SSID, BSSID, channel, RSSI, encryption."
+},
+{
+"id": "k002",
+"source": "codex/wifi",
+"title": "WiFi > Deauth",
+"text": "Deauth (a WiFi / 802.11 tool). What it does: Kicks devices off a network (one you control) to force reconnects. How it works: Spoofs 802.11 deauth/disassoc management frames for the AP↔client pair with correct sequence counters; sniffs associated clients first so it targets real stations."
+},
+{
+"id": "k003",
+"source": "codex/wifi",
+"title": "WiFi > PMKID + 4-way handshake",
+"text": "PMKID + 4-way handshake (a WiFi / 802.11 tool). What it does: Grabs the crypto material needed to crack a WiFi password offline. How it works: Captures the PMKID from EAPOL message 1, or the full 4-way handshake, and saves it in hashcat 22000 format on SD."
+},
+{
+"id": "k004",
+"source": "codex/wifi",
+"title": "WiFi > Evil Portal",
+"text": "Evil Portal (a WiFi / 802.11 tool). What it does: Stands up a fake login page to see what users would type. How it works: SoftAP + catch-all DNS + HTTP server serving a captive credential page; submissions logged to SD."
+},
+{
+"id": "k005",
+"source": "codex/wifi",
+"title": "WiFi > Karma",
+"text": "Karma (a WiFi / 802.11 tool). What it does: Answers devices hunting for their saved networks. How it works: Replies to client probe requests for any SSID, impersonating remembered APs so devices auto-associate."
+},
+{
+"id": "k006",
+"source": "codex/wifi",
+"title": "WiFi > Beacon spam",
+"text": "Beacon spam (a WiFi / 802.11 tool). What it does: Fills the air with fake network names. How it works: Broadcasts many crafted beacon frames with varied SSIDs/BSSIDs/channels."
+},
+{
+"id": "k007",
+"source": "codex/wifi",
+"title": "WiFi > Probe sniff",
+"text": "Probe sniff (a WiFi / 802.11 tool). What it does: Reveals which networks nearby phones are looking for. How it works: Captures 802.11 probe-request frames and logs the SSIDs clients leak."
+},
+{
+"id": "k008",
+"source": "codex/wifi",
+"title": "WiFi > Evil Twin",
+"text": "Evil Twin (a WiFi / 802.11 tool). What it does: Clones a real AP to lure its clients. How it works: Copies a target's SSID/security shell on a SoftAP, optionally paired with deauth to push clients over."
+},
+{
+"id": "k009",
+"source": "codex/wifi",
+"title": "WiFi > Wardrive + GPS",
+"text": "Wardrive + GPS (a WiFi / 802.11 tool). What it does: Maps WiFi networks as you walk or drive. How it works: Logs APs with GNSS coordinates to SD as Wigle-style CSV."
+},
+{
+"id": "k010",
+"source": "codex/wifi",
+"title": "WiFi > Argus — handshake-hunter gotchi",
+"text": "Argus — handshake-hunter gotchi (a WiFi / 802.11 tool). What it does: An autonomous pet that hunts WiFi handshakes for you. How it works: RL channel-picker hops bands, fires deauths and captures handshakes unattended; mood sprite reflects hunt state; SD-persisted. Modes: HUNT / STEALTH / SURGICAL / STORM."
+},
+{
+"id": "k011",
+"source": "codex/ble",
+"title": "Bluetooth LE radio (BLE)",
+"text": "Bluetooth LE (BLE, ESP32-S3 · NimBLE) — 15 tools. Identify, spam, clone, and probe BLE — including a real CVE check."
+},
+{
+"id": "k012",
+"source": "codex/ble",
+"title": "Bluetooth LE > Classifying scan",
+"text": "Classifying scan (a Bluetooth LE / BLE tool). What it does: Lists nearby Bluetooth devices and what they actually are. How it works: Parses BLE advertisements and matches OUI, Apple Continuity, and Google Fast Pair databases to name the device type."
+},
+{
+"id": "k013",
+"source": "codex/ble",
+"title": "Bluetooth LE > Spam (Apple/Samsung/Google/Windows)",
+"text": "Spam (Apple/Samsung/Google/Windows) (a Bluetooth LE / BLE tool). What it does: Pops fake pairing popups on nearby phones and PCs. How it works: Broadcasts vendor advertising payloads (Continuity / Fast Pair / Swift Pair) that trigger the OS pairing UI. Cooperative-tick scheduled so every nearby device sees it."
+},
+{
+"id": "k014",
+"source": "codex/ble",
+"title": "Bluetooth LE > Sour Apple (CVE-2023-42941)",
+"text": "Sour Apple (CVE-2023-42941) (a Bluetooth LE / BLE tool). What it does: Floods nearby iPhones with pairing prompts to lock them up. How it works: Emits malformed Apple proximity-pairing adverts that overload iOS BLE handling."
+},
+{
+"id": "k015",
+"source": "codex/ble",
+"title": "Bluetooth LE > WhisperPair probe (CVE-2025-36911)",
+"text": "WhisperPair probe (CVE-2025-36911) (a Bluetooth LE / BLE tool). What it does: Checks Fast Pair earbuds/speakers for a takeover bug. How it works: Sends a real Key-Based Pairing write (secp256r1 ECDH + AES-128-ECB) to in-use Fast Pair accessories; a response when not in pairing mode = vulnerable, and the hidden BR/EDR MAC can be lifted."
+},
+{
+"id": "k016",
+"source": "codex/ble",
+"title": "Bluetooth LE > Bad-KB HID",
+"text": "Bad-KB HID (a Bluetooth LE / BLE tool). What it does: Acts as a Bluetooth keyboard to type into a paired host. How it works: Emulates a BLE HID keyboard and streams keystroke reports (DuckyScript-style)."
+},
+{
+"id": "k017",
+"source": "codex/ble",
+"title": "Bluetooth LE > Tracker detect",
+"text": "Tracker detect (a Bluetooth LE / BLE tool). What it does: Finds AirTags/Tiles that might be following you. How it works: Scans for known tracker advertisement signatures and flags ones that persist around you."
+},
+{
+"id": "k018",
+"source": "codex/ble",
+"title": "Bluetooth LE > GATT explorer",
+"text": "GATT explorer (a Bluetooth LE / BLE tool). What it does: Browses what a BLE device exposes. How it works: Connects and enumerates GATT services/characteristics for read/write."
+},
+{
+"id": "k019",
+"source": "codex/ble",
+"title": "Bluetooth LE > Find-My emulator",
+"text": "Find-My emulator (a Bluetooth LE / BLE tool). What it does: Makes the device look like an Apple Find My beacon. How it works: Broadcasts Find My-format advertisements."
+},
+{
+"id": "k020",
+"source": "codex/ble",
+"title": "Bluetooth LE > Clone",
+"text": "Clone (a Bluetooth LE / BLE tool). What it does: Mimics a target BLE device's advertisement. How it works: Captures and re-broadcasts the advertising payload/address."
+},
+{
+"id": "k021",
+"source": "codex/ble",
+"title": "Bluetooth LE > Flood",
+"text": "Flood (a Bluetooth LE / BLE tool). What it does: Saturates an area with BLE advertisements. How it works: High-rate advertising across many randomized addresses."
+},
+{
+"id": "k022",
+"source": "codex/subghz",
+"title": "Sub-GHz radio (CC1101)",
+"text": "Sub-GHz (CC1101, CC1101 · 300–928 MHz) — 10 tools. Capture, decode, and replay garage/car/sensor remotes, plus a big signal library."
+},
+{
+"id": "k023",
+"source": "codex/subghz",
+"title": "Sub-GHz > Capture + protocol decoder",
+"text": "Capture + protocol decoder (a Sub-GHz / CC1101 tool). What it does: Records a remote and tells you which protocol it is. How it works: CC1101 demodulates OOK/FSK; the pulse train is timed and decoded for fixed-code protocols (Princeton PT2262, CAME, NICE, Linear)."
+},
+{
+"id": "k024",
+"source": "codex/subghz",
+"title": "Sub-GHz > RAW record (RMT)",
+"text": "RAW record (RMT) (a Sub-GHz / CC1101 tool). What it does: Records any sub-GHz signal exactly, even unknown ones. How it works: Captures edge timings via the ESP32 RMT peripheral for low-jitter RAW pulses."
+},
+{
+"id": "k025",
+"source": "codex/subghz",
+"title": "Sub-GHz > Replay .sub",
+"text": "Replay .sub (a Sub-GHz / CC1101 tool). What it does: Re-transmits a recorded signal; Flipper-compatible. How it works: Reads Flipper .sub pulse data and transmits it on the captured frequency/modulation (armed-gated)."
+},
+{
+"id": "k026",
+"source": "codex/subghz",
+"title": "Sub-GHz > Signal library (3,190+)",
+"text": "Signal library (3,190+) (a Sub-GHz / CC1101 tool). What it does: A built-in catalog of ready-to-send signals. How it works: Bundled .sub files organized by category (cars, garages, gas-station, etc.)."
+},
+{
+"id": "k027",
+"source": "codex/subghz",
+"title": "Sub-GHz > Spectrum analyzer",
+"text": "Spectrum analyzer (a Sub-GHz / CC1101 tool). What it does: Shows which frequencies are active right now. How it works: Sweeps RSSI across channels and plots a live waterfall / peak-hold / radar scope."
+},
+{
+"id": "k028",
+"source": "codex/subghz",
+"title": "Sub-GHz > Brute force",
+"text": "Brute force (a Sub-GHz / CC1101 tool). What it does: Tries every code for simple fixed-code remotes. How it works: Iterates a de-Bruijn keyspace of fixed codes and transmits each."
+},
+{
+"id": "k029",
+"source": "codex/subghz",
+"title": "Sub-GHz > Jammer",
+"text": "Jammer (a Sub-GHz / CC1101 tool). What it does: Blocks a sub-GHz frequency. How it works: Continuous-carrier (CW) transmit on the target frequency. Illegal in most places — see Legal."
+},
+{
+"id": "k030",
+"source": "codex/subghz",
+"title": "Sub-GHz > Jam detect",
+"text": "Jam detect (a Sub-GHz / CC1101 tool). What it does: Warns you when a band is being jammed. How it works: Monitors the RSSI floor for sustained abnormal energy."
+},
+{
+"id": "k031",
+"source": "codex/nrf24",
+"title": "2.4 GHz radio (nRF24)",
+"text": "2.4 GHz (nRF24, nRF24L01+) — 6 tools. Sniff and inject Nordic Enhanced ShockBurst — wireless mice/keyboards and more."
+},
+{
+"id": "k032",
+"source": "codex/nrf24",
+"title": "2.4 GHz > Promiscuous ESB sniffer",
+"text": "Promiscuous ESB sniffer (a 2.4 GHz / nRF24 tool). What it does: Sniffs 2.4 GHz wireless keyboards, mice, and other Nordic gear. How it works: Uses the Goodspeed pseudo-promiscuous trick (illegal address + short preamble) to capture Enhanced ShockBurst frames."
+},
+{
+"id": "k033",
+"source": "codex/nrf24",
+"title": "2.4 GHz > MouseJack injection",
+"text": "MouseJack injection (a 2.4 GHz / nRF24 tool). What it does: Injects keystrokes into vulnerable wireless mice/keyboards. How it works: Targets unauthenticated Nordic dongles by injecting crafted ESB HID keystroke frames."
+},
+{
+"id": "k034",
+"source": "codex/nrf24",
+"title": "2.4 GHz > nRF24 BLE spam",
+"text": "nRF24 BLE spam (a 2.4 GHz / nRF24 tool). What it does: Sends BLE advertisements from a cheap nRF24 radio. How it works: Hand-builds BLE-compatible packets with manual CRC24 + whitening on advertising channels 37/38/39."
+},
+{
+"id": "k035",
+"source": "codex/nrf24",
+"title": "2.4 GHz > Spectrum analyzer",
+"text": "Spectrum analyzer (a 2.4 GHz / nRF24 tool). What it does: Visualizes 2.4 GHz channel activity. How it works: Reads received-power-detector across channels for an energy map."
+},
+{
+"id": "k036",
+"source": "codex/nrf24",
+"title": "2.4 GHz > CW jammer",
+"text": "CW jammer (a 2.4 GHz / nRF24 tool). What it does: Blocks a 2.4 GHz channel. How it works: Constant-carrier output on a chosen channel. Illegal in most places — see Legal."
+},
+{
+"id": "k037",
+"source": "codex/lora",
+"title": "LoRa & Mesh radio (SX1262)",
+"text": "LoRa & Mesh (SX1262, SX1262) — 8 tools. Long-range LoRa scan/TX, GNSS, and a full Meshtastic leaf node."
+},
+{
+"id": "k038",
+"source": "codex/lora",
+"title": "LoRa & Mesh > Multi-band scan",
+"text": "Multi-band scan (a LoRa & Mesh / SX1262 tool). What it does: Listens for LoRa traffic on 433 / 868 / 915 MHz. How it works: Configures SX1262 spreading-factor/bandwidth/coding-rate and logs packets with RSSI/SNR."
+},
+{
+"id": "k039",
+"source": "codex/lora",
+"title": "LoRa & Mesh > Beacon TX + GPS",
+"text": "Beacon TX + GPS (a LoRa & Mesh / SX1262 tool). What it does: Broadcasts your position over LoRa. How it works: Transmits a LoRa frame carrying GNSS coordinates."
+},
+{
+"id": "k040",
+"source": "codex/lora",
+"title": "LoRa & Mesh > Meshtastic leaf node",
+"text": "Meshtastic leaf node (a LoRa & Mesh / SX1262 tool). What it does: Join and chat on a Meshtastic mesh from your pocket. How it works: Implements the LongFast preset + protocol: chat, node list, paging, and position."
+},
+{
+"id": "k041",
+"source": "codex/lora",
+"title": "LoRa & Mesh > LoRa analyzer",
+"text": "LoRa analyzer (a LoRa & Mesh / SX1262 tool). What it does: Live capture and inspection of LoRa packets. How it works: Streams decoded headers/payloads as they arrive."
+},
+{
+"id": "k042",
+"source": "codex/lora",
+"title": "LoRa & Mesh > GPS fix",
+"text": "GPS fix (a LoRa & Mesh / SX1262 tool). What it does: Gets a location lock for wardrive/beacon. How it works: Parses NMEA from the GNSS module with automatic baud detection."
+},
+{
+"id": "k043",
+"source": "codex/network",
+"title": "LAN / Network radio (RJ45 / IP)",
+"text": "LAN / Network (RJ45 / IP, wired + SaltyJack) — 18 tools. A full wired/wireless LAN suite, including the SaltyJack credential arsenal — no PC or Pi needed."
+},
+{
+"id": "k044",
+"source": "codex/network",
+"title": "LAN / Network > Port scan",
+"text": "Port scan (a LAN / Network / RJ45 / IP tool). What it does: Finds open ports on a host or across the LAN. How it works: TCP connect scan over the wired (W5500) or WiFi link."
+},
+{
+"id": "k045",
+"source": "codex/network",
+"title": "LAN / Network > Ping / DNS",
+"text": "Ping / DNS (a LAN / Network / RJ45 / IP tool). What it does: Basic reachability and name-lookup checks. How it works: ICMP echo + DNS resolution."
+},
+{
+"id": "k046",
+"source": "codex/network",
+"title": "LAN / Network > SSDP poisoner",
+"text": "SSDP poisoner (a LAN / Network / RJ45 / IP tool). What it does: Interferes with UPnP device discovery. How it works: Spoofs SSDP responses to discovery queries."
+},
+{
+"id": "k047",
+"source": "codex/network",
+"title": "LAN / Network > Honeypot",
+"text": "Honeypot (a LAN / Network / RJ45 / IP tool). What it does: Fake service that catches whoever's scanning. How it works: Opens listening ports and logs connection attempts."
+},
+{
+"id": "k048",
+"source": "codex/network",
+"title": "LAN / Network > Reverse TCP tunnel",
+"text": "Reverse TCP tunnel (a LAN / Network / RJ45 / IP tool). What it does: Phone-home channel for remote access. How it works: Outbound TCP to a listener you control."
+},
+{
+"id": "k049",
+"source": "codex/network",
+"title": "LAN / Network > UART shell",
+"text": "UART shell (a LAN / Network / RJ45 / IP tool). What it does: Serial command console to the device. How it works: Interactive shell over USB-CDC / UART."
+},
+{
+"id": "k050",
+"source": "codex/network",
+"title": "LAN / Network > SaltyJack — DHCP starvation",
+"text": "SaltyJack — DHCP starvation (a LAN / Network / RJ45 / IP tool). What it does: Drains a network's pool of IP addresses. How it works: Floods DHCP Discover/Request with random MACs until exhaustion (auto-detects on NAK ≥ 20)."
+},
+{
+"id": "k051",
+"source": "codex/network",
+"title": "LAN / Network > SaltyJack — Rogue DHCP",
+"text": "SaltyJack — Rogue DHCP (a LAN / Network / RJ45 / IP tool). What it does: Hands clients poisoned network settings. How it works: Races the real server (STA) or serves DHCP on our SoftAP (AP), setting attacker gateway + DNS for MitM."
+},
+{
+"id": "k052",
+"source": "codex/network",
+"title": "LAN / Network > SaltyJack — Responder",
+"text": "SaltyJack — Responder (a LAN / Network / RJ45 / IP tool). What it does: Captures Windows logins on the LAN. How it works: LLMNR + NBT-NS name-poisoning plus SMB NTLMv2 challenge; hashes saved in hashcat-5600 format."
+},
+{
+"id": "k053",
+"source": "codex/network",
+"title": "LAN / Network > SaltyJack — WPAD NTLM",
+"text": "SaltyJack — WPAD NTLM (a LAN / Network / RJ45 / IP tool). What it does: Tricks Windows into handing over proxy creds. How it works: Serves a PAC file on :80 + HTTP 407 Proxy-Authenticate; domain clients auto-authenticate."
+},
+{
+"id": "k054",
+"source": "codex/network",
+"title": "LAN / Network > SaltyJack — on-device cracker",
+"text": "SaltyJack — on-device cracker (a LAN / Network / RJ45 / IP tool). What it does: Cracks captured NTLMv2 hashes on the device itself. How it works: Pure-C HMAC-MD5 wordlist runner over hashcat-5600 lines — no PC tether."
+},
+{
+"id": "k055",
+"source": "codex/ir",
+"title": "IR · BadUSB · System radio (IR / USB)",
+"text": "IR · BadUSB · System (IR / USB, ESP32-S3) — 12 tools. HID payloads, IR remotes, and the pocket utilities that make it a daily-carry."
+},
+{
+"id": "k056",
+"source": "codex/ir",
+"title": "IR · BadUSB · System > USB-HID payload runner (BadUSB)",
+"text": "USB-HID payload runner (BadUSB) (a IR · BadUSB · System / IR / USB tool). What it does: Types a scripted payload into any computer. How it works: Enumerates as a USB HID keyboard over native USB-C and runs DuckyScript."
+},
+{
+"id": "k057",
+"source": "codex/ir",
+"title": "IR · BadUSB · System > TV-B-Gone",
+"text": "TV-B-Gone (a IR · BadUSB · System / IR / USB tool). What it does: Powers off most TVs in range. How it works: Blasts a database of TV power IR codes."
+},
+{
+"id": "k058",
+"source": "codex/ir",
+"title": "IR · BadUSB · System > Samsung remote",
+"text": "Samsung remote (a IR · BadUSB · System / IR / USB tool). What it does: Control Samsung TVs. How it works: Sends the Samsung IR keymap (active-HIGH LED, verified vs Flipper-IRDB)."
+},
+{
+"id": "k059",
+"source": "codex/ir",
+"title": "IR · BadUSB · System > MAC randomizer",
+"text": "MAC randomizer (a IR · BadUSB · System / IR / USB tool). What it does: Changes the device's WiFi MAC. How it works: Sets a consumer-OUI random MAC for OPSEC."
+},
+{
+"id": "k060",
+"source": "codex/ir",
+"title": "IR · BadUSB · System > Utilities",
+"text": "Utilities (a IR · BadUSB · System / IR / USB tool). What it does: Flashlight, stopwatch, calculator, morse, SD format, file browser. How it works: Standalone pocket tools."
+},
+{
+"id": "k061",
+"source": "codex/ir",
+"title": "IR · BadUSB · System > Theme engine",
+"text": "Theme engine (a IR · BadUSB · System / IR / USB tool). What it does: Six swappable color schemes. How it works: POSEIDON / PHANTOM / MATRIX / AMBER / E-INK / TRON, persisted to NVS, with ambient procedural motion + idle screensavers."
+},
+{
+"id": "k062",
+"source": "codex/hunt",
+"title": "Recon & Defense radio (multi-radio)",
+"text": "Recon & Defense (multi-radio, HUNT · multi-radio) — 4 tools. One proximity-hunting submenu that homes in on an emitter across any radio, geiger-style."
+},
+{
+"id": "k063",
+"source": "codex/hunt",
+"title": "Recon & Defense > BLE tracker hunt",
+"text": "BLE tracker hunt (a Recon & Defense / multi-radio tool). What it does: Hot/cold homing on a chosen BLE device. How it works: Maps RSSI to a proximity meter that beeps faster as you close in."
+},
+{
+"id": "k064",
+"source": "codex/hunt",
+"title": "Recon & Defense > Passive tracker scan",
+"text": "Passive tracker scan (a Recon & Defense / multi-radio tool). What it does: Finds trackers around you without engaging them. How it works: Listens for tracker advert signatures and ranks by signal."
+},
+{
+"id": "k065",
+"source": "codex/hunt",
+"title": "Recon & Defense > CC1101 finder",
+"text": "CC1101 finder (a Recon & Defense / multi-radio tool). What it does: Homes in on a sub-GHz emitter. How it works: Geiger-style RSSI tracking on a chosen frequency."
+},
+{
+"id": "k066",
+"source": "codex/hunt",
+"title": "Recon & Defense > nRF24 finder",
+"text": "nRF24 finder (a Recon & Defense / multi-radio tool). What it does: Homes in on a 2.4 GHz Nordic emitter. How it works: Geiger-style RSSI tracking; the HUNT menu switches the radio to match the target automatically."
+},
+{
+"id": "k067",
+"source": "codex/trident",
+"title": "TRIDENT radio (ESP32-C5)",
+"text": "TRIDENT (ESP32-C5, ESP32-C5 satellite · 5 GHz) — satellite. A plug-in C5 node over ESP-NOW that does the 5 GHz / 802.15.4 work the S3 can't."
+},
+{
+"id": "k068",
+"source": "codex/trident",
+"title": "TRIDENT > 5 GHz deauth",
+"text": "5 GHz deauth (a TRIDENT / ESP32-C5 tool). What it does: Deauth on 5 GHz networks (the Cardputer's S3 can't reach 5 GHz). How it works: C5 raw 802.11 frames with a binary patch bypassing ieee80211_raw_frame_sanity_check ; targeted + broadcast."
+},
+{
+"id": "k069",
+"source": "codex/trident",
+"title": "TRIDENT > 802.15.4 Zigbee sniffer",
+"text": "802.15.4 Zigbee sniffer (a TRIDENT / ESP32-C5 tool). What it does: Captures Zigbee / Thread radio traffic. How it works: C5 802.15.4 PHY capture."
+},
+{
+"id": "k070",
+"source": "codex/trident",
+"title": "TRIDENT > 5 GHz PMKID",
+"text": "5 GHz PMKID (a TRIDENT / ESP32-C5 tool). What it does: Handshake capture on 5 GHz networks. How it works: PMKID / EAPOL capture on the C5 radio."
+},
+{
+"id": "k071",
+"source": "codex/trident",
+"title": "TRIDENT > Dual-band scan",
+"text": "Dual-band scan (a TRIDENT / ESP32-C5 tool). What it does: Lists 2.4 + 5 GHz networks with their security. How it works: Scans both bands and red-flags WPA3; results stream to POSEIDON over ESP-NOW (auto-pairs on channel 1)."
+},
+{
+"id": "k072",
+"source": "README.md",
+"title": "README.md",
+"text": "<!-- markdownlint-disable MD033 MD041 --> <div align=\"center\">  ██████╗ ██████╗ ███████╗███████╗██╗██████╗ ██████╗ ███╗ ██╗ ██╔══██╗██╔═══██╗██╔════╝██╔════╝██║██╔══██╗██╔═══██╗████╗ ██║ ██████╔╝██║ ██║███████╗█████╗ ██║██║ ██║██║ ██║██╔██╗ ██║ ██╔═══╝ ██║ ██║╚════██║██╔══╝ ██║██║ ██║██║ ██║██║╚██╗██║ ██║ ╚██████╔╝███████║███████╗██║██████╔╝╚██████╔╝██║ ╚████║ ╚═╝ ╚═════╝ ╚══════╝╚══════╝╚═╝╚═════╝ ╚═════╝ ╚═╝ ╚═══╝ ≋≋≋ commander of the deep ≋≋≋  **Keyboard-first pentesting firmware for the M5Stack Cardputer-Advance** ![target](https://img.shields.io/badge/target-Cardputer--Adv-red?style=flat-square) ![platform](https://img.shields.io/badge/framework-Arduino%2FPlatformIO-blue?style=flat-square) ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square) ![features](https://img.shields.io/badge/features-163-magenta?style=flat-square) ![release](https://img.shields.io/github/v/release/GeneralDussDuss/poseidon?style=flat-square) ![version](https://img.shields.io/badge/version-0.6.3-cyan?style=flat-square) **163 attacks in your pocket — WiFi, BLE, sub-GHz, 2.4 GHz, LoRa, IR, and LAN — driven by a real QWERTY keyboard.** POSEIDON turns the M5Stack Cardputer-Advance into a keyboard-first hacking deck: type to navigate, type your parameters, and watch **Argus** — an autonomous handshake-hunting gotchi with a 96x96 mood sprite — work the airwaves while you do. Same fam"
+},
+{
+"id": "k073",
+"source": "README.md",
+"title": "👁️ Meet Argus",
+"text": "## 👁️ Meet Argus > They blinded the hundred-eyed giant by killing him. POSEIDON just gave him a new way to see. **Argus Panoptes** was the all-seeing sentinel of myth — a hundred eyes, never all closed at once, cursed to keep watch for eternity. POSEIDON carries the last of those eyes. He's a **cursed Argonian demigod** chained into the deck, his hundred eyes melted down into a single antenna, all that watching-hunger pointed at the airwaves around you. He channel-hops on instinct, learns where the prey gathers, and snares WiFi handshakes out of thin air while your Cardputer sits in your pocket — tireless, because the curse won't *let* him rest. The moods that cross his face are the curse showing through. ---"
+},
+{
+"id": "k074",
+"source": "README.md",
+"title": "🌊 New to all this? Start here",
+"text": "## 🌊 New to all this? Start here POSEIDON is a **pocket hacking gadget**. It runs on a tiny handheld with a real keyboard — the M5Stack Cardputer — and turns it into a Swiss-army knife for the invisible signals all around you. **No PC, no coding.** Flash it once and start typing. **What can it actually do?** - 📶 **WiFi** — see every network around you, test your own, map them as you walk - 📱 **Bluetooth** — find lost trackers (AirTags / Tiles), spot hidden ones following you, poke at nearby gadgets - 🚗 **Remotes & signals** — record and replay garage doors, car fobs, doorbells, smart plugs *(on stuff you own)* - 📺 **Infrared** — a universal TV remote, plus the classic \"turn off every TV in the room\" button - 🐾 **Argus** — your on-screen pet that hunts WiFi on its own and reacts with moods - 🎨 **Six looks** — flip the whole interface between six themes, matrix-green to vaporwave **Get it on your device (~2 minutes):** 1. Grab the free **M5Burner** app, *or* open the [**web installer**](https://generaldussduss.github.io/poseidon/install.html) in Chrome. 2. Search **POSEIDON** (or hit Install), plug in your Cardputer, press the button. 3. Done — it boots straight to the menu. Just start typing. > ⚠️ **Be cool.** This is for exploring *your own* stuff and learning how wireless actually works. Don't touch networks or devices you don't own — that's both uncool and illegal. <div align"
+},
+{
+"id": "k075",
+"source": "README.md",
+"title": "⌁ Want the deep technical breakdown? The nerd zone starts here. ⌁",
+"text": "### ⌁ Want the deep technical breakdown? The nerd zone starts here. ⌁ </div> ---"
+},
+{
+"id": "k076",
+"source": "README.md",
+"title": "What is this?",
+"text": "## What is this? POSEIDON is keyboard-first pentesting firmware for the **M5Stack Cardputer-Advance** (ESP32-S3, real QWERTY keyboard + 240x135 color screen). **163 features** span WiFi, Bluetooth LE, sub-GHz, 2.4 GHz, LoRa & Mesh, Infrared, LAN/network, BadUSB, and recon — all reachable by typing. It's in the same genre as Flipper Zero, Bruce, Evil-M5Project, and ESP32Marauder, but the keyboard changes everything: - **Letter-mnemonic menus** — every item has a hotkey, so you jump straight to it - **Typed parameters** — enter a channel, an SSID, a frequency directly, no thumb-stick scrolling - **Six swappable themes** + a procedural ambient motion layer painted behind every menu - **Argus** — a 96x96 mood-sprite gotchi that hunts handshakes on its own while you browse the menu Runs standalone on the Cardputer-Advance. Optional snap-on satellites extend the radio range: - **TRIDENT** — ESP32-C5 node over ESP-NOW: 5 GHz deauth, Zigbee/802.15.4 sniff, PMKID - **nRF52840 Feather** — BLE 5.0 features (proof-of-concept today, hardened in v0.7)"
+},
+{
+"id": "k077",
+"source": "README.md",
+"title": "Quick Start — Flash it",
+"text": "## Quick Start — Flash it Two ways onto the Cardputer-Advance, both browser-based, no toolchain. Pick one."
+},
+{
+"id": "k078",
+"source": "README.md",
+"title": "1. Cardputer-Advance",
+"text": "### 1. Cardputer-Advance **A) M5Burner — one-click, easiest.** Open [M5Burner](https://docs.m5stack.com/en/download), search **POSEIDON**, hit **Burn**. Done. **B) Web flasher** (Chrome / Edge / Opera). Plug the Cardputer in over USB-C and open: > **<https://generaldussduss.github.io/poseidon/install.html>** Click **Connect**, pick the serial port, **Install** — the page flashes the current factory image at offset 0x0 for you."
+},
+{
+"id": "k079",
+"source": "README.md",
+"title": "2. TRIDENT satellite (ESP32-C5)",
+"text": "### 2. TRIDENT satellite (ESP32-C5) The C5 isn't in M5Burner's chip list, so it flashes with the Espressif **esptool-js** web flasher over WebSerial. 1. Plug the C5 board into USB and open the Espressif flasher: **<https://espressif.github.io/esptool-js/>** (Chrome / Edge) 2. **Connect** and select the C5's serial port 3. Add the three TRIDENT bins from the [latest release](https://github.com/GeneralDussDuss/poseidon/releases/latest) at these offsets: | Offset | File | |---|---| | 0x2000 | bootloader | | 0x8000 | partition table | | 0x10000 | TRIDENT application | 4. **Program**. When it finishes, power-cycle the C5 — it pairs to POSEIDON over ESP-NOW automatically. > A one-click guided version of these steps also lives at **<https://generaldussduss.github.io/poseidon/flash/>**."
+},
+{
+"id": "k080",
+"source": "README.md",
+"title": "Build from source",
+"text": "### Build from source bash"
+},
+{
+"id": "k081",
+"source": "README.md",
+"title": "Cardputer (ESP32-S3) — PlatformIO",
+"text": "# Cardputer (ESP32-S3) — PlatformIO git clone https://github.com/GeneralDussDuss/poseidon.git cd poseidon pio run -t upload  The TRIDENT C5 firmware builds with **ESP-IDF** (idf.py build flash) — see the trident/ directory for its README."
+},
+{
+"id": "k082",
+"source": "README.md",
+"title": "WiFi (17)",
+"text": "### WiFi (17) Scan · Clients (all-channel + per-AP) · Deauth · Deauth All · Deauth Detector · AP Clone · Evil Portal (4 templates) · Karma · Beacon Spam · Probe Sniff · PMKID + 4-Way Handshake Capture · 2.4 GHz Spectrum · GPS Wardrive (WiGLE CSV) · Connect · **CIW Zeroclick** (157 SSID payloads: cmd injection, Log4Shell, XSS, buffer overflow)"
+},
+{
+"id": "k083",
+"source": "README.md",
+"title": "Bluetooth (16)",
+"text": "### Bluetooth (16) Scan (OUI + Apple Continuity + Fast Pair DB + GhostBLE sigdb_bt vendor lookup) · Spam (4 brands) · Bad-KB HID · Tracker Detect (AirTag/SmartTag/Tile) · Tracker Finder (Geiger) · Sniffer (CSV) · iBeacon · Clone · GATT Explorer · Flood · Karma · Sour Apple (CVE-2023-42941) · Find My Emulator · The Salty Deep (toy controller) · **Drone Remote ID** (ASTM F3411-22a UAS broadcasts) · WhisperPair (BLE probe injection)"
+},
+{
+"id": "k084",
+"source": "README.md",
+"title": "Defensive (3 new)",
+"text": "### Defensive (3 new) **Surveillance Hunter** (Flock/Raven ALPR + body-cam detector via Plume OUI tables) · **Defensive Monitor** (7-class WiFi+BLE anomaly: deauth-flood, broadcast-deauth, evil-twin, beacon-spam, WiFi-karma, BLE-spoof, BLE-flood) · **SATCOM Tracker** (baked TLE database, 14 favorited satellites — az/el/lat/lon/alt/range live, no internet)"
+},
+{
+"id": "k085",
+"source": "README.md",
+"title": "Sub-GHz — CC1101 (9)",
+"text": "### Sub-GHz — CC1101 (9) Scan/Copy (ISR capture + protocol decoder: Princeton, CAME, NICE, Linear) · Record RAW (Flipper .sub format) · Replay .sub Files · **Signal Broadcast Library** (3,190+ .sub files: cars, pranks, Tesla, home) · Spectrum Analyzer (bar + waterfall + oscilloscope) · Brute Force (Came/Nice/Linear/Chamberlain/Holtek/Ansonic) · Jammer · **Hot/Cold Signal Finder**"
+},
+{
+"id": "k086",
+"source": "README.md",
+"title": "2.4 GHz — nRF24L01+ (6)",
+"text": "### 2.4 GHz — nRF24L01+ (6) **Promiscuous ESB Sniffer** (Travis Goodspeed trick, CRC16-validated) · **MouseJack** (Logitech/Microsoft fingerprint + HID injection) · **BLE Spam** (ADV_IND via nRF24, CRC24 + whitening) · Spectrum Analyzer (WiFi/BLE/Zigbee markers) · **CW Carrier + Data Flood Jammer** (7 presets) · Hot/Cold Finder"
+},
+{
+"id": "k087",
+"source": "README.md",
+"title": "LoRa + GNSS — SX1262 (8)",
+"text": "### LoRa + GNSS — SX1262 (8) LoRa Scan (passive RX, multi-band) · Beacon TX · Meshtastic LongFast Listener · LoRa Analyzer (bar meter + waterfall + scope with live packet capture) · **Meshtastic Chat** (send + receive text) · **Meshtastic Nodes** (live roster) · **Meshtastic Page** (direct-message a node) · **Meshtastic Position** (show up as pin on other apps) · **Live GPS Fix** (baud auto-detect, background NMEA)"
+},
+{
+"id": "k088",
+"source": "README.md",
+"title": "Network Attacks (18)",
+"text": "### Network Attacks (18) Port Scan · Ping · DNS · Connect · **Responder** (LLMNR/NBT-NS → NTLM) · SSDP/UPnP Scanner · LAN Recon (ARP + port + banner + vendor) · **UART Shell** (serial terminal, auto-baud) · **Reverse TCP Tunnel** · **Telnet Honeypot** · **WiFi Dead Drop** (anonymous message board) · **Printer Detection + Raw Print** · **SSDP Poisoner** · **DHCP Starvation** · **Rogue DHCP** (STA + AP) · **Network Hijacking** (chained MitM) · **WPAD Abuse** (credential capture) · **Autodiscover Abuse** (Exchange NTLM hash capture)"
+},
+{
+"id": "k089",
+"source": "README.md",
+"title": "IR (4)",
+"text": "### IR (4) TV-B-Gone · Samsung Smart Remote (~40 buttons, full D-pad) · Multi-profile Clone (Samsung / LG / Sony) · **LED Test** (pin + polarity diagnostic, phone-camera verifiable)"
+},
+{
+"id": "k090",
+"source": "README.md",
+"title": "BadUSB (1)",
+"text": "### BadUSB (1) USB-HID payload runner with DuckyScript-lite"
+},
+{
+"id": "k091",
+"source": "README.md",
+"title": "Argus — Autonomous Gotchi",
+"text": "### Argus — Autonomous Gotchi 96x96 **mood sprite** with twelve portraits that map live to hunt state. Hunts handshakes autonomously. RL channel-picker brain persisted to SD. 4 modes: HUNT, STEALTH, SURGICAL, STORM. Bordered speech bubble, RL sparkline, TX indicator, HS flash."
+},
+{
+"id": "k092",
+"source": "README.md",
+"title": "TRIDENT — ESP32-C5 Satellite",
+"text": "### TRIDENT — ESP32-C5 Satellite ESP32-C5 companion over ESP-NOW for **5 GHz WiFi** + **802.15.4 Zigbee/Thread**. Dual-band scan, remote 5 GHz deauth, Zigbee sniff, PMKID. WS2812 NeoPixel status LED."
+},
+{
+"id": "k093",
+"source": "README.md",
+"title": "Mesh",
+"text": "### Mesh PigSync ESP-NOW presence beacon — foundation for multi-device coordination."
+},
+{
+"id": "k094",
+"source": "README.md",
+"title": "Tools (9)",
+"text": "### Tools (9) Flashlight · Stopwatch · Dice/Coin/8-Ball · Morse · MAC Randomizer · Calculator · Screen Test · SD Format · **Theme Picker** (6 palettes)"
+},
+{
+"id": "k095",
+"source": "README.md",
+"title": "Themes (6)",
+"text": "### Themes (6) | Theme | Aesthetic | |---|---| | POSEIDON | Cyberpunk cyan / magenta / purple on black — default | | MATRIX | Souped-up hacker green-on-black + matrix rain ambient | | E-INK | Paper white, daytime / outdoor / minimal | | SYNTHWAVE | Vaporwave hot magenta + pastel cyan on midnight grape — 80s night-sky vibe | | PHANTOM | Deep violet / lavender — visually cohesive with the phantom-* tool suite | | BLOOD | fsociety tactical red on pure black — reads as \"device is attacking\" | Plus a procedural ambient motion layer (ui_ambient_tick) painted behind every menu draw, theme-aware. Live preview at System → Ambient Preview. Theme-matched screensavers kick in at 2 min idle."
+},
+{
+"id": "k096",
+"source": "README.md",
+"title": "Signature Features",
+"text": "## Signature Features **Argus — the cursed all-seeing one.** A hundred-eyed demigod bound into the deck (lore up top ↑), Argus is an autonomous gotchi with a 96x96 mood sprite — twelve portraits (Watching, Pleased, Annoyed, Calculating, Old Fury, Sleeping…), each one the curse showing through as it reacts in real time to what it's catching. Under the cute face is a reinforcement-learning channel picker that learns which channels pay off and persists its brain to SD. Leave POSEIDON in your pocket and Argus keeps hunting handshakes across HUNT / STEALTH / SURGICAL / STORM modes. **TRIDENT — snap on a second band.** A pocket-sized ESP32-C5 satellite that pairs to POSEIDON over ESP-NOW and adds the radios the S3 can't do alone: **5 GHz deauth**, **Zigbee / 802.15.4 sniffing**, and **PMKID** capture. Flash it once with the web flasher, power it up, and it auto-pairs — your Cardputer stays the keyboard, TRIDENT becomes the antenna. **SaltyJack — a pocket LAN attack arsenal.** Drop POSEIDON onto a network (WiFi STA or wired W5500) and run the kind of attacks that usually need a laptop and a Pi: **DHCP starvation**, **rogue DHCP**, **Responder** (LLMNR/NBT-NS → NTLM), **WPAD** and **Autodiscover** credential capture, plus an **on-device NTLMv2 cracker**. A faithful port that proudly credits [@7h30th3r0n3](https://github.com/7h30th3r0n3)'s RaspyJack and Evil-M5Project — go star both. **"
+},
+{
+"id": "k097",
+"source": "README.md",
+"title": "Hardware",
+"text": "## Hardware | Component | Spec | |---|---| | MCU | ESP32-S3 @ 240 MHz | | Display | 1.14\" ST7789v2 240x135 | | Keyboard | TCA8418 I2C matrix (Adv) | | Radio | WiFi 4 + BLE 5.0 | | IR | transmit-only LED | | USB | native USB-C (HID + CDC) | | Storage | microSD |"
+},
+{
+"id": "k098",
+"source": "README.md",
+"title": "Supported Hats (one at a time)",
+"text": "### Supported Hats (one at a time) | Hat | Chips | Features | |---|---|---| | M5Stack CAP-LoRa1262 | SX1262 + ATGM336H | LoRa 868/915 MHz + GPS | | PINGEQUA Hydra RF Cap 424 | CC1101 + nRF24L01+ | Sub-GHz 300-928 MHz + 2.4 GHz | | ESP32-C5 (custom node) | ESP32-C5 | 5 GHz WiFi + 802.15.4 |"
+},
+{
+"id": "k099",
+"source": "README.md",
+"title": "Planned: MIMIR Drop-Box (future)",
+"text": "### Planned: MIMIR Drop-Box (future) **MIMIR** is a companion pentest drop-box targeting a **Banana Pi BPI-M4 Zero** (Allwinner H618, 4GB RAM). Design goal: POSEIDON connects via USB-C as the pocket-mode control client — no wireless link, pure opsec. MIMIR would run autonomous handshake hunting, cracking, and post-exploitation while the Cardputer stays the interactive UI. **Not implemented yet — aspirational roadmap item, no client code in POSEIDON today.** | MIMIR Component | Detail | |---|---| | SBC | BPI-M4 Zero (quad A53, 4GB LPDDR4) | | Attack Radio | Alfa AWUS036ACM (MT7612U, dual-band) | | UPS | Geekworm X306 (18650, MAX17040 gauge) | | Display | Waveshare 4\" Spectra 6 e-ink (640x400) | | Sidecar | DAVEY JONES (ESP32-C6 + SX1262 LoRa) | | Control | POSEIDON Cardputer via USB-CDC |"
+},
+{
+"id": "k100",
+"source": "README.md",
+"title": "Controls",
+"text": "## Controls | Key | Action | |---|---| | letter | jump to menu item | | ; / . | scroll up / down | | ENTER | select / confirm | | = | info panel | |    | back / ESC | | + / - | tune frequency (in RF features) | | A | auto-scan (in scan features) | | S | save capture | | R | replay / reset |"
+},
+{
+"id": "k101",
+"source": "README.md",
+"title": "Comparison",
+"text": "## Comparison | | POSEIDON | Flipper Zero | Evil-M5 | Marauder | Bruce | |---|---|---|---|---|---| | Keyboard | native QWERTY | D-pad | native QWERTY | none | varies | | Features | 163 | 50+ | 87 | 30+ | 40+ | | Sub-GHz | CC1101 | CC1101 | CC1101 | none | CC1101 | | 2.4 GHz RF | nRF24 | none | none | none | nRF24 | | LoRa | SX1262 | none | none | none | SX1262 | | 5 GHz WiFi | C5 node | none | none | none | none | | Zigbee | C5 node | none | none | none | none | | MouseJack | full suite | none | none | none | partial | | BLE Spam (nRF24) | CRC24+whiten | none | none | none | none | | Protocol Decoder | Princeton/CAME/NICE/Linear | 40+ | none | none | partial | | Signal Library | 3,190+ .sub | community | none | none | community | | DHCP Attacks | starve+rogue+hijack | none | starve+rogue | none | none | | WPAD/Autodiscover | NTLM capture | none | yes | none | none | | CIW Zeroclick | 157 payloads | none | yes | none | none | | Gotchi/Pet | Argus (RL brain) | Dolphin | none | none | none | | Themes | 6 palettes | 1 | 1 | 1 | 1 |"
+},
+{
+"id": "k102",
+"source": "README.md",
+"title": "Massive Shoutouts",
+"text": "## Massive Shoutouts - **[@7h30th3r0n3](https://github.com/7h30th3r0n3)** → [Evil-M5Project](https://github.com/7h30th3r0n3/Evil-M5Project) + [RaspyJack](https://github.com/7h30th3r0n3/Raspyjack) — **SaltyJack submenu** (DHCP Starve, Rogue DHCP, Responder, WPAD, NTLMv2 crack), plus WPAD, Autodiscover, CIW, honeypot, dead drop, SSDP poisoner all ported from his work. Hands down the single biggest code-inspiration for POSEIDON's LAN/creds side. Go star both repos. - **[@JesseCHale](https://github.com/JesseCHale)** → [HaleHound-CYD](https://github.com/JesseCHale/HaleHound-CYD) — CC1101 init sequence reference - **[@insecurityofthings](https://github.com/insecurityofthings)** → [uC_mousejack](https://github.com/insecurityofthings/uC_mousejack) — MouseJack ESB sniffer + HID injection protocol - **[@0ct0sec](https://github.com/0ct0sec)** → [M5PORKCHOP](https://github.com/0ct0sec/M5PORKCHOP) — PigSync mesh, wardrive, spectrum concepts - **[@justcallmekoko](https://github.com/justcallmekoko)** → [ESP32Marauder](https://github.com/justcallmekoko/ESP32Marauder) — WiFi promisc attack patterns - **[@bmorcelli](https://github.com/bmorcelli) / [@pr3y](https://github.com/pr3y)** → [Bruce](https://github.com/pr3y/Bruce) — CC1101/nRF24 feature reference - **[@ECTO-1A](https://github.com/ECTO-1A)** → [AppleJuice](https://github.com/ECTO-1A/AppleJuice) — CVE-2023-42941 research - **COSIC — KU Leu"
+},
+{
+"id": "k103",
+"source": "README.md",
+"title": "Roadmap",
+"text": "## Roadmap Full release history in [CHANGELOG.md](CHANGELOG.md). Current shipped version is **v0.6.3** (sub-GHz analyzer visual modes — radar / persistence / sonar, full-screen waterfall, Argus 5 GHz hunting via TRIDENT, Mass Storage, and a batch of stability fixes, on top of the v0.6.1 baked sub-GHz library + ON-AIR indicator). What's next:"
+},
+{
+"id": "k104",
+"source": "README.md",
+"title": "v0.7 — nRF52840 BLE 5.0 dongle (planned)",
+"text": "### v0.7 — nRF52840 BLE 5.0 dongle (planned) The nRF52840 is the real BLE chip — full BLE 5.0 with long range, coded PHY, and direction finding. The four nRF52 features that landed in v0.6.0 ride an Adafruit Feather as proof-of-concept; v0.7 hardens the path with a dedicated dongle. - [ ] nRF52840 dongle as BLE sniffer (USB-CDC bridge from Cardputer) - [ ] Full BLE advertisement capture + decode (not just nRF24 fake-BLE) - [ ] BLE connection hijacking (MITM via nRF52 + NimBLE coordination) - [ ] BLE direction finding (AoA/AoD with multi-antenna nRF52) - [ ] BLE long-range attacks (Coded PHY S=8, 4x range) - [ ] Zigbee via nRF52840's 802.15.4 radio (alternative to TRIDENT) - [ ] Thread border router attack surface enumeration - [ ] nRF52840 firmware flasher from Cardputer SD - [ ] Combined attack: nRF24 MouseJack + nRF52 BLE MITM simultaneously"
+},
+{
+"id": "k105",
+"source": "README.md",
+"title": "Aspirational — MIMIR Drop-Box (BPI-M4 Zero)",
+"text": "### Aspirational — MIMIR Drop-Box (BPI-M4 Zero) **Not started.** A future companion pentest drop-box on a Banana Pi BPI-M4 Zero running hcxdumptool + on-device cracker + Bjorn orchestrator. POSEIDON would act as the pocket-mode USB-C control client. No code exists today. - [ ] MIMIR daemon: hcxdumptool wrapper - [ ] On-device WPA2 dictionary cracker (dual-core PBKDF2-SHA1) - [ ] Bjorn orchestrator port — handshake → crack → auto-exploit pivot - [ ] FENRIR RL policy head — autonomous exploit strategy selection - [ ] Armbian H618 image recipe (one-flash deploy) - [ ] MIMIR ↔ POSEIDON file transfer - [ ] GPS-tagged attack logging with WiGLE integration"
+},
+{
+"id": "k106",
+"source": "README.md",
+"title": "v0.7 — On-Device Intelligence",
+"text": "### v0.7 — On-Device Intelligence - [ ] On-device WPA2 cracker (handshake → PBKDF2-SHA1, dual-core ESP32-S3) - [ ] SSH shell via libssh_esp32 (interactive remote terminal) - [ ] LDAP domain dump (hand-rolled BER/DER LDAP client) - [ ] Web crawler (HTTP spider + link extraction for internal web apps) - [ ] SIP attack suite (scan/enumerate/spoof/flood/ring-all) - [ ] CCTV toolkit (camera discovery + default credential spray) - [ ] Skimmer detector (BLE OUI blocklist for payment card skimmers) - [ ] Wall of Flipper (detect + counter-spam nearby Flipper Zeros) - [ ] Pwnagotchi beacon spam (fake peer broadcasts) - [ ] Open WiFi dashboard (association + internet connectivity test) - [ ] UPnP NAT exploitation (AddPortMapping for firewall punching)"
+},
+{
+"id": "k107",
+"source": "README.md",
+"title": "Ongoing",
+"text": "### Ongoing - [ ] More .sub signal library contributions (community PRs welcome) - [ ] Theme community — user-submitted color palettes - [ ] DuckyScript full parser (not just -lite) - [ ] Flipper .sub protocol-encoded format support (not just RAW) - [ ] KeeLoq rolling code analysis (manufacturer key database) - [ ] SD card USB mass storage mode (export captures without pulling card) - [ ] ESP-NOW encrypted mesh (AES-256 between POSEIDON nodes) - [ ] CI/CD: PlatformIO GitHub Actions build + auto-release .bin"
+},
+{
+"id": "k108",
+"source": "README.md",
+"title": "Legal",
+"text": "## Legal This is for **authorized security testing, research, and education only**. You are responsible for complying with all applicable laws. Do not use against networks or devices without explicit authorization. MIT License. Take it, fork it, improve it. --- <div align=\"center\">  ≋≋≋≋≋ ≋≋≋≋≋ ≋≋≋≋≋ ≋≋≋≋≋ ≋≋≋≋≋ ≋≋≋≋≋ ≋≋ ≋≋ ≋≋ ≋≋ ≋≋ ≋≋ ≋≋ ≋≋ ≋≋ ≋≋ ≋≋ ≋≋ ≋ ≋ ≋ ≋ ≋ ≋ ≋  *commander of the deep* </div>"
+},
+{
+"id": "k109",
+"source": "c5_node/README.md",
+"title": "POSEIDON C5 Node",
+"text": "# POSEIDON C5 Node Companion firmware for the ESP32-C5. The C5 is the only Espressif chip with: - **5 GHz WiFi** (2.4 + 5, 802.11ax) - **802.15.4** (Zigbee / Thread) This firmware turns a C5 into a remote radio for POSEIDON (running on the Cardputer's S3). Communication happens over ESP-NOW — the C5 listens for command frames from POSEIDON, executes the requested scan or attack on its native radio, and streams results back."
+},
+{
+"id": "k110",
+"source": "c5_node/README.md",
+"title": "Protocol (over PigSync ESP-NOW)",
+"text": "## Protocol (over PigSync ESP-NOW)  struct posei_msg_t { uint32_t magic; // 0x504F5345 \"POSE\" uint8_t version; // 3 uint8_t type; // see POSEI_TYPE_* uint16_t seq; uint8_t payload[230]; uint8_t payload_len; } __packed;  Types: | Type | Name | Direction | Payload | |------|------|-----------|---------| | 1 | HELLO | both | node name, heap, gps | | 10 | CMD_PING | S3→C5 | — | | 11 | CMD_SCAN_5G | S3→C5 | duration_ms | | 12 | CMD_SCAN_ZB | S3→C5 | channel or 0xFF for hop | | 13 | CMD_SCAN_2G | S3→C5 | duration_ms | | 14 | CMD_DEAUTH_5G | S3→C5 | bssid + channel | | 15 | CMD_STOP | S3→C5 | — | | 20 | RESP_PONG | C5→S3 | — | | 21 | RESP_AP_BATCH | C5→S3 | count + array of APs | | 22 | RESP_ZB_FRAME | C5→S3 | pan id + src + dst | | 23 | RESP_STATUS | C5→S3 | last_cmd + ok flag |"
+},
+{
+"id": "k111",
+"source": "c5_node/README.md",
+"title": "Building",
+"text": "## Building Requires ESP-IDF v5.2 or newer (first version with C5 support). This firmware builds against v5.5.4. bash . $IDF_PATH/export.sh cd c5_node idf.py set-target esp32c5 idf.py build idf.py -p /dev/ttyUSB0 flash monitor"
+},
+{
+"id": "k112",
+"source": "c5_node/README.md",
+"title": "Status",
+"text": "## Status Shipped and hardware-verified (protocol **v3**). Implements HELLO/PING, 5 GHz scan, **5 GHz deauth**, **PMKID capture**, and **Zigbee / 802.15.4 sniff**, all driven from POSEIDON over ESP-NOW, plus 2.4 GHz scan and GPS passthrough. Known limitation: full 4-way handshake capture over ESP-NOW is constrained by the 230-byte payload (large EAPOL frames must be fragmented) — 5 GHz scan, PMKID, and deauth are unaffected."
+},
+{
+"id": "k113",
+"source": "docs/hardware.html",
+"title": "Hardware",
+"text": "Hardware — POSEIDON 🔱 POSEIDON [LOAD] hardware.html OK HARDWARE · base + 4 hats P POSEIDON Arsenal Codex Hardware Roadmap Install Testers Credits Legal GitHub 02 // HARDWARE Four Hats. Every Frequency. Now with Wired. POSEIDON runs on the M5Stack Cardputer-Adv and supports swappable hats — one at a time. Pick the mission's tool. v0.4 adds a W5500 SPI-to-Ethernet hat that unlocks full RaspyJack parity over a wired cable. [HW] mcu= esp32-s3 hats= 4 radios= wifi+ble+lora+cc1101+nrf24+c5 wired= w5500 ▸ Cardputer-Adv BASE MCU ESP32-S3 @ 240 MHz Display 1.14\" ST7789 240×135 Keyboard TCA8418 I²C QWERTY Radio WiFi 4 + BLE 5.0 USB Native USB-C (HID + CDC) Storage microSD + 8MB flash Audio I²S speaker + PDM mic CAP-LoRa1262 HAT LoRa SX1262 (433/868/915 MHz) GN"
+},
+{
+"id": "k114",
+"source": "docs/hardware.html",
+"title": "Hardware",
+"text": "+ PDM mic CAP-LoRa1262 HAT LoRa SX1262 (433/868/915 MHz) GNSS ATGM336H GPS (NMEA auto-baud) Antenna RP-SMA external Bus SPI (shared with SD) Use Wardrive, LoRa scan, Meshtastic leaf-node Hydra RF Cap 424 HAT Sub-GHz CC1101 (300–928 MHz) 2.4 GHz nRF24L01+ (promisc ESB + HID) Vendor PINGEQUA Bus SPI (shared with SD) Use Signal capture/replay, MouseJack, BLE spam via nRF24 ESP32-C5 Node SATELLITE WiFi 5 GHz + 2.4 GHz dual-band 802.15.4 Zigbee / Thread Link ESP-NOW mesh to Cardputer Form factor Remote satellite (USB-powered) Use 5G scan/deauth, Zigbee sniff, Thread enum W5500 SPI&thinsp;⇄&thinsp;Ethernet NEW · RJ45 PHY WIZnet W5500 10/100 full-duplex Bus SPI (shared FSPI w/ SD) Stack lwIP via Arduino Ethernet — transport-agnostic netif Unlocks Full Rasp"
+},
+{
+"id": "k115",
+"source": "docs/hardware.html",
+"title": "Hardware",
+"text": "rduino Ethernet — transport-agnostic netif Unlocks Full RaspyJack parity on Cardputer — the SaltyJack suite (DHCP starve, rogue DHCP, Responder, WPAD, NTLM harvest) runs over wired lwIP instead of WiFi STA. Why wired Wired gets you past every PMF / WPA3 / corporate 802.1X defense that kills the wireless path. Plug in, own the broadcast domain. HAT PIN SHARING How the hats share GPIO Only one hat at a time. The keyboard on I²C (TCA8418) frees GPIO 3–7 and 13/15 so hats can claim them without fighting the keyboard scan matrix. GPIO map G3 LoRa RST · held LOW at boot to keep SX1262 BUSY high-Z during M5GFX hat autodetect G4 LoRa DIO1 · shared with nRF24 CE on Hydra hat G5 LoRa NSS (SPI) · shared with CC1101 GDO0 on Hydra hat G6 LoRa BUSY · shared with n"
+},
+{
+"id": "k116",
+"source": "docs/hardware.html",
+"title": "Hardware",
+"text": "d with CC1101 GDO0 on Hydra hat G6 LoRa BUSY · shared with nRF24 CS on Hydra hat G7 GPS RX (NMEA input) on LoRa hat G13 GPS TX (LoRa hat) · shared with CC1101 CS on Hydra hat (gps_end() releases before CC1101 begin) G14 SPI MOSI (shared across SD + every hat) G39/G40 SPI MISO / SCK ⟠ PART OF THE SUITE THE SUITE FACELESS (c) 2026 POSEIDON - commander of the deep - MIT"
+},
+{
+"id": "k117",
+"source": "docs/install.html",
+"title": "Install / flashing",
+"text": "Install — POSEIDON =0.6 directly (lazy-loaded on click) instead. Same plan/offsets as docs/flash/index.html and manifest-trident-c5.json. --> 🔱 POSEIDON [LOAD] install.html OK INSTALL · two devices P POSEIDON Arsenal Codex Hardware Roadmap Install Testers Credits Legal GitHub 06 // DEPLOYMENT Flash POSEIDON You're about to bring your gear to life. There are two devices here — the Cardputer is the main event, and the TRIDENT C5 is an optional add-on. Pick your device below and follow the numbered steps. Most people are done in under two minutes. [FLASH] cardputer= esp32-s3 trident= esp32-c5 · optional version= v0.6.3 ▸ DEVICE 1 · MAIN · M5STACK CARDPUTER-ADVANCE · ESP32-S3 🔱 The Cardputer This is the brain of POSEIDON — the handheld you'll actually ca"
+},
+{
+"id": "k118",
+"source": "docs/install.html",
+"title": "Install / flashing",
+"text": "s is the brain of POSEIDON — the handheld you'll actually carry. Flashing takes one click. Grab a USB-C cable, plug it in, and let's go. ★ EASIEST · RECOMMENDED FOR EVERYONE Option A — M5Burner (one click) M5Burner is M5Stack's free official flasher. POSEIDON is right there in the list — no files to download, no offsets to remember. Download M5Burner from docs.m5stack.com/download and open it. In the search box, type POSEIDON . Plug your Cardputer in with a USB-C cable. Click Burn . That's it — wait for the green bar, and you're done. 🎉 M5Burner picks the port and version for you automatically. New releases ( v0.6.3 and up) show up the moment they're tagged. Option B — Flash in your browser Prefer not to install anything? Flash straight from Chrome o"
+},
+{
+"id": "k119",
+"source": "docs/install.html",
+"title": "Install / flashing",
+"text": "Prefer not to install anything? Flash straight from Chrome or Edge using WebSerial. Plug the Cardputer in, hit the button, pick its port, and watch it go. WEB FLASHER · CHROME / EDGE Plug in via USB-C → click → choose the Cardputer's serial port → done in ~30 s. ▸ FLASH CARDPUTER This browser can't flash — open this page in Chrome or Edge. Web flashing needs HTTPS (use the live site, not a local file). ⚡ FIRST BOOT Unplug, plug back in — POSEIDON boots straight to the main menu. From here, the keyboard drives everything : arrow keys to move, Enter to select, and you're inside. Go explore. 🌊 DEVICE 2 · OPTIONAL ADD-ON · ESP32-C5 🛰 The TRIDENT C5 Satellite OPTIONAL — ONLY IF YOU HAVE A C5 BOARD TRIDENT is an optional sidekick. If you have an ESP32-C5 b"
+},
+{
+"id": "k120",
+"source": "docs/install.html",
+"title": "Install / flashing",
+"text": "D TRIDENT is an optional sidekick. If you have an ESP32-C5 board, flash it to unlock 5 GHz work, Zigbee sniffing, and PMKID capture — beamed back to the Cardputer over ESP-NOW. Don't have a C5? Skip this whole section; the Cardputer is fully loaded on its own. Flash it in your browser — one click Same deal as the Cardputer: plug the C5 in, hit the button, pick its port, and watch it go. Runs entirely in Chrome or Edge over WebSerial — no install, no offsets to type. The three images go on automatically. WEB FLASHER · CHROME / EDGE Plug in via USB-C → click → choose the C5's serial port → ~1–2 min, leave it plugged in. If it won't connect, hold BOOT (G0) while you click. ▸ FLASH TRIDENT C5 This browser can't flash — open this page in Chrome or Edge. W"
+},
+{
+"id": "k121",
+"source": "docs/install.html",
+"title": "Install / flashing",
+"text": "is browser can't flash — open this page in Chrome or Edge. Web flashing needs HTTPS — use the live site, not a local file. Prefer the command line, or on Firefox/Safari? The three .bin files and a manual route are under Advanced below. ADVANCED — manual flash (CLI / other browsers) Flash from Espressif's own WebSerial tool at espressif.github.io/esptool-js (Connect → add the three files at the addresses below → Program), or with Python esptool : THREE FILES · from docs/flash/bin/trident-c5/ 0x2000 bootloader.bin 0x8000 partition-table.bin 0x10000 poseidon_c5_node.bin # set each address in its Flash Address box, then Program Grab them from flash/bin/trident-c5/ or the latest release . There's also a standalone two-target flasher at /flash/ . 💡 PICK TH"
+},
+{
+"id": "k122",
+"source": "docs/install.html",
+"title": "Install / flashing",
+"text": "also a standalone two-target flasher at /flash/ . 💡 PICK THE RIGHT PORT The C5 shows up as a generic \"USB Serial Device\" — exactly like the Cardputer does. If both are plugged in, unplug the Cardputer while you flash the C5 so there's no guessing which port is which. Once flashed, the C5 pairs with POSEIDON automatically over ESP-NOW and appears under C5 → Status . STUCK? · QUICK FIXES Troubleshooting No port shows up? Install the USB serial driver (CH340 / CP210x) for your board, then unplug and replug. Try a different USB-C cable — some are charge-only and carry no data. Web flasher greyed out or missing the button? Use Chrome or Edge — Firefox and Safari don't support WebSerial yet. Won't connect / flash fails? Hold the BOOT (G0) button while you"
+},
+{
+"id": "k123",
+"source": "docs/install.html",
+"title": "Install / flashing",
+"text": "t connect / flash fails? Hold the BOOT (G0) button while you plug in or hit Connect to force download mode, then release and flash again. ⚠ CAN'T BRICK IT Boots to black or locks up? Don't panic — hold BOOT (G0) during power-on to force download mode, then flash again. Every ESP32 has this escape hatch, so you can't permanently brick a Cardputer or a C5 from software. Worst case, you just re-flash. 🔱 ⟠ PART OF THE SUITE THE SUITE FACELESS (c) 2026 POSEIDON - commander of the deep - MIT 🔱 Flash TRIDENT C5 ESP32-C5 · WebSerial · do not unplug while flashing Requesting serial port… Close"
+},
+{
+"id": "k124",
+"source": "docs/legal.html",
+"title": "Legal / authorized use",
+"text": "Legal & Responsible Use — POSEIDON LEGAL · authorized testing only P POSEIDON Arsenal Codex Hardware Roadmap Install Testers Credits Legal GitHub ★ · LEGAL & RESPONSIBLE USE Read this before you transmit. ★ The one rule POSEIDON can receive and (when explicitly armed) transmit on regulated radio bands and can simulate networks. Use it only on devices and networks you own or have written authorization to test. Unauthorized use is a crime in most jurisdictions — and not the point of this project. Your responsibilities Authorization. Get explicit, written permission before testing any system, device, vehicle, or network you don't own. \"I was just curious\" is not a defense. Radio regulations. Transmitting on sub-GHz / ISM / 2.4 GHz / 5 GHz / LoRa bands i"
+},
+{
+"id": "k125",
+"source": "docs/legal.html",
+"title": "Legal / authorized use",
+"text": "ansmitting on sub-GHz / ISM / 2.4 GHz / 5 GHz / LoRa bands is regulated. You are responsible for complying with your local regime — e.g. FCC (US), Ofcom (UK), ETSI/CE (EU), or your national equivalent — including band, power, and duty-cycle limits. Some operations require a licence. Jamming and deauthentication against networks you don't control are illegal in most places. Safety-critical systems. Never target systems where interference could endanger people or property — vehicles in motion, medical, industrial, aviation, emergency. Data you capture. Handshakes, hashes, and Fast-Pair probes can contain other people's credentials and personal data. Handle, store, and dispose of captures lawfully; don't retain or share data you're not authorized to hol"
+},
+{
+"id": "k126",
+"source": "docs/legal.html",
+"title": "Legal / authorized use",
+"text": "lly; don't retain or share data you're not authorized to hold. Built-in safety posture POSEIDON ships safety-by-design: transmit-capable actions are gated behind a deliberate arm step, defaults are conservative, and identifying defaults are suppressed. Do not remove or weaken these gates. They exist to prevent accidental or unattended transmission — they protect you as much as anyone nearby. Responsible disclosure Tools like the WhisperPair probe (CVE-2025-36911) are built on top of published research and are intended as demonstration and self-check tools. If you discover a vulnerability using POSEIDON, follow coordinated disclosure: report it to the vendor and give them time to fix it before going public. Credit the researchers whose work you build"
+},
+{
+"id": "k127",
+"source": "docs/legal.html",
+"title": "Legal / authorized use",
+"text": "e going public. Credit the researchers whose work you build on — see the Credits page. License & no warranty POSEIDON is released under the MIT License (see the LICENSE on GitHub). It is provided \"as is\", without warranty of any kind . The authors are not liable for misuse or for any damage arising from use of this software. By using POSEIDON you accept full responsibility for operating it lawfully and ethically. Not legal advice. Laws vary by country and change over time — when in doubt, consult a qualified professional and your local regulator before transmitting. ⟠ PART OF THE SUITE THE SUITE FACELESS (c) 2026 POSEIDON - commander of the deep - MIT"
+},
+{
+"id": "k128",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": "Roadmap — POSEIDON 🔱 POSEIDON [LOAD] roadmap.html OK ROADMAP · v0.6.3 current P POSEIDON Arsenal Codex Hardware Roadmap Install Testers Credits Legal GitHub 03 // ROADMAP Where we've been. Where we're going. Six tagged releases, one landed companion (TRIDENT — the ESP32-C5 satellite over ESP-NOW). Below is everything shipped and what's queued next. [TIMELINE] shipped= v0.1 → v0.6.3 current= v0.6.3 next= v0.7 nRF52840 BLE 5.0 dongle after= v0.8 on-device WPA2 crack ▸ v0.1.0 2026-04-14 Shipped First tagged release — the foundation Every radio band brought online. Full menu shell with slide transitions. Hokusai splash. 90+ features across WiFi, BLE, sub-GHz, LoRa, nRF24, IR, net attacks, BadUSB, theme engine, Argus gotchi. Initial C5 satellite scaffoldi"
+},
+{
+"id": "k129",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": ", theme engine, Argus gotchi. Initial C5 satellite scaffolding (not yet end-to-end — that lands in v0.5). v0.2.0 2026-04-17 Shipped Deauth correctness + LoRa stability Two back-to-back audits landed simultaneously — deauth wasn't kicking clients, LoRa was hard-rebooting the device. Both classes of bug found, fixed, reviewed, shipped. Deauth: addr1 bug fixed across 4 sites + Argus, shared frame builder with correct 802.11-2016 Sequence Control encoding Deauth + disassoc pair with per-frame seq increment, client sniffer feeding alternating broadcast/unicast rounds PMF / WPA3 / WPA2-Enterprise warning + driver-level TX drop counter LoRa bandwidth unit fixed (kHz directly, not divided by 1000) PI4IOE antenna switch driven directly via M5.In_I2C , bypassi"
+},
+{
+"id": "k130",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": "I4IOE antenna switch driven directly via M5.In_I2C , bypassing a broken M5 expander API that was LoadProhibited-panic'ing the device Null-radio boot-loop eliminated — lora_radio() returns a dummy instead of esp_restart() LoRa spectrum analyzer rewritten — no more 210-retune sweep per frame, real packet capture with RSSI/SNR/size overlay v0.3.0 Shipped Released Meshtastic node + SFX engine POSEIDON becomes a full Meshtastic participant — send, receive, page, show up on the mesh. Hand-rolled minimal protobuf for MeshPacket / Data / User / Position AES-CTR-128 with default LongFast PSK (nonce counter at bytes 12-15 — byte-exact vs fw v2.7.23) Broadcast text + direct-to-node (paging) + position reporting Live node roster with long/short names, SNR, hops,"
+},
+{
+"id": "k131",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": "reporting Live node roster with long/short names, SNR, hops, last-seen, GPS pin Tron-style cyberpunk SFX engine with NVS-persisted volume (boot jingle, menu clicks, attack cues, warn/bad) SaltyJack phase-1: DHCP Starvation shipped standalone v0.4.0 Shipped 2026-04-19 Released Deauth actually lands · SaltyJack · NimBLE 2.x · pioarduino IDF 5.5.4 The release where deauth frames finally TX on-air, a full RaspyJack LAN arsenal lands, and the whole BLE stack migrates to NimBLE 2.x. Deauth on-air. The real blocker was ieee80211_raw_frame_sanity_check inside libnet80211.a — not the interface, not the mode, not the silent-AP pattern. Bypassed with a 5-line link-time symbol override + one linker flag. Credit to GANESH-ICMC for the original trick. Verified on-"
+},
+{
+"id": "k132",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": ". Credit to GANESH-ICMC for the original trick. Verified on-device: 800/800 frames TX'd, target kicks in seconds. SaltyJack = RaspyJack port. Direct port of @7h30th3r0n3 's RaspyJack + Evil-M5Project — DHCP Starve, Rogue DHCP (STA + AP), Responder (LLMNR/NBT-NS/SMB NTLMv2), WPAD PAC harvest, on-device NTLMv2 cracker. Custom pirate UX, 16×16 sprite pack, full-screen boot splash. Press j . NimBLE 2.x migration. 1.4.1 crashed at BLE init on Core 3.3.8. Bumped to 2.3.9 and migrated 13 BLE feature files — callbacks take NimBLEConnInfo& , scan signatures changed, HID accessors renamed, et al. Platform on pioarduino. platform-espressif32@55.03.38 (Arduino 3.3.8 / IDF 5.5.4) + bruce_esp32-arduino-libs-20260123 for stack parity with Bruce. W5500 SPI Ethernet"
+},
+{
+"id": "k133",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": "bs-20260123 for stack parity with Bruce. W5500 SPI Ethernet hat. Wired RJ45 for full RaspyJack parity — SaltyJack runs over lwIP's transport-agnostic netif , bypassing WiFi STA / PMF / 802.1X. Build runs from WSL2 / native Linux (pioarduino's installer trips on Git Bash MSys markers). v0.4.3 Shipped 2026-04-20 Shipped Sub-GHz actually transmits · WhisperPair CVE probe · Jam Detect · HUNT bundle Four consecutive drops across two days. Record / replay / broadcast finally fire the radio (native rmt_tx.h / rmt_rx.h ). WhisperPair CVE-2025-36911 detector with real secp256r1 ECDH lands (credit COSIC @ KU Leuven). Sub-GHz Jam Detect RSSI monitor ships as peer to the WiFi deauth detector. Unified Tools → Hunt submenu. TRIDENT protocol grows status + loot com"
+},
+{
+"id": "k134",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": "ols → Hunt submenu. TRIDENT protocol grows status + loot commands. Meshtastic !poseidon command parser. Scan CSV export everywhere. Cross-feature state handoff (wardrive → Triton / PMKID). In-feature ? help. Theme persistence + WhisperPair scan fixes. v0.5.0 Shipped 2026-04-21 Shipped TRIDENT (C5 satellite) · 5 GHz deauth · LoRa end-to-end · flicker killed · M5 Launcher The ESP32-C5 companion node ( TRIDENT ) lands as a proper peripheral over ESP-NOW — 5 GHz deauth targeted + broadcast (binary patch bypassing ieee80211_raw_frame_sanity_check in libnet80211.a ), 802.15.4 Zigbee sniffer, 5 GHz PMKID capture, dual-band WiFi scan with auth column. One-click WebSerial flasher on the install page ( esp-web-tools@10.2.0 ). LoRa SX1262 now works end-to-end o"
+},
+{
+"id": "k135",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": "( esp-web-tools@10.2.0 ). LoRa SX1262 now works end-to-end on the CAP-LoRa1262 hat: BUSY pin wired into RadioLib, shared HSPI with SD, antenna switch order fixed, setCurrentLimit(140) . Every live screen ( wifi_scan , ble_scan , wifi_clients , wifi_spectrum , the C5 dashboards) is flicker-free — state caching across the board. bmorcelli Launcher integration ships as a second PIO env ( cardputer-launcher ) that links into ota_0 at 0x170000 . v0.6.0 Shipped 2026-05-28 Shipped Argus mood sprite · six themes · ambient motion · raw-IDF AP path · BLE cooperative tick · C5 protocol v3 The biggest single drop since 0.5.0. Argus finally has a real character — a 96x96 mood sprite with twelve mood portraits (Watching, Pleased, Annoyed, Resigned, Calculating, Ol"
+},
+{
+"id": "k136",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": "raits (Watching, Pleased, Annoyed, Resigned, Calculating, Old Fury, Sleeping…) that maps live to hunt state. Six themes ship (POSEIDON / MATRIX / E-INK / SYNTHWAVE / PHANTOM / BLOOD), seven idle screensavers keyed off the active theme, carousel menu style with cyberpunk pictographs, ambient procedural motion painted under every menu draw. WiFi raw-TX moves to STA mode with a -Wl,-zmuldefs linker override of ieee80211_raw_frame_sanity_check (Bruce-libs-safe). Portal gets a real raw-IDF AP recipe that actually broadcasts. BLE features (Sour Apple, Spam, Karma, Flood, FindMy) move from broken xTaskCreate to a cooperative tick pattern that actually fires. IR LED polarity finally corrected (active-HIGH, not active-LOW), full Samsung Smart Remote keymap (~"
+},
+{
+"id": "k137",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": "e-HIGH, not active-LOW), full Samsung Smart Remote keymap (~40 buttons) verified against Flipper-IRDB. New features: AP Signal Test, Evil Twin, BLE BlueDucky, SATCOM Tracker (SGP4 + baked TLEs), Drone Remote ID (ASTM F3411), Surveillance Hunter (Flock + Raven detection), Defensive Monitor, four nRF52 hat features. C5: protocol v3 with 5G scan terminator fix. Removed: OTA Update (M5Burner / web flasher cover the same ground without partition complexity). v0.6.1 Shipped 2026-05-29 Shipped Built-in sub-GHz library (40 baked signals) · ON-AIR TX indicator · Hydra hat pre-flight Forty baked OOK signals ship with the firmware — no SD recordings required. Tesla Charge Port + Frunk, garage codes (Princeton / CAME / NICE / Linear / Holtek / Multicode / Stanle"
+},
+{
+"id": "k138",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": "inceton / CAME / NICE / Linear / Holtek / Multicode / Stanley / Liftmaster pre-rolling), doorbells, restaurant pagers, keychain panic alarms, novelty bursts (cricket / TV-B-Gone / air horn), wireless outlet packs + master ALL ON/OFF, ceiling fan (low/med/high/off), smoke alarm test, window/PIR/glass-break sensor alerts. Baked signals merge into their natural category alongside any user recordings dropped into /poseidon/signals/<cat>/ . New ON-AIR TX indicator drops a big red badge + frequency + play counter over the broadcast screen during every CC1101 transmit, with a green border flash on completion so you can tell \"frame stuck\" from \"TX actually fired.\" Hydra RF hat pre-flight — six pre-arrival fixes audited against Bruce / bmorcelli's SmartRC for"
+},
+{
+"id": "k139",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": "rrival fixes audited against Bruce / bmorcelli's SmartRC fork / PINGEQUA pin reference: nRF24 driver moved off the FSPI display bus, CC1101 reclaims pin 13 from GPS UART, Init() return value checked, mousejack sniffer ports Bruce's 6-pipe noise-address table, RMT min-pulse 20 µs → 3 µs to catch fast Manchester edges. Hydra regression sweep happens the moment the hat lands. v0.6.2 Shipped 2026-06-11 Shipped Sub-GHz analyzer modes · full-screen waterfall · Argus 5 GHz hunting · Mass Storage · stability The sub-GHz analyzer gains four new visual modes on the CC1101 — peak-hold , a radar PPI scope , digital-phosphor persistence , and a blip sonar — plus a waterfall that fills the whole screen and scales to available heap, all in a neon palette. Argus now"
+},
+{
+"id": "k140",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": "d scales to available heap, all in a neon palette. Argus now hunts 5 GHz handshakes through the TRIDENT C5 when one is online, and got a proper cursed-demigod character pass. Mass Storage mode exposes the SD card over USB. Stability: fixed NimBLE heap-leak reboots in Defensive Monitor + Drone Remote ID (missing setMaxResults(0) ), plus a defmon BLE-phase heap-fragmentation guard that degrades to WiFi-only instead of resetting. New gas-station + drug-store sub-GHz signal categories. Capped off with a full website + docs refresh: magenta cyberpunk re-skin, glitch accordions, and a two-lane README. v0.6.3 Shipped 2026-06-13 Live Hotfix · deauth transmits reliably · spectrum flat-line fix · Argus overlay cleanup Community hotfix off the first wave of rea"
+},
+{
+"id": "k141",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": "s overlay cleanup Community hotfix off the first wave of real-user reports. Deauth now actually lands on-air — esp_wifi_80211_tx was returning ESP_ERR_NO_MEM under burst load and silently dropping ~half the frames; a retry-on-NO_MEM makes every frame resend until it sends, so handshake capture works (GitHub #7). Spectrum analyzer flat-line fixed — every mode re-enters RX after each frequency hop instead of reading a stale RSSI. Argus lost the lightning + glitch overlays that bled over his face. Covers Deauth / Deauth All / Clients / Argus hunt. v0.7.0 TBD Planned nRF52840 BLE 5.0 dongle Real BLE 5.0 via a dedicated nRF52840 dongle over USB-CDC (full advertisement decode, Coded PHY long-range, direction finding, LE Secure Connection MITM). The four nR"
+},
+{
+"id": "k142",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": ", direction finding, LE Secure Connection MITM). The four nRF52 features that landed in v0.6.0 ride an Adafruit Feather hat as proof-of-concept; v0.7 hardens the path with a dedicated dongle that doesn't compete with the Feather's I/O. nRF52840 dongle as USB-CDC BLE sniffer BLE connection hijacking via nRF52 + NimBLE coordination Coded PHY S=8 long-range attacks Thread / Matter enumeration via TRIDENT C5 TRIDENT CSI In R&D Flagship Full C5 CSI integration — WiFi sensing radar (see through walls) The big one. Full WiFi Channel State Information capture on the ESP32-C5 turns TRIDENT into a passive radar — ambient WiFi becomes a live presence + motion map: count bodies, track movement room-to-room, even detect breathing , through drywall, no camera, no"
+},
+{
+"id": "k143",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": "oom, even detect breathing , through drywall, no camera, no contact. The C5 runs the DSP on-chip and streams a real-time heatmap to POSEIDON over ESP-NOW. Clean-room implementation; the C5 firmware already inits CSI on hardware. The endgame for the satellite. aspirational no ETA Idea MIMIR drop-box — companion SBC Unimplemented today. Future companion pentest drop-box on a Banana Pi BPI-M4 Zero running hcxdumptool , an on-device WPA2 cracker, and a Bjorn-style action DAG. POSEIDON would act as the USB-C control client — no wireless link, pure opsec. No code exists yet; listed here so the design intent is on record. hcxdumptool wrapper for real scan events On-device WPA2 cracker (dual-core PBKDF2-SHA1) FENRIR RL policy head selecting exploit strategy"
+},
+{
+"id": "k144",
+"source": "docs/roadmap.html",
+"title": "Roadmap",
+"text": "KDF2-SHA1) FENRIR RL policy head selecting exploit strategy Armbian H618 one-flash image Pull captured pcap / .22000 back to Cardputer SD over USB-CDC ⟠ PART OF THE SUITE THE SUITE FACELESS (c) 2026 POSEIDON - commander of the deep - MIT"
+}
+]
