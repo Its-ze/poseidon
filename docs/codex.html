@@ -41,17 +41,50 @@
   .mod:hover .mcount::after{opacity:1;transform:translateX(0)}
 
   /* ---- per-radio boot terminal (level 1.5 transition) ---- */
-  #bootterm{position:fixed;inset:0;z-index:60;display:none;overflow:auto;
-    background:radial-gradient(120% 80% at 50% 0,rgba(10,16,32,.96),#04060c)}
-  #bootterm.show{display:block}
-  #bootpre{font-family:var(--font-mono);margin:0;color:#9fb3d1;
-    padding:clamp(3rem,9vh,6rem) clamp(1.1rem,6vw,5rem);
-    font-size:clamp(8.5px,1.6vw,14px);line-height:1.4}
+  #bootterm{position:fixed;inset:0;z-index:60;display:none;
+    align-items:center;justify-content:center;padding:2vmin;
+    background:radial-gradient(140% 120% at 50% 50%,rgba(6,10,18,.9),#010206 75%)}
+  #bootterm.show{display:flex}
+  #crt{position:relative;width:min(940px,94vw);height:min(640px,86vh);
+    border-radius:20px;overflow:hidden;transform-origin:center center;
+    background:radial-gradient(120% 130% at 50% 0,rgba(10,20,30,.96),#03050a 72%);
+    box-shadow:0 0 0 1px rgba(120,255,220,.12),0 0 70px rgba(0,0,0,.85),inset 0 0 130px rgba(0,0,0,.72)}
+  #crt.on{animation:crtOn .44s ease-out}
+  #crt.off{animation:crtOff .34s ease-in forwards}
+  #bootpre{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
+    font-family:var(--font-mono);margin:0;color:#c2ece0;overflow:hidden;
+    padding:clamp(1.4rem,4vw,3rem);
+    font-size:clamp(11px,2vw,19px);line-height:1.45;text-shadow:0 0 6px rgba(120,255,220,.4)}
   #bootpre > div{white-space:pre}
-  #bootpre .b{color:var(--bacc,#38bdf8);text-shadow:0 0 9px var(--bacc,#38bdf8)}
-  #bootpre .ok{color:#5effc8}
+  #bootpre .b{color:var(--bacc,#38bdf8);text-shadow:0 0 11px var(--bacc,#38bdf8)}
+  #bootpre .ok{color:#5effc8;text-shadow:0 0 9px rgba(94,255,200,.6)}
   #bootpre .cur{animation:bootcur 1s steps(2,end) infinite}
+  .crt-scan{position:absolute;left:0;right:0;top:-20%;height:18%;pointer-events:none;z-index:3;
+    background:linear-gradient(rgba(160,255,230,0),rgba(160,255,230,.10),rgba(160,255,230,0));
+    animation:crtScan 3.4s linear infinite}
+  .crt-lines{position:absolute;inset:0;pointer-events:none;z-index:4;opacity:.42;
+    animation:crtFlick 4s ease-in-out infinite;
+    background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.5) 2px 3px)}
+  .crt-vig{position:absolute;inset:0;pointer-events:none;z-index:5;
+    background:radial-gradient(125% 125% at 50% 50%,rgba(0,0,0,0) 52%,rgba(0,0,0,.5))}
+  #crt-mute{position:absolute;top:16px;right:18px;z-index:7;cursor:pointer;
+    font-family:var(--font-mono);font-size:.72rem;letter-spacing:.1em;
+    background:rgba(0,0,0,.5);border:1px solid var(--bacc,#38bdf8);color:var(--bacc,#38bdf8);
+    border-radius:8px;padding:.3rem .55rem}
   @keyframes bootcur{50%{opacity:0}}
+  @keyframes crtScan{0%{top:-20%}100%{top:120%}}
+  @keyframes crtFlick{0%,100%{opacity:.42}48%{opacity:.36}52%{opacity:.46}}
+  @keyframes crtOn{
+    0%{transform:scaleY(.004) scaleX(1.25);filter:brightness(6);opacity:.15}
+    16%{transform:scaleY(.02) scaleX(1);filter:brightness(4);opacity:1}
+    55%{transform:scaleY(1);filter:brightness(1.9)}
+    78%{filter:brightness(2.6)}
+    100%{transform:scaleY(1);filter:brightness(1)}}
+  @keyframes crtOff{
+    0%{transform:scaleY(1);filter:brightness(1)}
+    45%{transform:scaleY(1);filter:brightness(2.8)}
+    72%{transform:scaleY(.02);filter:brightness(6)}
+    100%{transform:scaleY(.002) scaleX(1.35);filter:brightness(9);opacity:0}}
 
   /* ---- detail overlay (level 2) ---- */
   #overlay{position:fixed;inset:0;z-index:61;overflow-y:auto;background:linear-gradient(180deg,rgba(4,6,12,.86),rgba(4,6,12,.97));
@@ -79,7 +112,8 @@
   .legal-note{font-size:.8rem;color:#7587a8;border:1px solid rgba(249,115,22,.3);border-radius:10px;padding:.7rem 1rem;margin:0 1.5rem 1.5rem;max-width:1100px}
   .legal-note,.legal-note + *{margin-left:auto;margin-right:auto}
   .legal-note a{color:var(--coral,#f97316)}
-  @media (prefers-reduced-motion: reduce){ #overlay,.tool{transition:none} }
+  @media (prefers-reduced-motion: reduce){ #overlay,.tool{transition:none}
+    #crt.on,#crt.off{animation:none} .crt-scan{display:none} .crt-lines{animation:none} }
 
   /* ===== Mobile optimization (added 2026-06-18) — scoped; desktop untouched ===== */
   @media (max-width:768px){
@@ -128,7 +162,15 @@
 
 <div class="modules" id="modules"></div>
 
-<div id="bootterm" aria-hidden="true"><div id="bootpre"></div></div>
+<div id="bootterm" aria-hidden="true">
+  <div id="crt">
+    <div id="bootpre"></div>
+    <div class="crt-scan"></div>
+    <div class="crt-lines"></div>
+    <div class="crt-vig"></div>
+    <button id="crt-mute" title="Toggle sound">♪ ON</button>
+  </div>
+</div>
 <div id="overlay" role="dialog" aria-modal="true" aria-label="Module tools"><div class="det" id="det"></div></div>
 
 <footer>
@@ -282,6 +324,63 @@ BANDS.forEach((b, i) => {
 // console — named banner + an ASCII motif for the protocol, then a boot log.
 const bootterm = document.getElementById('bootterm');
 const bootpre  = document.getElementById('bootpre');
+const crt      = document.getElementById('crt');
+const muteBtn  = document.getElementById('crt-mute');
+
+// ---- synth sound FX (Web Audio, no asset files) ----
+// Everything is generated live so the page stays self-contained on Pages.
+// Audio only ever starts inside the radio-click gesture, so autoplay policy
+// is satisfied. Honors a persisted mute + prefers-reduced-motion.
+let actx = null, hum = null;
+let muted = localStorage.getItem('codexMute') === '1';
+function setMuteUI(){ muteBtn.textContent = muted ? '♪ OFF' : '♪ ON'; muteBtn.style.opacity = muted ? '.5' : '1'; }
+setMuteUI();
+function audio(){
+  if (REDUCED) return null;
+  if (!actx){ try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return null; } }
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+function tone({f=440, type='square', d=.05, g=.04, to=null, delay=0}){
+  const a = audio(); if (!a || muted) return;
+  const o = a.createOscillator(), gn = a.createGain();
+  const t0 = a.currentTime + delay;
+  o.type = type; o.frequency.setValueAtTime(f, t0);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + d);
+  gn.gain.setValueAtTime(0.0001, t0);
+  gn.gain.linearRampToValueAtTime(g, t0 + .006);
+  gn.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+  o.connect(gn).connect(a.destination); o.start(t0); o.stop(t0 + d + .03);
+}
+function noise(d=.09, g=.05){
+  const a = audio(); if (!a || muted) return;
+  const n = (a.sampleRate * d) | 0, buf = a.createBuffer(1, n, a.sampleRate), ch = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const s = a.createBufferSource(); s.buffer = buf;
+  const gn = a.createGain(); gn.gain.value = g;
+  s.connect(gn).connect(a.destination); s.start();
+}
+const sfx = {
+  key(){ tone({ f: 1500 + Math.random() * 1400, type: 'square', d: .012, g: .018 }); },
+  ok(){ tone({ f: 660, d: .05, g: .03 }); tone({ f: 990, d: .06, g: .03, delay: .055 }); },
+  powerOn(){ noise(.14, .045); tone({ f: 150, type: 'sine', d: .22, g: .09, to: 42 });
+             tone({ f: 880, type: 'sine', d: .3, g: .03, to: 180, delay: .04 }); },
+  ready(){ [523, 784, 1047].forEach((f, i) => tone({ f, d: .12, g: .035, delay: i * .07 })); },
+  whoosh(){ tone({ f: 1400, type: 'sawtooth', d: .34, g: .05, to: 70 }); noise(.22, .04); },
+};
+function startHum(){ const a = audio(); if (!a || muted) return; stopHum();
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = 'sine'; o.frequency.value = 68; g.gain.value = .014;
+  o.connect(g).connect(a.destination); o.start(); hum = { o, g }; }
+function stopHum(){ if (!hum) return; const a = audio();
+  try { hum.g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + .25); hum.o.stop(a.currentTime + .3); } catch {}
+  hum = null; }
+muteBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  muted = !muted; localStorage.setItem('codexMute', muted ? '1' : '0'); setMuteUI();
+  if (muted) stopHum();
+});
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Per-radio ASCII motif (kept narrow so it fits a phone in monospace).
 const ART = {
@@ -371,35 +470,63 @@ function bootLines(b){
   ];
 }
 
-function bootSequence(b){
+// Type one log line char-by-char with a soft key tick; returns when done.
+async function typeLine(div, text){
+  for (let i = 0; i < text.length; i++){
+    div.textContent = text.slice(0, i + 1);
+    if (i % 2 === 0) sfx.key();
+    bootterm.scrollTop = bootterm.scrollHeight;
+    await sleep(11);
+  }
+}
+
+async function bootSequence(b){
   bootpre.innerHTML = '';
   bootterm.style.setProperty('--bacc', b.acc);
   bootterm.classList.add('show'); bootterm.scrollTop = 0;
   const lines = bootLines(b);
-  return new Promise(res => {
-    if (REDUCED){
-      bootpre.innerHTML = lines.map(l => `<div class="${l.c||''}">${esc(l.t||' ')}</div>`).join('');
-      setTimeout(res, 160); return;
+
+  if (REDUCED){
+    bootpre.innerHTML = lines.map(l => `<div class="${l.c||''}">${esc(l.t||' ')}</div>`).join('');
+    await sleep(160); return;
+  }
+
+  // CRT power-on: scanline sweeps the screen open, then the console hums.
+  crt.classList.remove('off'); void crt.offsetWidth; crt.classList.add('on');
+  sfx.powerOn();
+  await sleep(440);
+  startHum();
+
+  for (const l of lines){
+    const div = document.createElement('div');
+    if (l.c) div.className = l.c;
+    bootpre.appendChild(div);
+    if (l.t && l.t[0] === '>'){           // boot-log line → type it out
+      await typeLine(div, l.t);
+      l.c === 'ok' ? sfx.ok() : sfx.key();
+      await sleep(70);
+    } else {                              // banner / ASCII art → snap in with a tick
+      div.textContent = l.t || ' ';
+      if (l.t && l.t.trim()) sfx.key();
+      bootterm.scrollTop = bootterm.scrollHeight;
+      await sleep(36);
     }
-    let i = 0;
-    (function step(){
-      if (i < lines.length){
-        const l = lines[i++];
-        const div = document.createElement('div');
-        if (l.c) div.className = l.c;
-        div.textContent = l.t || ' ';
-        bootpre.appendChild(div);
-        bootterm.scrollTop = bootterm.scrollHeight;
-        // log lines tick a touch slower than the banner art for a "running" feel
-        setTimeout(step, (l.t && l.t[0] === '>') ? 95 : 34);
-      } else {
-        const cur = document.createElement('span');
-        cur.className = 'cur'; cur.textContent = '█';
-        bootpre.lastChild.appendChild(cur);
-        setTimeout(res, 260);
-      }
-    })();
-  });
+  }
+  const cur = document.createElement('span');
+  cur.className = 'cur'; cur.textContent = '█';
+  bootpre.lastChild.appendChild(cur);
+  sfx.ready();
+  await sleep(300);
+}
+
+// Power-down collapse that hands off to the tool list.
+async function crtOff(){
+  stopHum();
+  if (REDUCED){ hideBoot(); return; }
+  crt.classList.remove('on'); void crt.offsetWidth; crt.classList.add('off');
+  sfx.whoosh();
+  await sleep(320);
+  hideBoot(); crt.classList.remove('off');
 }
 function hideBoot(){ bootterm.classList.remove('show'); }
 
@@ -432,11 +559,12 @@ async function openModule(b){
   });
   det.appendChild(g);
 
-  // per-radio boot terminal → reveal
+  // per-radio CRT boot → power-down collapse → reveal tools
+  audio();                 // resume AudioContext inside the click gesture
   await bootSequence(b);
+  await crtOff();          // terminal collapses (and hides) first
   overlay.classList.add('show');
   overlay.scrollTop = 0;
-  hideBoot();
   back.focus();
   // stagger the tool cards in
   const cards=[...g.querySelectorAll('.tool')];
@@ -444,7 +572,7 @@ async function openModule(b){
 }
 function closeModule(){
   overlay.classList.remove('show');
-  hideBoot();
+  stopHum(); hideBoot(); crt.classList.remove('on','off');
   if (lastFocus) lastFocus.focus();
 }
 addEventListener('keydown', e=>{ if(e.key==='Escape' && overlay.classList.contains('show')) closeModule(); });
