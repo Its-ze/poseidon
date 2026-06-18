@@ -95,6 +95,9 @@ static void scan_task(void *arg)
     wifi_scanner_run(sr->mac, sr->dur, sr->seq);
     g_pause_hello = false;
     s_scan_running = false;
+    /* Recon finished — flash the completion blip, which auto-returns the LED
+     * to idle. Without this the LED would stay stuck in SCAN until a STOP. */
+    led_fx_set(LED_MODE_DONE);
     free(sr);
     vTaskDelete(NULL);
 }
@@ -155,6 +158,7 @@ static void on_recv(const esp_now_recv_info_t *info,
             xTaskCreate(scan_task, "scan", 4096, sr, 4, NULL);
         } else {
             s_scan_running = false;
+            led_fx_set(LED_MODE_ERROR);
         }
         break;
     }
@@ -187,7 +191,7 @@ static void on_recv(const esp_now_recv_info_t *info,
         break;
     }
     case POSEI_TYPE_CMD_STOP:
-        led_fx_set(LED_MODE_IDLE);
+        led_fx_set(LED_MODE_DONE);   /* success blip, then auto-returns to idle */
         zb_sniffer_stop();
         pmkid_capture_stop();
         hs_capture_stop();
@@ -304,7 +308,7 @@ void app_main(void)
     esp_now_add_peer(&pi);
 
     led_fx_init();
-    led_fx_set(LED_MODE_IDLE);
+    led_fx_set(LED_MODE_BOOT);   /* visible confirmation a fresh flash booted */
 
     ESP_LOGI(TAG, "POSEIDON C5 Node '%s' online", s_node_name);
     xTaskCreate(hello_task, "hello", 3072, NULL, 4, NULL);

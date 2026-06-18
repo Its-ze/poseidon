@@ -185,6 +185,37 @@ static void fx_task(void *_)
             vTaskDelay(pdMS_TO_TICKS(35));
             s_mode = LED_MODE_SCAN;
             break;
+
+        case LED_MODE_BOOT:
+            /* Power-on confirmation: a green swell up+down, then two crisp
+             * blinks. This is what tells the operator a fresh flash actually
+             * took and the node is alive. Auto-settles to the idle breathe. */
+            for (int v = 0; v <= 160; v += 8) { push_rgb(0, v, scale8(v, 60)); vTaskDelay(pdMS_TO_TICKS(8)); }
+            for (int v = 160; v >= 0; v -= 8) { push_rgb(0, v, scale8(v, 60)); vTaskDelay(pdMS_TO_TICKS(8)); }
+            for (int i = 0; i < 2; i++) {
+                push_rgb(0, 180, 60); vTaskDelay(pdMS_TO_TICKS(90));
+                push_rgb(0, 0, 0);    vTaskDelay(pdMS_TO_TICKS(110));
+            }
+            s_mode = LED_MODE_IDLE;
+            break;
+
+        case LED_MODE_DONE:
+            /* Operation finished OK: two green blinks, then back to idle. */
+            for (int i = 0; i < 2; i++) {
+                push_rgb(0, 200, 40); vTaskDelay(pdMS_TO_TICKS(110));
+                push_rgb(0, 0, 0);    vTaskDelay(pdMS_TO_TICKS(90));
+            }
+            s_mode = LED_MODE_IDLE;
+            break;
+
+        case LED_MODE_ERROR:
+            /* Operation failed: three red blinks, then back to idle. */
+            for (int i = 0; i < 3; i++) {
+                push_rgb(200, 0, 0); vTaskDelay(pdMS_TO_TICKS(110));
+                push_rgb(0, 0, 0);   vTaskDelay(pdMS_TO_TICKS(90));
+            }
+            s_mode = LED_MODE_IDLE;
+            break;
         }
         (void)last_blip;
     }
