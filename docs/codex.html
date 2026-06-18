@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Codex — POSEIDON</title>
-<meta name="description" content="The POSEIDON Codex: every tool explained by radio type — what it does in plain English and how it works under the hood. For noobs and nerds alike.">
+<meta name="description" content="The POSEIDON Codex: pick a radio, watch the rain, read every tool — what it does in plain English and how it works under the hood.">
 <meta property="og:title" content="POSEIDON Codex">
-<meta property="og:description" content="Every tool, explained — by radio type, what it does and how it works.">
+<meta property="og:description" content="Pick a radio. Decrypt the arsenal. Every tool, what it does and how it works.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://generaldussduss.github.io/poseidon/codex.html">
 <meta property="og:image" content="https://generaldussduss.github.io/poseidon/assets/og.png">
@@ -14,41 +14,66 @@
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
 <style>
-  .codex-wrap{max-width:1100px;margin:0 auto;padding:1rem 1.5rem 4rem}
-  .codex-controls{position:sticky;top:64px;z-index:4;background:linear-gradient(180deg,var(--bg-surface) 70%,rgba(6,8,16,0));
-    padding:1rem 0 1.2rem;display:flex;flex-direction:column;gap:.8rem}
-  #codex-search{width:100%;font-family:var(--font-mono);font-size:.95rem;color:var(--ocean-white);
-    background:var(--bg-card);border:1px solid var(--line, #1a2740);border-radius:10px;padding:.8rem 1rem}
-  #codex-search::placeholder{color:var(--muted,#7587a8)}
-  .band-nav{display:flex;flex-wrap:wrap;gap:.5rem}
-  .band-nav a{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;
-    text-decoration:none;color:var(--ocean-vivid);border:1px solid rgba(56,189,248,.4);border-radius:999px;padding:.35rem .8rem}
-  .band-nav a:hover{background:rgba(56,189,248,.12)}
-  .band{margin:2.4rem 0;scroll-margin-top:150px}
-  .band-head{display:flex;align-items:baseline;gap:.7rem;border-bottom:1px solid rgba(56,189,248,.18);padding-bottom:.5rem;margin-bottom:.3rem}
-  .band-head h2{font-family:var(--font-display);font-size:clamp(1.4rem,3vw,2rem);margin:0;letter-spacing:.01em}
-  .band-head .chip{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.16em;text-transform:uppercase;
-    border:1px solid currentColor;border-radius:999px;padding:.2rem .6rem;opacity:.85}
-  .band-head .cnt{margin-left:auto;font-family:var(--font-mono);font-size:.75rem;color:var(--muted,#7587a8)}
-  .band-intro{font-family:var(--font-body);font-size:1.02rem;color:#cbd5e1;margin:.5rem 0 1.2rem}
-  .tool-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:1rem}
-  .tool{background:var(--bg-card,#0d1628);border:1px solid rgba(56,189,248,.14);border-left:3px solid var(--acc,#38bdf8);
-    border-radius:10px;padding:1rem 1.1rem}
-  .tool h3{font-family:var(--font-display);font-size:1.02rem;margin:0 0 .5rem;color:var(--ocean-white)}
-  .tool .lab{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--acc,#38bdf8)}
-  .tool .what{font-family:var(--font-body);font-size:1rem;line-height:1.5;color:#e2e8f0;margin:.15rem 0 .7rem}
+  .codex-head{padding:5.5rem 1.5rem 1rem;text-align:center}
+  .codex-head h1{margin:.3rem 0;font-size:clamp(2.2rem,6vw,4rem)}
+  .codex-head .lede{max-width:680px;margin:.6rem auto 0;color:#9fb3d1}
+
+  /* ---- module grid (level 1) ---- */
+  .modules{max-width:1150px;margin:1.5rem auto 4rem;padding:0 1.5rem;
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1.1rem}
+  .mod{position:relative;cursor:pointer;border:1px solid rgba(56,189,248,.18);border-radius:16px;
+    background:linear-gradient(160deg,rgba(13,22,40,.9),rgba(6,8,16,.95));overflow:hidden;
+    padding:1.6rem 1.4rem 1.3rem;min-height:170px;display:flex;flex-direction:column;justify-content:flex-end;
+    transition:transform .18s var(--ease-spring,cubic-bezier(.175,.885,.32,1.275)),box-shadow .25s,border-color .25s}
+  .mod::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 80% at 50% -10%,var(--acc),transparent 60%);
+    opacity:.10;transition:opacity .25s}
+  .mod::after{content:"";position:absolute;left:0;top:0;height:100%;width:3px;background:var(--acc);box-shadow:0 0 18px var(--acc)}
+  .mod:hover,.mod:focus-visible{transform:translateY(-4px);border-color:var(--acc);box-shadow:0 14px 50px -20px var(--acc);outline:none}
+  .mod:hover::before{opacity:.22}
+  .mod .mglyph{position:absolute;top:1rem;right:1.1rem;width:30px;height:30px;color:var(--acc);opacity:.55}
+  .mod .mtag{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.22em;text-transform:uppercase;color:var(--acc)}
+  .mod h2{font-family:var(--font-display);font-weight:800;line-height:1.02;margin:.35rem 0 .2rem;
+    font-size:clamp(1.5rem,2.6vw,2.1rem);color:var(--ocean-white,#e0f2fe);text-shadow:0 0 18px rgba(0,0,0,.6)}
+  .mod .msub{font-family:var(--font-body);font-size:.95rem;color:#9fb3d1}
+  .mod .mcount{margin-top:.7rem;font-family:var(--font-mono);font-size:.7rem;letter-spacing:.14em;
+    color:var(--ocean-white,#e0f2fe);opacity:.8;display:flex;align-items:center;gap:.5rem}
+  .mod .mcount::after{content:"DECRYPT ▸";color:var(--acc);margin-left:auto;opacity:0;transform:translateX(-6px);transition:.2s}
+  .mod:hover .mcount::after{opacity:1;transform:translateX(0)}
+
+  /* ---- detail overlay (level 2) ---- */
+  #rain{position:fixed;inset:0;z-index:60;display:block;background:#04060c}
+  #overlay{position:fixed;inset:0;z-index:61;overflow-y:auto;background:linear-gradient(180deg,rgba(4,6,12,.86),rgba(4,6,12,.97));
+    opacity:0;pointer-events:none;transition:opacity .5s ease}
+  #overlay.show{opacity:1;pointer-events:auto}
+  .det{max-width:1100px;margin:0 auto;padding:clamp(4rem,8vw,6rem) 1.5rem 4rem}
+  .det-top{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;border-bottom:1px solid var(--dacc);padding-bottom:.8rem}
+  .back{font-family:var(--font-mono);font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;
+    background:rgba(0,0,0,.4);border:1px solid var(--dacc);color:var(--dacc);border-radius:999px;padding:.5rem 1rem}
+  .back:hover{background:var(--dacc);color:#04060c}
+  .det-top h2{font-family:var(--font-display);font-weight:800;font-size:clamp(1.6rem,4vw,2.6rem);margin:0;color:var(--dacc)}
+  .det-top .chip{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;
+    border:1px solid var(--dacc);color:var(--dacc);border-radius:999px;padding:.2rem .6rem}
+  .det-top .cnt{margin-left:auto;font-family:var(--font-mono);font-size:.78rem;color:#9fb3d1}
+  .det-intro{font-family:var(--font-body);font-size:1.08rem;color:#cbd5e1;margin:1rem 0 1.6rem;max-width:840px}
+  .det-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:1rem}
+  .tool{background:rgba(13,22,40,.7);border:1px solid var(--dacc-dim);border-left:3px solid var(--dacc);border-radius:10px;
+    padding:1rem 1.1rem;opacity:0;transform:translateY(10px);transition:opacity .4s,transform .4s}
+  .tool.in{opacity:1;transform:none}
+  .tool h3{font-family:var(--font-display);font-size:1.04rem;margin:0 0 .4rem;color:var(--ocean-white,#e0f2fe)}
+  .tool .what{font-family:var(--font-body);font-size:1rem;line-height:1.5;color:#e2e8f0;margin:0 0 .6rem}
   .tool .how{font-family:var(--font-mono);font-size:.82rem;line-height:1.55;color:#9fb3d1}
-  .tool code{background:rgba(0,0,0,.35);padding:.05rem .35rem;border-radius:4px;color:var(--ocean-vivid)}
-  .nomatch{color:var(--muted,#7587a8);font-style:italic;padding:1rem 0}
-  .legal-note{font-size:.8rem;color:var(--muted,#7587a8);border:1px solid rgba(249,115,22,.3);
-    border-radius:10px;padding:.7rem 1rem;margin:.4rem 0 0}
+  .tool .how b{color:var(--dacc)}
+  .tool code{background:rgba(0,0,0,.4);padding:.05rem .35rem;border-radius:4px;color:var(--dacc)}
+  .legal-note{font-size:.8rem;color:#7587a8;border:1px solid rgba(249,115,22,.3);border-radius:10px;padding:.7rem 1rem;margin:0 1.5rem 1.5rem;max-width:1100px}
+  .legal-note,.legal-note + *{margin-left:auto;margin-right:auto}
   .legal-note a{color:var(--coral,#f97316)}
+  @media (prefers-reduced-motion: reduce){ #rain{display:none} #overlay,.tool{transition:none} }
 </style>
 </head>
 <body>
 
 <div id="scrollProgress"></div>
-<div id="hud"><div class="hud-row"><span class="hud-dot"></span>CODEX · every tool, explained</div></div>
+<div id="hud"><div class="hud-row"><span class="hud-dot"></span>CODEX · pick a radio · decrypt the arsenal</div></div>
 
 <nav id="mainNav">
   <a href="index.html" class="nav-logo"><span class="icon">P</span><span>POSEIDON</span></a>
@@ -65,22 +90,18 @@
   </ul>
 </nav>
 
-<header class="page-head" style="padding:5.5rem 1.5rem 0;text-align:center">
+<header class="codex-head">
   <div class="kicker">01b // CODEX</div>
-  <h1 style="margin:.3rem 0">Every Tool, Explained</h1>
-  <p class="lede" style="max-width:760px;margin:.6rem auto 0">The Arsenal lists what POSEIDON carries. The Codex tells you what each tool
-  <em>does</em> and how it actually works — plain English up top, the under-the-hood detail right below. Skim by radio, or search.</p>
+  <h1>Decrypt the Arsenal</h1>
+  <p class="lede">Pick a radio. Watch it crack open. Every tool on that chip — what it does, and how it actually works.</p>
 </header>
 
-<div class="codex-wrap">
-  <div class="codex-controls">
-    <input id="codex-search" type="search" placeholder="Search tools — e.g. deauth, PMKID, mousejack, NTLM, jam…" autocomplete="off">
-    <div class="band-nav" id="band-nav"></div>
-  </div>
-  <div class="legal-note">Reference only. Several tools transmit on regulated bands or simulate networks — use them solely on hardware and networks you own or are authorized to test. See <a href="legal.html">Legal &amp; Responsible Use</a>.</div>
-  <div id="codex"></div>
-  <div id="nomatch" class="nomatch" hidden>No tool matches that search.</div>
-</div>
+<div class="legal-note">Reference only. Several tools transmit on regulated bands or simulate networks — use them solely on hardware and networks you own or are authorized to test. See <a href="legal.html">Legal &amp; Responsible Use</a>.</div>
+
+<div class="modules" id="modules"></div>
+
+<canvas id="rain" aria-hidden="true"></canvas>
+<div id="overlay" role="dialog" aria-modal="true" aria-label="Module tools"><div class="det" id="det"></div></div>
 
 <footer>
   <div class="foot-glyph">⟠</div>
@@ -95,13 +116,13 @@
 <canvas id="particles" style="position:fixed;inset:0;z-index:-1;pointer-events:none" aria-hidden="true"></canvas>
 <script src="assets/site.js"></script>
 <script>
-// Data-driven so it stays cohesive and easy to extend. Each tool: name / what (plain) / how (technical).
 const BANDS = [
- { id:"wifi", name:"WiFi (2.4 GHz, ESP32-S3)", chip:"802.11", acc:"#38bdf8", count:"17 tools",
+ { id:"wifi", name:"WiFi", sub:"2.4 GHz · ESP32-S3", chip:"802.11", acc:"#38bdf8", count:"17 tools",
+   glyph:'<path d="M2 12c2-4 7-6 10-6s8 2 10 6M5 16c2-3 5-4 7-4s5 1 7 4M8 20c1-2 3-2 4-2s3 0 4 2M12 22v.01"/>',
    intro:"Scan, capture, and disrupt 2.4 GHz WiFi. The deauth core is built to actually land frames on-air.",
    tools:[
    {n:"Network scan",w:"Lists nearby WiFi networks and the clients on them.",h:"Monitor-mode capture of 802.11 beacon and probe frames → SSID, BSSID, channel, RSSI, encryption."},
-   {n:"Deauth",w:"Kicks devices off a network (one you control) to force reconnects.",h:"Spoofs 802.11 deauth/disassoc management frames for the AP↔client pair with correct sequence counters; sniffs associated clients first so it targets real stations, not the void."},
+   {n:"Deauth",w:"Kicks devices off a network (one you control) to force reconnects.",h:"Spoofs 802.11 deauth/disassoc management frames for the AP↔client pair with correct sequence counters; sniffs associated clients first so it targets real stations."},
    {n:"PMKID + 4-way handshake",w:"Grabs the crypto material needed to crack a WiFi password offline.",h:"Captures the PMKID from EAPOL message 1, or the full 4-way handshake, and saves it in hashcat <code>22000</code> format on SD."},
    {n:"Evil Portal",w:"Stands up a fake login page to see what users would type.",h:"SoftAP + catch-all DNS + HTTP server serving a captive credential page; submissions logged to SD."},
    {n:"Karma",w:"Answers devices hunting for their saved networks.",h:"Replies to client probe requests for any SSID, impersonating remembered APs so devices auto-associate."},
@@ -109,11 +130,10 @@ const BANDS = [
    {n:"Probe sniff",w:"Reveals which networks nearby phones are looking for.",h:"Captures 802.11 probe-request frames and logs the SSIDs clients leak."},
    {n:"Evil Twin",w:"Clones a real AP to lure its clients.",h:"Copies a target's SSID/security shell on a SoftAP, optionally paired with deauth to push clients over."},
    {n:"Wardrive + GPS",w:"Maps WiFi networks as you walk or drive.",h:"Logs APs with GNSS coordinates to SD as Wigle-style CSV."},
-   {n:"CIW zero-click injection",w:"Injects crafted frames at nearby clients with no interaction needed.",h:"Builds raw 802.11 frames and transmits through the raw-frame TX path."},
-   {n:"AP Signal Test",w:"Measures how strong an AP is from where you stand.",h:"Live RSSI readout for a chosen BSSID."},
-   {n:"Argus — handshake-hunter gotchi",w:"An autonomous pet that hunts WiFi handshakes for you.",h:"RL channel-picker hops bands, fires deauths and captures handshakes unattended; 96×96 mood sprite reflects hunt state; progress SD-persisted. Modes: HUNT / STEALTH / SURGICAL / STORM."},
+   {n:"Argus — handshake-hunter gotchi",w:"An autonomous pet that hunts WiFi handshakes for you.",h:"RL channel-picker hops bands, fires deauths and captures handshakes unattended; mood sprite reflects hunt state; SD-persisted. Modes: HUNT / STEALTH / SURGICAL / STORM."},
  ]},
- { id:"ble", name:"Bluetooth LE (ESP32-S3, NimBLE)", chip:"BLE", acc:"#a78bfa", count:"15 tools",
+ { id:"ble", name:"Bluetooth LE", sub:"ESP32-S3 · NimBLE", chip:"BLE", acc:"#a78bfa", count:"15 tools",
+   glyph:'<path d="M6 3h3l2 3 3-4 2 4 2-2v16h-12z M10 8v8 M13 8v8"/>',
    intro:"Identify, spam, clone, and probe BLE — including a real CVE check.",
    tools:[
    {n:"Classifying scan",w:"Lists nearby Bluetooth devices and what they actually are.",h:"Parses BLE advertisements and matches OUI, Apple Continuity, and Google Fast Pair databases to name the device type."},
@@ -127,7 +147,8 @@ const BANDS = [
    {n:"Clone",w:"Mimics a target BLE device's advertisement.",h:"Captures and re-broadcasts the advertising payload/address."},
    {n:"Flood",w:"Saturates an area with BLE advertisements.",h:"High-rate advertising across many randomized addresses."},
  ]},
- { id:"subghz", name:"Sub-GHz (CC1101, 300–928 MHz)", chip:"CC1101", acc:"#fbbf24", count:"10 tools",
+ { id:"subghz", name:"Sub-GHz", sub:"CC1101 · 300–928 MHz", chip:"CC1101", acc:"#fbbf24", count:"10 tools",
+   glyph:'<path d="M3 12h4l2-8 4 16 2-8h6"/>',
    intro:"Capture, decode, and replay garage/car/sensor remotes, plus a big signal library.",
    tools:[
    {n:"Capture + protocol decoder",w:"Records a remote and tells you which protocol it is.",h:"CC1101 demodulates OOK/FSK; the pulse train is timed and decoded for fixed-code protocols (Princeton PT2262, CAME, NICE, Linear)."},
@@ -139,7 +160,8 @@ const BANDS = [
    {n:"Jammer",w:"Blocks a sub-GHz frequency.",h:"Continuous-carrier (CW) transmit on the target frequency. Illegal in most places — see Legal."},
    {n:"Jam detect",w:"Warns you when a band is being jammed.",h:"Monitors the RSSI floor for sustained abnormal energy."},
  ]},
- { id:"nrf24", name:"2.4 GHz (nRF24L01+)", chip:"nRF24", acc:"#22d3ee", count:"6 tools",
+ { id:"nrf24", name:"2.4 GHz", sub:"nRF24L01+", chip:"nRF24", acc:"#22d3ee", count:"6 tools",
+   glyph:'<path d="M12 2v4 M12 18v4 M4.93 4.93l2.83 2.83 M16.24 16.24l2.83 2.83 M2 12h4 M18 12h4 M8 12a4 4 0 018 0"/>',
    intro:"Sniff and inject Nordic Enhanced ShockBurst — wireless mice/keyboards and more.",
    tools:[
    {n:"Promiscuous ESB sniffer",w:"Sniffs 2.4 GHz wireless keyboards, mice, and other Nordic gear.",h:"Uses the Goodspeed pseudo-promiscuous trick (illegal address + short preamble) to capture Enhanced ShockBurst frames."},
@@ -148,7 +170,8 @@ const BANDS = [
    {n:"Spectrum analyzer",w:"Visualizes 2.4 GHz channel activity.",h:"Reads received-power-detector across channels for an energy map."},
    {n:"CW jammer",w:"Blocks a 2.4 GHz channel.",h:"Constant-carrier output on a chosen channel. Illegal in most places — see Legal."},
  ]},
- { id:"lora", name:"LoRa & Mesh (SX1262)", chip:"SX1262", acc:"#34d399", count:"8 tools",
+ { id:"lora", name:"LoRa & Mesh", sub:"SX1262", chip:"SX1262", acc:"#34d399", count:"8 tools",
+   glyph:'<path d="M12 2l3 6 6 1-4.5 4 1 6L12 16l-5.5 3 1-6L3 9l6-1z"/>',
    intro:"Long-range LoRa scan/TX, GNSS, and a full Meshtastic leaf node.",
    tools:[
    {n:"Multi-band scan",w:"Listens for LoRa traffic on 433 / 868 / 915 MHz.",h:"Configures SX1262 spreading-factor/bandwidth/coding-rate and logs packets with RSSI/SNR."},
@@ -157,7 +180,8 @@ const BANDS = [
    {n:"LoRa analyzer",w:"Live capture and inspection of LoRa packets.",h:"Streams decoded headers/payloads as they arrive."},
    {n:"GPS fix",w:"Gets a location lock for wardrive/beacon.",h:"Parses NMEA from the GNSS module with automatic baud detection."},
  ]},
- { id:"network", name:"LAN / Network + SaltyJack (wired/WiFi)", chip:"RJ45 / IP", acc:"#f59e0b", count:"18 tools",
+ { id:"network", name:"LAN / Network", sub:"wired + SaltyJack", chip:"RJ45 / IP", acc:"#f59e0b", count:"18 tools",
+   glyph:'<path d="M4 6h16v12H4z M4 10h16 M8 14h2 M12 14h2 M16 14h2"/>',
    intro:"A full wired/wireless LAN suite, including the SaltyJack credential arsenal — no PC or Pi needed.",
    tools:[
    {n:"Port scan",w:"Finds open ports on a host or across the LAN.",h:"TCP connect scan over the wired (W5500) or WiFi link."},
@@ -172,7 +196,8 @@ const BANDS = [
    {n:"SaltyJack — WPAD NTLM",w:"Tricks Windows into handing over proxy creds.",h:"Serves a PAC file on :80 + HTTP 407 Proxy-Authenticate; domain clients auto-authenticate."},
    {n:"SaltyJack — on-device cracker",w:"Cracks captured NTLMv2 hashes on the device itself.",h:"Pure-C HMAC-MD5 wordlist runner over hashcat-5600 lines — no PC tether."},
  ]},
- { id:"ir", name:"IR · BadUSB · System (ESP32-S3)", chip:"IR / USB", acc:"#7dd3fc", count:"12 tools",
+ { id:"ir", name:"IR · BadUSB · System", sub:"ESP32-S3", chip:"IR / USB", acc:"#7dd3fc", count:"12 tools",
+   glyph:'<path d="M4 4h16v16H4z M8 8h8v2H8z M8 12h8v2H8z M8 16h4v2H8z"/>',
    intro:"HID payloads, IR remotes, and the pocket utilities that make it a daily-carry.",
    tools:[
    {n:"USB-HID payload runner (BadUSB)",w:"Types a scripted payload into any computer.",h:"Enumerates as a USB HID keyboard over native USB-C and runs DuckyScript."},
@@ -180,9 +205,10 @@ const BANDS = [
    {n:"Samsung remote",w:"Control Samsung TVs.",h:"Sends the Samsung IR keymap (active-HIGH LED, verified vs Flipper-IRDB)."},
    {n:"MAC randomizer",w:"Changes the device's WiFi MAC.",h:"Sets a consumer-OUI random MAC for OPSEC."},
    {n:"Utilities",w:"Flashlight, stopwatch, calculator, morse, SD format, file browser.",h:"Standalone pocket tools."},
-   {n:"Theme engine",w:"Six swappable color schemes.",h:"POSEIDON / PHANTOM / MATRIX / AMBER (synthwave) / E-INK / TRON, persisted to NVS, with ambient procedural motion + idle screensavers."},
+   {n:"Theme engine",w:"Six swappable color schemes.",h:"POSEIDON / PHANTOM / MATRIX / AMBER / E-INK / TRON, persisted to NVS, with ambient procedural motion + idle screensavers."},
  ]},
- { id:"hunt", name:"Recon & Defense — HUNT", chip:"multi-radio", acc:"#f0abfc", count:"4 tools",
+ { id:"hunt", name:"Recon & Defense", sub:"HUNT · multi-radio", chip:"multi-radio", acc:"#f0abfc", count:"4 tools",
+   glyph:'<path d="M12 3v3 M12 18v3 M3 12h3 M18 12h3 M12 8a4 4 0 014 4 M12 16a4 4 0 01-4-4"/>',
    intro:"One proximity-hunting submenu that homes in on an emitter across any radio, geiger-style.",
    tools:[
    {n:"BLE tracker hunt",w:"Hot/cold homing on a chosen BLE device.",h:"Maps RSSI to a proximity meter that beeps faster as you close in."},
@@ -190,7 +216,8 @@ const BANDS = [
    {n:"CC1101 finder",w:"Homes in on a sub-GHz emitter.",h:"Geiger-style RSSI tracking on a chosen frequency."},
    {n:"nRF24 finder",w:"Homes in on a 2.4 GHz Nordic emitter.",h:"Geiger-style RSSI tracking; the HUNT menu switches the radio to match the target automatically."},
  ]},
- { id:"trident", name:"TRIDENT — ESP32-C5 satellite (5 GHz)", chip:"ESP32-C5", acc:"#34d399", count:"satellite",
+ { id:"trident", name:"TRIDENT", sub:"ESP32-C5 satellite · 5 GHz", chip:"ESP32-C5", acc:"#2dd4bf", count:"satellite",
+   glyph:'<path d="M3 12h18 M12 3v18 M6 6l12 12 M18 6L6 18"/>',
    intro:"A plug-in C5 node over ESP-NOW that does the 5 GHz / 802.15.4 work the S3 can't.",
    tools:[
    {n:"5 GHz deauth",w:"Deauth on 5 GHz networks (the Cardputer's S3 can't reach 5 GHz).",h:"C5 raw 802.11 frames with a binary patch bypassing <code>ieee80211_raw_frame_sanity_check</code>; targeted + broadcast."},
@@ -200,50 +227,107 @@ const BANDS = [
  ]},
 ];
 
-const codex = document.getElementById('codex');
-const bandNav = document.getElementById('band-nav');
-const esc = (s) => s; // content is authored, not user input
-for (const b of BANDS) {
-  const a = document.createElement('a'); a.href = '#' + b.id; a.textContent = b.name.split(' (')[0]; bandNav.appendChild(a);
-  const sec = document.createElement('section'); sec.className = 'band'; sec.id = b.id; sec.style.setProperty('--acc', b.acc);
-  const head = document.createElement('div'); head.className = 'band-head';
-  const h2 = document.createElement('h2'); h2.textContent = b.name; h2.style.color = b.acc;
-  const chip = document.createElement('span'); chip.className = 'chip'; chip.textContent = b.chip; chip.style.color = b.acc;
-  const cnt = document.createElement('span'); cnt.className = 'cnt'; cnt.textContent = b.count;
-  head.append(h2, chip, cnt); sec.appendChild(head);
-  const intro = document.createElement('p'); intro.className = 'band-intro'; intro.textContent = b.intro; sec.appendChild(intro);
-  const grid = document.createElement('div'); grid.className = 'tool-grid';
-  for (const t of b.tools) {
-    const card = document.createElement('div'); card.className = 'tool'; card.style.setProperty('--acc', b.acc);
-    card.dataset.search = (t.n + ' ' + t.w + ' ' + t.h + ' ' + b.name).toLowerCase();
-    const lab = document.createElement('div'); lab.className = 'lab'; lab.textContent = b.chip;
-    const h3 = document.createElement('h3'); h3.textContent = t.n;
-    const what = document.createElement('div'); what.className = 'what'; what.textContent = t.w;
-    const how = document.createElement('div'); how.className = 'how';
-    how.innerHTML = '<b style="color:' + b.acc + '">How:</b> ' + t.h; // t.h is authored markup (code tags), not user input
-    card.append(lab, h3, what, how); grid.appendChild(card);
-  }
-  sec.appendChild(grid); codex.appendChild(sec);
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const NS = "http://www.w3.org/2000/svg";
+
+// ---- build module grid ----
+const grid = document.getElementById('modules');
+BANDS.forEach((b, i) => {
+  const el = document.createElement('div');
+  el.className = 'mod'; el.tabIndex = 0; el.style.setProperty('--acc', b.acc);
+  el.setAttribute('role','button'); el.setAttribute('aria-label', b.name + ' — open');
+  const svg = `<svg class="mglyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${b.glyph}</svg>`;
+  // text nodes for everything author-controlled; glyph markup is static (authored, not user input)
+  el.innerHTML = svg;
+  const tag = document.createElement('div'); tag.className='mtag'; tag.textContent = b.chip;
+  const h2 = document.createElement('h2'); h2.textContent = b.name;
+  const sub = document.createElement('div'); sub.className='msub'; sub.textContent = b.sub;
+  const cnt = document.createElement('div'); cnt.className='mcount'; cnt.textContent = b.count;
+  el.append(tag,h2,sub,cnt);
+  el.addEventListener('click', () => openModule(b));
+  el.addEventListener('keydown', e => { if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openModule(b);} });
+  grid.appendChild(el);
+});
+
+// ---- matrix rain ----
+const rainCv = document.getElementById('rain');
+const rctx = rainCv.getContext('2d');
+const GLYPHS = "アカサタナハマヤラ0123456789ABCDEF<>/{}=+*".split("");
+let rainAnim = null, cols = [], cw = 14;
+function sizeRain(){ rainCv.width = innerWidth; rainCv.height = innerHeight;
+  cols = new Array(Math.ceil(innerWidth/cw)).fill(0).map(()=> Math.random()*-50); }
+function runRain(color, ms){
+  if (REDUCED) return Promise.resolve();
+  sizeRain(); rainCv.style.opacity = '1';
+  const start = performance.now();
+  return new Promise(res=>{
+    function frame(t){
+      rctx.fillStyle = 'rgba(4,6,12,0.18)'; rctx.fillRect(0,0,rainCv.width,rainCv.height);
+      rctx.font = cw+'px JetBrains Mono, monospace';
+      for(let i=0;i<cols.length;i++){
+        const x=i*cw, y=cols[i]*cw;
+        rctx.fillStyle = '#dffaff'; rctx.fillText(GLYPHS[(Math.random()*GLYPHS.length)|0], x, y);
+        rctx.fillStyle = color; rctx.fillText(GLYPHS[(Math.random()*GLYPHS.length)|0], x, y-cw);
+        cols[i] = (y > rainCv.height && Math.random()>0.975) ? 0 : cols[i]+1;
+      }
+      const k = (t-start)/ms;
+      if (k < 1) { rainAnim = requestAnimationFrame(frame); }
+      else { res(); }
+    }
+    rainAnim = requestAnimationFrame(frame);
+  });
+}
+function fadeRain(){ // dim to faint ambient behind detail, then stop
+  cancelAnimationFrame(rainAnim);
+  rainCv.style.transition='opacity .6s'; rainCv.style.opacity = REDUCED ? '0' : '0.10';
 }
 
-// Live search filter.
-const search = document.getElementById('codex-search');
-const nomatch = document.getElementById('nomatch');
-search.addEventListener('input', () => {
-  const q = search.value.trim().toLowerCase();
-  let anyVisible = false;
-  for (const sec of codex.querySelectorAll('.band')) {
-    let secVisible = false;
-    for (const card of sec.querySelectorAll('.tool')) {
-      const hit = !q || card.dataset.search.includes(q);
-      card.style.display = hit ? '' : 'none';
-      if (hit) secVisible = true;
-    }
-    sec.style.display = secVisible ? '' : 'none';
-    if (secVisible) anyVisible = true;
-  }
-  nomatch.hidden = anyVisible;
-});
+// ---- open / close detail ----
+const overlay = document.getElementById('overlay');
+const det = document.getElementById('det');
+let lastFocus = null;
+
+async function openModule(b){
+  lastFocus = document.activeElement;
+  det.style.setProperty('--dacc', b.acc);
+  det.style.setProperty('--dacc-dim', b.acc.length===7 ? b.acc+'33' : b.acc);
+  // build detail content
+  det.innerHTML = '';
+  const top = document.createElement('div'); top.className='det-top';
+  const back = document.createElement('button'); back.className='back'; back.textContent='◂ All radios'; back.onclick = closeModule;
+  const h2 = document.createElement('h2'); h2.textContent = b.name;
+  const chip = document.createElement('span'); chip.className='chip'; chip.textContent = b.chip;
+  const cnt = document.createElement('span'); cnt.className='cnt'; cnt.textContent = b.sub + ' · ' + b.count;
+  top.append(back,h2,chip,cnt); det.appendChild(top);
+  const intro = document.createElement('p'); intro.className='det-intro'; intro.textContent = b.intro; det.appendChild(intro);
+  const g = document.createElement('div'); g.className='det-grid';
+  b.tools.forEach(t=>{
+    const c=document.createElement('div'); c.className='tool';
+    const h3=document.createElement('h3'); h3.textContent=t.n;
+    const w=document.createElement('div'); w.className='what'; w.textContent=t.w;
+    const how=document.createElement('div'); how.className='how';
+    how.innerHTML = '<b>How:</b> ' + t.h;   // t.h is authored markup (code tags), not user input
+    c.append(h3,w,how); g.appendChild(c);
+  });
+  det.appendChild(g);
+
+  // rain transition → reveal
+  await runRain(b.acc, 850);
+  overlay.classList.add('show');
+  overlay.scrollTop = 0;
+  fadeRain();
+  back.focus();
+  // stagger the tool cards in
+  const cards=[...g.querySelectorAll('.tool')];
+  cards.forEach((c,i)=> setTimeout(()=> c.classList.add('in'), REDUCED?0:40+i*45));
+}
+function closeModule(){
+  overlay.classList.remove('show');
+  rainCv.style.opacity='0';
+  if (lastFocus) lastFocus.focus();
+}
+addEventListener('keydown', e=>{ if(e.key==='Escape' && overlay.classList.contains('show')) closeModule(); });
+addEventListener('resize', ()=>{ if(rainCv.style.opacity==='1') sizeRain(); });
 </script>
 </body>
 </html>
