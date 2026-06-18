@@ -256,7 +256,7 @@ async function fetchBinaryString(url){
   return { str: out, size: bytes.length };
 }
 
-const TF_BUILD = "c5-2026-06-18-f-nostub"; // bump on every change — proves which build the browser actually ran
+const TF_BUILD = "c5-2026-06-18-g-nostub-spiattach"; // bump on every change — proves which build the browser actually ran
 btn.addEventListener("click", async () => {
   openModal();
   log(`[POSEIDON flasher build ${TF_BUILD}] target=ESP32-C5 NO-STUB ROM loader · 4MB/dio/80m · 115200 · uncompressed`);
@@ -286,6 +286,12 @@ btn.addEventListener("click", async () => {
     if (esploader.chip && esploader.chip.postConnect) await esploader.chip.postConnect(esploader);
     const chip = esploader.chip?.CHIP_NAME ? esploader.chip.CHIP_NAME : "?";
     log(`Detected (no-stub / ROM loader): ${chip}`);
+    // The stub normally configures the SPI flash pins itself; on the ROM loader
+    // we must do it explicitly or FLASH_BEGIN fails ("enter Flash download mode
+    // ... status 1,5"). This is what `esptool --no-stub` does via flash_spi_attach.
+    setStatus("Attaching SPI flash…");
+    await esploader.flashSpiAttach(0);
+    log("SPI flash attached.");
     if (!chip.toUpperCase().includes("C5") &&
         !confirm(`Connected chip reads "${chip}", not an ESP32-C5.\nFlash the TRIDENT image anyway?`)) {
       setStatus("Cancelled — wrong chip.", "warn"); closeBtn.disabled = false;
