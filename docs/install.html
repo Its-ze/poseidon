@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Install — POSEIDON</title>
-<meta name="description" content="Flash POSEIDON onto your Cardputer-Advance in one click with M5Burner, plus the optional TRIDENT C5 satellite via the Espressif web flasher.">
+<meta name="description" content="Flash POSEIDON onto your Cardputer-Advance in one click with M5Burner, plus the optional TRIDENT C5 satellite with a one-click in-browser flasher.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
@@ -14,6 +14,30 @@
      first release with ESP32-C5 support via esptool-js 0.5.6. -->
 <script type="module"
         src="https://cdn.jsdelivr.net/npm/esp-web-tools@10.2.1/dist/web/install-button.js"></script>
+<!-- TRIDENT C5 one-click flasher modal. esp-web-tools (above) bundles esptool-js
+     0.5.x, which has the confirmed ESP32-C5 flash-detect bug, so the C5 button
+     below drives esptool-js >=0.6 directly (lazy-loaded on click) instead. Same
+     plan/offsets as docs/flash/index.html and manifest-trident-c5.json. -->
+<style>
+  #tf-overlay{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;
+    background:rgba(3,6,14,.82);backdrop-filter:blur(4px);padding:20px;font-family:var(--font-mono),ui-monospace,monospace;}
+  #tf-overlay[data-open]{display:flex;}
+  .tf-modal{width:100%;max-width:560px;background:#0a0f1c;border:1px solid rgba(52,211,153,.4);
+    border-radius:14px;padding:22px;box-shadow:0 0 40px rgba(52,211,153,.18);}
+  .tf-modal h3{margin:0 0 4px;font-family:var(--font-display),sans-serif;letter-spacing:.06em;color:#34d399;font-size:1.2rem;}
+  .tf-sub{color:#64748b;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;margin-bottom:14px;}
+  .tf-bar{height:10px;background:#000;border:1px solid rgba(52,211,153,.3);border-radius:999px;overflow:hidden;margin:14px 0 10px;}
+  .tf-bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#34d399,#0ea5e9);transition:width .2s;}
+  #tf-status{font-size:.9rem;color:#cbd5e1;min-height:1.3em;}
+  #tf-status.ok{color:#34d399;} #tf-status.bad{color:#f87171;} #tf-status.warn{color:#fbbf24;}
+  #tf-log{background:#000;border:1px solid rgba(52,211,153,.18);border-radius:6px;padding:10px;margin:12px 0 0;
+    font-size:.74rem;line-height:1.5;height:150px;overflow:auto;white-space:pre-wrap;color:#5effc8;}
+  .tf-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:14px;}
+  .tf-actions button{font-family:var(--font-mono),monospace;font-size:.82rem;padding:.5rem 1rem;border-radius:7px;
+    background:transparent;color:#94a3b8;border:1px solid rgba(148,163,184,.3);cursor:pointer;}
+  .tf-actions button:not(:disabled):hover{color:#e2e8f0;border-color:#94a3b8;}
+  .tf-actions button:disabled{opacity:.4;cursor:not-allowed;}
+</style>
 </head>
 <body data-matrix>
 
@@ -107,26 +131,33 @@
 
     <p style="color:#cbd5e1;line-height:1.6;margin-bottom:1.4rem;">TRIDENT is an optional sidekick. If you have an <b>ESP32-C5</b> board, flash it to unlock <b>5 GHz</b> work, <b>Zigbee</b> sniffing, and <b>PMKID</b> capture — beamed back to the Cardputer over ESP-NOW. Don't have a C5? Skip this whole section; the Cardputer is fully loaded on its own.</p>
 
-    <h3 style="font-family:var(--font-display);font-size:1.15rem;color:#34d399;letter-spacing:.05em;margin-bottom:.4rem;">Flash it with the Espressif web flasher</h3>
-    <p style="color:#94a3b8;font-size:.92rem;line-height:1.55;margin-bottom:1rem;">This is the recommended, verified-working route for the C5. It runs entirely in <b>Chrome or Edge</b> — no install. Open the flasher, point it at three small files, and program.</p>
+    <h3 style="font-family:var(--font-display);font-size:1.15rem;color:#34d399;letter-spacing:.05em;margin-bottom:.4rem;">Flash it in your browser — one click</h3>
+    <p style="color:#94a3b8;font-size:.92rem;line-height:1.55;margin-bottom:1rem;">Same deal as the Cardputer: plug the C5 in, hit the button, pick its port, and watch it go. Runs entirely in <b>Chrome or Edge</b> over WebSerial — no install, no offsets to type. The three images go on automatically.</p>
 
-    <ol style="padding-left:1.4rem;color:#cbd5e1;line-height:1.8;font-size:.96rem;margin-bottom:1.2rem;">
-      <li>Plug the C5 into your computer with a USB-C cable.</li>
-      <li>In Chrome or Edge, open <a href="https://espressif.github.io/esptool-js" target="_blank" rel="noopener" style="color:#34d399;">espressif.github.io/esptool-js</a>.</li>
-      <li>Click <b>Connect</b> and pick the C5's serial port from the list.</li>
-      <li>Add the three files below, each with its <b>Flash Address</b> set exactly as shown.</li>
-      <li>Click <b>Program</b> and wait for it to finish. 🎉</li>
-    </ol>
-
-    <div class="stream-panel" style="margin-bottom:1rem;max-width:600px;">
-      <div class="head"><span class="led" style="background:#34d399;box-shadow:0 0 6px #34d399"></span>THREE FILES · from docs/flash/bin/trident-c5/</div>
-      <div><span class="warn">0x2000</span>  &nbsp;<span class="ocean">bootloader.bin</span></div>
-      <div><span class="warn">0x8000</span>  &nbsp;<span class="ocean">partition-table.bin</span></div>
-      <div><span class="warn">0x10000</span> <span class="ocean">poseidon_c5_node.bin</span></div>
-      <div class="dim" style="margin-top:.5rem;"># set each address in its Flash Address box, then Program</div>
+    <div style="padding:1.1rem 1.2rem;border:1px solid rgba(52,211,153,.3);border-radius:12px;background:rgba(6,10,22,.35);max-width:540px;margin-bottom:1.2rem;">
+      <div style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.18em;color:#34d399;margin-bottom:.4rem;">WEB FLASHER · CHROME / EDGE</div>
+      <div style="color:#94a3b8;font-size:.88rem;margin-bottom:.9rem;">Plug in via USB-C → click → choose the C5's serial port → done in ~30 s. <span style="color:#64748b;">If it won't connect, hold <b>BOOT (G0)</b> while you click.</span></div>
+      <div id="trident-flash-host">
+        <button id="trident-flash-btn" style="font-family:var(--font-mono);background:#34d399;color:#041a11;border:none;padding:.7rem 1.2rem;border-radius:8px;font-weight:700;letter-spacing:.08em;cursor:pointer;">▸ FLASH TRIDENT C5</button>
+        <span id="trident-flash-unsupported" hidden style="color:#f87171;font-size:.85rem;">This browser can't flash — open this page in Chrome or Edge.</span>
+        <span id="trident-flash-notallowed" hidden style="color:#f87171;font-size:.85rem;">Web flashing needs HTTPS — use the live site, not a local file.</span>
+      </div>
     </div>
 
-    <p style="color:#94a3b8;font-size:.9rem;line-height:1.55;margin-bottom:1.2rem;">Grab the three <code style="background:rgba(52,211,153,.12);padding:.1rem .3rem;border-radius:3px;color:#34d399;font-family:var(--font-mono);">.bin</code> files from <a href="flash/bin/trident-c5/" target="_blank" rel="noopener" style="color:#34d399;">flash/bin/trident-c5/</a> (or the <a href="https://github.com/GeneralDussDuss/poseidon/releases/latest" target="_blank" rel="noopener" style="color:#34d399;">latest release</a>). The Espressif flasher is the go-to here because the one-click button can't currently program the C5 — that's an upstream library limitation, not something on your end. The web flasher above gets you there reliably.</p>
+    <p style="color:#94a3b8;font-size:.9rem;line-height:1.55;margin-bottom:1.2rem;">Prefer the command line, or on Firefox/Safari? The three <code style="background:rgba(52,211,153,.12);padding:.1rem .3rem;border-radius:3px;color:#34d399;font-family:var(--font-mono);">.bin</code> files and a manual route are under <b>Advanced</b> below.</p>
+
+    <details style="margin-bottom:1.2rem;border:1px solid rgba(52,211,153,.2);border-radius:12px;background:rgba(6,10,22,.3);padding:.8rem 1.1rem;">
+      <summary style="cursor:pointer;font-family:var(--font-mono);font-size:.78rem;letter-spacing:.12em;color:#34d399;">ADVANCED — manual flash (CLI / other browsers)</summary>
+      <p style="color:#94a3b8;font-size:.9rem;line-height:1.55;margin:1rem 0 .8rem;">Flash from Espressif's own WebSerial tool at <a href="https://espressif.github.io/esptool-js" target="_blank" rel="noopener" style="color:#34d399;">espressif.github.io/esptool-js</a> (Connect → add the three files at the addresses below → Program), or with Python <code style="background:rgba(52,211,153,.12);padding:.1rem .3rem;border-radius:3px;color:#34d399;font-family:var(--font-mono);">esptool</code>:</p>
+      <div class="stream-panel" style="margin-bottom:.8rem;max-width:600px;">
+        <div class="head"><span class="led" style="background:#34d399;box-shadow:0 0 6px #34d399"></span>THREE FILES · from docs/flash/bin/trident-c5/</div>
+        <div><span class="warn">0x2000</span>  &nbsp;<span class="ocean">bootloader.bin</span></div>
+        <div><span class="warn">0x8000</span>  &nbsp;<span class="ocean">partition-table.bin</span></div>
+        <div><span class="warn">0x10000</span> <span class="ocean">poseidon_c5_node.bin</span></div>
+        <div class="dim" style="margin-top:.5rem;"># set each address in its Flash Address box, then Program</div>
+      </div>
+      <p style="color:#94a3b8;font-size:.88rem;line-height:1.55;margin:0;">Grab them from <a href="flash/bin/trident-c5/" target="_blank" rel="noopener" style="color:#34d399;">flash/bin/trident-c5/</a> or the <a href="https://github.com/GeneralDussDuss/poseidon/releases/latest" target="_blank" rel="noopener" style="color:#34d399;">latest release</a>. There's also a standalone two-target flasher at <a href="flash/" target="_blank" rel="noopener" style="color:#34d399;">/flash/</a>.</p>
+    </details>
 
     <div style="padding:1rem 1.2rem;border:1px solid rgba(52,211,153,.2);border-radius:12px;background:rgba(52,211,153,.05);">
       <div style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.18em;color:#34d399;margin-bottom:.45rem;">💡 PICK THE RIGHT PORT</div>
@@ -163,7 +194,122 @@
   <div class="copy">&copy; 2026 POSEIDON &mdash; commander of the deep &mdash; MIT</div>
 </footer>
 
+<!-- TRIDENT C5 flash progress modal -->
+<div id="tf-overlay" role="dialog" aria-modal="true" aria-labelledby="tf-title">
+  <div class="tf-modal">
+    <h3 id="tf-title">🔱 Flash TRIDENT C5</h3>
+    <div class="tf-sub">ESP32-C5 · WebSerial · do not unplug while flashing</div>
+    <div class="tf-bar"><i id="tf-progress"></i></div>
+    <div id="tf-status">Requesting serial port…</div>
+    <pre id="tf-log"></pre>
+    <div class="tf-actions">
+      <button id="tf-close" disabled>Close</button>
+    </div>
+  </div>
+</div>
+
 <canvas id="particles" style="position:fixed;inset:0;z-index:-1;pointer-events:none"></canvas>
 <script src="assets/site.js"></script>
+
+<script type="module">
+/* One-click TRIDENT C5 flasher.
+   Drives esptool-js >=0.6 directly (lazy-loaded on first click) because the
+   esp-web-tools bundle pins 0.5.x, which can't detect/flash the ESP32-C5.
+   Offsets mirror docs/flash/manifest-trident-c5.json. */
+const PARTS = [
+  { url: "flash/bin/trident-c5/bootloader.bin",       offset: 0x2000  },
+  { url: "flash/bin/trident-c5/partition-table.bin",  offset: 0x8000  },
+  { url: "flash/bin/trident-c5/poseidon_c5_node.bin", offset: 0x10000 },
+];
+const ESPTOOL_VER = "0.6"; // jsdelivr resolves to latest 0.6.x (has the C5 fix)
+
+const btn      = document.getElementById("trident-flash-btn");
+const unsup    = document.getElementById("trident-flash-unsupported");
+const notAllow = document.getElementById("trident-flash-notallowed");
+const overlay  = document.getElementById("tf-overlay");
+const progEl   = document.getElementById("tf-progress");
+const statusEl = document.getElementById("tf-status");
+const logEl    = document.getElementById("tf-log");
+const closeBtn = document.getElementById("tf-close");
+
+// Gate exactly like esp-web-tools does for the Cardputer button.
+const httpsOK = location.protocol === "https:" || ["localhost","127.0.0.1"].includes(location.hostname);
+if (!("serial" in navigator)) { btn.hidden = true; unsup.hidden = false; }
+else if (!httpsOK)            { btn.hidden = true; notAllow.hidden = false; }
+
+const log = (l) => { logEl.textContent += l + "\n"; logEl.scrollTop = logEl.scrollHeight; };
+const setStatus = (m, c) => { statusEl.textContent = m; statusEl.className = c || ""; };
+const hex = (n) => "0x" + n.toString(16);
+const terminal = { clean(){ logEl.textContent = ""; }, writeLine(d){ log(d); },
+  write(d){ logEl.textContent += d; logEl.scrollTop = logEl.scrollHeight; } };
+
+function openModal(){ overlay.setAttribute("data-open",""); progEl.style.width = "0";
+  logEl.textContent = ""; closeBtn.disabled = true; }
+closeBtn.addEventListener("click", () => overlay.removeAttribute("data-open"));
+
+async function fetchBinaryString(url){
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`fetch ${url} -> HTTP ${res.status}`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  let out = "", CH = 0x8000; // chunk to dodge String.fromCharCode call-stack limits
+  for (let i = 0; i < bytes.length; i += CH) out += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  return { str: out, size: bytes.length };
+}
+
+btn.addEventListener("click", async () => {
+  openModal();
+  let ESPLoader, Transport, transport;
+  try {
+    setStatus("Loading flasher…");
+    ({ ESPLoader, Transport } = await import(`https://cdn.jsdelivr.net/npm/esptool-js@${ESPTOOL_VER}/bundle.js`));
+  } catch (e) {
+    setStatus("Couldn't load the flasher from the CDN — check your connection.", "bad");
+    log("ERROR: " + (e?.message || e)); closeBtn.disabled = false; return;
+  }
+  try {
+    setStatus("Requesting serial port…");
+    const port = await navigator.serial.requestPort();
+    transport = new Transport(port, true);
+    const esploader = new ESPLoader({ transport, baudrate: 460800, terminal });
+    setStatus("Connecting / detecting chip…");
+    const mainFn = (esploader.main || esploader.main_fn).bind(esploader);
+    const chipDesc = await mainFn();
+    const chip = esploader.chip?.CHIP_NAME ? esploader.chip.CHIP_NAME : String(chipDesc);
+    log(`Detected: ${chip}`);
+    if (!chip.toUpperCase().includes("C5") &&
+        !confirm(`Connected chip reads "${chip}", not an ESP32-C5.\nFlash the TRIDENT image anyway?`)) {
+      setStatus("Cancelled — wrong chip.", "warn"); closeBtn.disabled = false;
+      try { await transport.disconnect(); } catch {} return;
+    }
+    setStatus("Loading firmware…");
+    const fileArray = [];
+    for (const p of PARTS){
+      const { str, size } = await fetchBinaryString(p.url);
+      log(`Loaded ${p.url.split("/").pop()} (${size.toLocaleString()} bytes) -> ${hex(p.offset)}`);
+      fileArray.push({ data: str, address: p.offset });
+    }
+    setStatus("Flashing… do not unplug.", "warn");
+    await esploader.writeFlash({
+      fileArray, flashSize: "keep", flashMode: "keep", flashFreq: "keep",
+      eraseAll: false, compress: true,
+      reportProgress: (i, written, total) => {
+        const pct = Math.round((written / total) * 100);
+        progEl.style.width = pct + "%";
+        setStatus(`Flashing file ${i + 1}/${fileArray.length} — ${pct}%`, "warn");
+      },
+    });
+    progEl.style.width = "100%";
+    log("Flash complete.");
+    setStatus("✅ Done. Resetting TRIDENT…", "ok");
+    try { await esploader.hardReset(); } catch { log("(auto-reset unavailable — unplug and replug to boot)"); }
+  } catch (e) {
+    log("ERROR: " + (e?.message || e));
+    setStatus("Flash failed — hold BOOT (G0) while clicking, try again, or use the Advanced route.", "bad");
+  } finally {
+    closeBtn.disabled = false;
+    try { await transport?.disconnect(); } catch {}
+  }
+});
+</script>
 </body>
 </html>
