@@ -256,8 +256,10 @@ async function fetchBinaryString(url){
   return { str: out, size: bytes.length };
 }
 
+const TF_BUILD = "c5-2026-06-18-e"; // bump on every change — proves which build the browser actually ran
 btn.addEventListener("click", async () => {
   openModal();
+  log(`[POSEIDON flasher build ${TF_BUILD}] target=ESP32-C5 flashSize=4MB mode=dio freq=80m baud=115200`);
   let ESPLoader, Transport, transport;
   try {
     setStatus("Loading flasher…");
