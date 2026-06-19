@@ -256,7 +256,7 @@ async function fetchBinaryString(url){
   return { str: out, size: bytes.length };
 }
 
-const TF_BUILD = "c5-2026-06-18-g-nostub-spiattach"; // bump on every change — proves which build the browser actually ran
+const TF_BUILD = "c5-2026-06-19-h-nostub-spiattach"; // bump on every change — proves which build the browser actually ran
 btn.addEventListener("click", async () => {
   openModal();
   log(`[POSEIDON flasher build ${TF_BUILD}] target=ESP32-C5 NO-STUB ROM loader · 4MB/dio/80m · 115200 · uncompressed`);
@@ -319,9 +319,13 @@ btn.addEventListener("click", async () => {
       },
     });
     progEl.style.width = "100%";
-    log("Flash complete.");
-    setStatus("✅ Done. Resetting TRIDENT…", "ok");
-    try { await esploader.hardReset(); } catch { log("(auto-reset unavailable — unplug and replug to boot)"); }
+    log("Flash complete. Hash not verified (ROM loader) — if it misbehaves, reflash.");
+    try { await esploader.hardReset(); } catch {}
+    // A warm reset can leave the C5's WiFi calibration in a stuck state (looks
+    // like a boot loop). A real power cycle clears it — so tell the user to
+    // physically unplug/replug for a clean first boot.
+    log("➡  UNPLUG and replug the C5 now for a clean first boot.");
+    setStatus("✅ Flashed! Now UNPLUG & replug the C5 — first boot needs a real power cycle. LED should go green→purple.", "ok");
   } catch (e) {
     const msg = (e?.message || String(e));
     log("ERROR: " + msg);
