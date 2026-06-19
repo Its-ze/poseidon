@@ -256,7 +256,7 @@ async function fetchBinaryString(url){
   return { str: out, size: bytes.length };
 }
 
-const TF_BUILD = "c5-2026-06-19-h-nostub-spiattach"; // bump on every change — proves which build the browser actually ran
+const TF_BUILD = "c5-2026-06-19-i-nostub-deflate"; // bump on every change — proves which build the browser actually ran
 btn.addEventListener("click", async () => {
   openModal();
   log(`[POSEIDON flasher build ${TF_BUILD}] target=ESP32-C5 NO-STUB ROM loader · 4MB/dio/80m · 115200 · uncompressed`);
@@ -304,14 +304,15 @@ btn.addEventListener("click", async () => {
       log(`Loaded ${p.url.split("/").pop()} (${size.toLocaleString()} bytes) -> ${hex(p.offset)}`);
       fileArray.push({ data: str, address: p.offset });
     }
-    setStatus("Flashing over ROM loader — slow (~2-4 min), do NOT unplug.", "warn");
+    setStatus("Flashing over ROM loader (~1-2 min), do NOT unplug.", "warn");
     // Geometry pinned to the known-good `--flash_size 4MB --flash_mode dio
-    // --flash_freq 80m`. compress:false because the ROM loader (no stub) takes
-    // uncompressed writes universally — slower, but it's what actually lands on
-    // this chip. eraseAll:false (stub-only erase path is unavailable no-stub).
+    // --flash_freq 80m`. compress:TRUE: the ESP32-C5 ROM rejects the plain
+    // FLASH_BEGIN ("enter Flash download mode ... status 1,5") but accepts the
+    // compressed FLASH_DEFL_BEGIN — which is exactly what `esptool --no-stub`
+    // used to flash this chip successfully. eraseAll:false (no-stub can't chip-erase).
     await esploader.writeFlash({
       fileArray, flashSize: "4MB", flashMode: "dio", flashFreq: "80m",
-      eraseAll: false, compress: false,
+      eraseAll: false, compress: true,
       reportProgress: (i, written, total) => {
         const pct = Math.round((written / total) * 100);
         progEl.style.width = pct + "%";
