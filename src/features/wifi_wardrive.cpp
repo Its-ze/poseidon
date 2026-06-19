@@ -37,6 +37,7 @@ int      g_wdr_ap_count = 0;
 static volatile bool s_running = false;
 static volatile uint32_t s_beacons = 0;
 static volatile uint8_t  s_current_ch = 1;
+static volatile bool     s_c5_hold    = false;  /* true = hop task parks on ch1 for a C5 5 GHz harvest window */
 static volatile int      s_5g_count = 0;   /* distinct 5 GHz APs from the C5 */
 static File       s_csv;
 static char       s_csv_path[64] = {0};
@@ -186,6 +187,14 @@ static void promisc_cb(void *buf, wifi_promiscuous_pkt_type_t type)
 static void hop_task(void *)
 {
     while (s_running) {
+        if (s_c5_hold) {                 /* C5 5 GHz window: hold ch1 so the */
+            if (s_current_ch != 1) {     /* satellite's ESP-NOW batch reaches us */
+                s_current_ch = 1;
+                esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
+            }
+            delay(50);
+            continue;
+        }
         s_current_ch = (s_current_ch % 13) + 1;
         esp_wifi_set_channel(s_current_ch, WIFI_SECOND_CHAN_NONE);
         delay(400);
@@ -299,24 +308,35 @@ void feat_wifi_wardrive(void)
     uint32_t last_flush  = 0;
     uint32_t last_c5_scan = 0;
     uint32_t last_c5_merge = 0;
+    uint32_t c5_window_end = 0;
     bool dirty = true;
     while (true) {
         gps_poll();
         uint32_t now = millis();
 
-        /* C5 5 GHz augmentation — opportunistic over the channel hop. The
-         * scan command only reaches the satellite while we're parked on
-         * its ESP-NOW channel (1); merge whatever streams back. */
+        /* C5 5 GHz augmentation — hop-SYNCHRONOUS. The old "opportunistic over
+         * the hop" approach logged zero 5 GHz APs: the C5 ships its result
+         * batch on ch1 ~2 s after the command, by which point the hop task has
+         * moved us off ch1, so the batch was never received. Fix: every ~6 s
+         * open a short window where the hop task parks on ch1 (s_c5_hold) so the
+         * scan command AND the streamed batch both land, then resume hopping. */
         if (c5_any_online()) {
-            if (s_current_ch == 1 && now - last_c5_scan > 6000) {
-                last_c5_scan = now;
-                merge_c5_5g();          /* harvest the prior batch first */
+            if (!s_c5_hold && now - last_c5_scan > 6000) {
+                last_c5_scan   = now;
+                s_c5_hold      = true;                 /* hop task parks on ch1 */
+                esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
+                s_current_ch   = 1;
                 c5_clear_results();
                 c5_cmd_scan_5g(2000);
+                c5_window_end  = now + 2700;           /* scan dur + result margin */
             }
-            if (now - last_c5_merge > 1000) {
+            if (now - last_c5_merge > 500) {           /* harvest streamed batches */
                 last_c5_merge = now;
                 merge_c5_5g();
+            }
+            if (s_c5_hold && now > c5_window_end) {     /* close window, resume hop */
+                merge_c5_5g();
+                s_c5_hold = false;
             }
         }
 
