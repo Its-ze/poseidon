@@ -10,15 +10,112 @@ var POSEIDON_REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 addEventListener('DOMContentLoaded',function(){document.querySelectorAll('canvas').forEach(function(c){c.setAttribute('aria-hidden','true');});});
 
 
-// Boot sequence
-window.addEventListener('load', () => {
-  setTimeout(() => {
-    const bo = document.getElementById('bootOverlay');
-    const hud = document.getElementById('hud');
-    if (bo) bo.classList.add('hidden');
-    if (hud) setTimeout(() => hud.classList.add('visible'), 400);
-  }, 1200);
-});
+// ===== Cinematic per-section boot sequence =====
+// Replaces the static splash: each page boots with its own ASCII emblem and a
+// dramatic streaming boot log, CRT-styled. Data-driven so it covers every page.
+(function bootSequence() {
+  const bo = document.getElementById('bootOverlay');
+  if (!bo) return;
+  const hud = document.getElementById('hud');
+  const page = ((location.pathname.split('/').pop() || 'index').replace('.html', '')) || 'index';
+
+  if (!document.getElementById('dbootStyle')) {
+    const st = document.createElement('style'); st.id = 'dbootStyle';
+    st.textContent =
+      '#bootOverlay .dboot{max-width:720px;width:92vw;font-family:var(--font-mono,ui-monospace,monospace);text-align:left}' +
+      '#bootOverlay .dboot-art{white-space:pre;color:var(--bacc,#38bdf8);font-size:clamp(8px,1.7vw,13px);line-height:1.15;' +
+      'text-shadow:0 0 10px var(--bacc,#38bdf8);margin:0 0 .4rem;opacity:0;animation:dbootArt .5s ease-out forwards}' +
+      '#bootOverlay .dboot-name{font-family:var(--font-display,sans-serif);font-weight:800;letter-spacing:.18em;' +
+      'font-size:clamp(1.4rem,5vw,2.6rem);color:var(--bacc,#38bdf8);text-shadow:0 0 18px var(--bacc,#38bdf8);margin:.1rem 0 .7rem}' +
+      '#bootOverlay .dboot-log{font-size:clamp(9px,1.5vw,12.5px);line-height:1.5;color:#8fa6c8;min-height:11em}' +
+      '#bootOverlay .dboot-log div{opacity:0;transform:translateX(-6px);transition:opacity .14s,transform .14s;white-space:pre}' +
+      '#bootOverlay .dboot-log div.on{opacity:1;transform:none}' +
+      '#bootOverlay .dboot-log .k{color:var(--bacc,#38bdf8)} #bootOverlay .dboot-log .ok{color:#5effc8}' +
+      '#bootOverlay .dboot-log .warn{color:#fbbf24}' +
+      '#bootOverlay .dboot-bar{height:4px;margin-top:.6rem;background:rgba(255,255,255,.06);border-radius:99px;overflow:hidden}' +
+      '#bootOverlay .dboot-bar i{display:block;height:100%;width:0;background:var(--bacc,#38bdf8);box-shadow:0 0 10px var(--bacc,#38bdf8);transition:width .25s}' +
+      '#bootOverlay .dboot-cur{display:inline-block;width:.6em;height:1em;background:var(--bacc,#38bdf8);vertical-align:-2px;animation:dbootCur 1s steps(2) infinite;box-shadow:0 0 8px var(--bacc,#38bdf8)}' +
+      '#bootOverlay::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:2;' +
+      'background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.5) 2px 3px);opacity:.4}' +
+      '@keyframes dbootArt{from{opacity:0;filter:brightness(3)}to{opacity:1;filter:none}}' +
+      '@keyframes dbootCur{50%{opacity:0}}';
+    document.head.appendChild(st);
+  }
+
+  const A = '#38bdf8';
+  const SEQ = {
+    index:    { acc:'#38bdf8', name:'POSEIDON', tag:'COMMANDER OF THE DEEP',
+      art:['        ╲     │     ╱','         ╲   ‖‖‖   ╱','      ◣════╗ ‖‖‖ ╔════◢','          ╚══╪╪╪══╝','             ‖‖‖','       ≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈'],
+      log:['mounting six-band RF core','wifi · ble · sub-ghz · 2.4 · lora · ir','cc1101 + nrf24 + sx1262 linked','TRIDENT C5 satellite handshake','80+ modules registered'] },
+    arsenal:  { acc:'#f0abfc', name:'ARSENAL', tag:'EVERY TOOL, ARMED',
+      art:['   ┌────┬────┬────┬────┐','   │ ⚷  │ ▚▚ │ ◎  │ ☢  │','   ├────┼────┼────┼────┤','   │ ▟▙ │ ⌁  │ ⟿  │ ▒▒ │','   └────┴────┴────┴────┘'],
+      log:['indexing module registry','arming wifi / ble / sub-ghz suites','loading 80+ attack + recon tools','safety gates: DISARMED by default'] },
+    codex:    { acc:'#38bdf8', name:'CODEX', tag:'DECRYPT THE ARSENAL',
+      art:['    ╔═══════════════╗','    ║ 0x504F5345 ▒▒ ║','    ║ decrypting... ▚ ║','    ╚═══════════════╝'],
+      log:['loading radio index','decrypting tool manifests','9 radios · per-chip arsenals','console standing by'] },
+    install:  { acc:'#34d399', name:'INSTALL', tag:'BRING IT TO LIFE',
+      art:['     ┌─[ ESP32 ]─┐','     │ ▓▓▓▓▓▓▓▓ │ ◂ flash','     └─────┬─────┘','        ▟ USB-C ▙'],
+      log:['probing flash subsystem','M5Burner + WebSerial bridge up','TRIDENT C5 no-stub flasher ready','select your device'] },
+    hardware: { acc:'#7dd3fc', name:'HARDWARE', tag:'KNOW YOUR GEAR',
+      art:['   ┌───────────────────┐','   │ ▢ LCD    ⌨ KBD   │','   │ ▟ RF ▟  ▟ HATS ▟ │','   └──┬─────────────┬──┘','      ╿             ╿'],
+      log:['probing i2c bus','ST7789v2 LCD + TCA8418 keyboard','sub-ghz / 2.4 / lora / gnss hats','pinmap resolved'] },
+    roadmap:  { acc:'#fbbf24', name:'ROADMAP', tag:'THE DEEP AHEAD',
+      art:['   ●───●───●───◐───○───○','   v0.4 v0.5 v0.6 now next','        ▸ charting course'],
+      log:['loading release timeline','shipped vs in-flight','plotting next milestones'] },
+    testers:  { acc:'#a78bfa', name:'TESTERS', tag:'FIRST IN THE WATER',
+      art:['      (( • ))   (( • ))','     ◢█◣  ◢█◣  ◢█◣','     field crew online'],
+      log:['pinging tester roster','field reports synced','thank-you protocol loaded'] },
+    credits:  { acc:'#f472b6', name:'CREDITS', tag:'STANDING ON GIANTS',
+      art:['        ✦   ✦   ✦','       ╲  ☼  ╱','        ╲ │ ╱','     ── built by ──'],
+      log:['loading contributors','open-source dependencies','respect + attribution'] },
+    legal:    { acc:'#f59e0b', name:'LEGAL', tag:'AUTHORIZED USE ONLY',
+      art:['          ╔═╗','        ╔═╝▟▙╚═╗','        ║ ⚖  ║','        ╚══════╝'],
+      log:['loading compliance banner','regulated bands · operate on your own gear','consent required for all targets'] },
+  };
+  const d = SEQ[page] || SEQ.index;
+  bo.style.setProperty('--bacc', d.acc);
+
+  const lines = [
+    { t: 'POSEIDON OS · cold boot', c: 'k' },
+    { t: 'core esp32-s3 @ 240MHz ............ [ OK ]', c: 'ok' },
+    { t: '8MB PSRAM mapped ................. [ OK ]', c: 'ok' },
+    ...d.log.map(s => ({ t: '> ' + s + ' ', c: '' })),
+    { t: d.name + ' online. ready_', c: 'k', cur: true },
+  ];
+
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const artHtml = d.art.map(esc).join('\n');
+  const logHtml = lines.map(l =>
+    `<div class="${l.c}">${esc(l.t)}${l.cur ? '<span class="dboot-cur"></span>' : ''}</div>`).join('');
+  bo.innerHTML =
+    `<div class="dboot"><pre class="dboot-art">${artHtml}</pre>` +
+    `<div class="dboot-name">${esc(d.name)}</div>` +
+    `<div class="dboot-log">${logHtml}</div>` +
+    `<div class="dboot-bar"><i></i></div></div>`;
+
+  const REDUCED = POSEIDON_REDUCED;
+  const logEls = [...bo.querySelectorAll('.dboot-log div')];
+  const bar = bo.querySelector('.dboot-bar i');
+  const showHud = () => { if (hud) setTimeout(() => hud.classList.add('visible'), 350); };
+
+  if (REDUCED) {
+    logEls.forEach(e => e.classList.add('on')); if (bar) bar.style.width = '100%';
+    setTimeout(() => { bo.classList.add('hidden'); showHud(); }, 600);
+    return;
+  }
+  let i = 0;
+  const step = () => {
+    if (i < logEls.length) {
+      logEls[i].classList.add('on');
+      if (bar) bar.style.width = Math.round(((i + 1) / logEls.length) * 100) + '%';
+      i++;
+      setTimeout(step, 95 + Math.random() * 70);
+    } else {
+      setTimeout(() => { bo.classList.add('hidden'); showHud(); }, 650);
+    }
+  };
+  setTimeout(step, 380);
+})();
 
 // Scroll progress + nav
 const bar = document.getElementById('scrollProgress');
