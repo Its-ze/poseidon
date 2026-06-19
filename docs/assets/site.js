@@ -438,7 +438,23 @@ document.querySelectorAll('[data-count]').forEach(el => counterObs.observe(el));
     hum = null;
   }
   const clickTick = () => blip({ f: 480 + Math.random() * 120, type: 'triangle', d: .03, g: .03, to: 220 });
-  const loadSweep = () => { blip({ f: 180, type: 'sine', d: .55, g: .04, to: 560 }); noise(.16, .02); };
+  // Page power-on: CRT-style thunk → rising sweep → confirm note. Plays on the
+  // first gesture of every page so the whole site feels like it boots up.
+  const loadSweep = () => {
+    blip({ f: 140, type: 'sine', d: .22, g: .07, to: 40 });
+    blip({ f: 200, type: 'sine', d: .5,  g: .035, to: 640, delay: .04 });
+    blip({ f: 880, type: 'sine', d: .12, g: .025, delay: .42 });
+    noise(.14, .02);
+  };
+  // Section transition: whoosh + select-rise + 2-note confirm — fires when you
+  // click into another page, so it sounds like "loading into" that section.
+  const transition = () => {
+    blip({ f: 1100, type: 'sawtooth', d: .26, g: .045, to: 90 });
+    blip({ f: 420,  type: 'square',   d: .05, g: .03, to: 880, delay: .02 });
+    blip({ f: 660,  type: 'sine',     d: .12, g: .03, delay: .14 });
+    blip({ f: 990,  type: 'sine',     d: .14, g: .03, delay: .2 });
+    noise(.12, .02);
+  };
 
   // Start audio on the first user gesture (autoplay policy).
   function firstGesture() {
@@ -452,6 +468,25 @@ document.querySelectorAll('[data-count]').forEach(el => counterObs.observe(el));
     if (muted || !started) return;
     if (e.target.closest && e.target.closest('a,button,.mod,[role="button"],.tool,summary,input,select,.nav-links a')) clickTick();
   }, { passive: true });
+
+  // Navigation flourish — internal page links play the transition sound, with a
+  // short hold so it lands before the page swaps. Skips external/new-tab/download
+  // /anchor links and modified clicks; never delays when muted or reduced-motion.
+  addEventListener('click', e => {
+    if (POSEIDON_REDUCED) return;
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = e.target.closest && e.target.closest('a[href]');
+    if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
+    let url; try { url = new URL(a.href, location.href); } catch { return; }
+    if (url.origin !== location.origin) return;              // external
+    if (url.pathname === location.pathname) return;          // same page / in-page anchor
+    if (!/(\.html|\/)$/.test(url.pathname)) return;          // page navigations only
+    started = true; ctx();
+    if (muted) return;                                       // no sound → no delay
+    e.preventDefault();
+    transition();
+    setTimeout(() => { location.href = a.href; }, 170);
+  });
 
   // Mute toggle (bottom-left), shared across the suite.
   const tgl = document.createElement('button');
