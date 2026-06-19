@@ -396,64 +396,108 @@ document.querySelectorAll('[data-count]').forEach(el => counterObs.observe(el));
   const MUTE_KEY = 'poseidonMuted';
   let muted = localStorage.getItem(MUTE_KEY) === '1';
   let actx = null, hum = null, started = false;
+  let bus = null, busWet = null;   // premium master chain + synthesized reverb send
 
   function ctx() {
     if (POSEIDON_REDUCED) return null;
-    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return null; } }
+    if (!actx) {
+      try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return null; }
+      // Premium master bus: every voice -> master gain -> warm lowpass -> out,
+      // with a parallel short synthesized reverb for a sense of space (Tron-ish
+      // depth without mud). Built once, lazily, inside the first gesture.
+      const a = actx;
+      const master = a.createGain(); master.gain.value = 0.9;
+      const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 5400; lp.Q.value = 0.4;
+      master.connect(lp).connect(a.destination);
+      const rev = a.createConvolver();
+      const len = (a.sampleRate * 1.0) | 0, ir = a.createBuffer(2, len, a.sampleRate);
+      for (let c = 0; c < 2; c++) { const dch = ir.getChannelData(c);
+        for (let i = 0; i < len; i++) dch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.4); }
+      rev.buffer = ir;
+      const revOut = a.createGain(); revOut.gain.value = 0.5;
+      rev.connect(revOut).connect(lp);
+      bus = master; busWet = { rev };
+    }
     if (actx.state === 'suspended') actx.resume();
     return actx;
   }
-  function blip({ f = 440, type = 'square', d = .05, g = .03, to = null, delay = 0 }) {
-    const a = ctx(); if (!a || muted) return;
+  // A voice: oscillator -> envelope -> master (dry); reverb>0 also sends to the
+  // convolver for space. Sweeps glide f -> to over the duration (swoops/chirps).
+  function blip({ f = 440, type = 'sine', d = .05, g = .03, to = null, delay = 0, reverb = 0 }) {
+    const a = ctx(); if (!a || muted || !bus) return;
     const o = a.createOscillator(), gn = a.createGain(), t0 = a.currentTime + delay;
     o.type = type; o.frequency.setValueAtTime(f, t0);
-    if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + d);
+    if (to) o.frequency.exponentialRampToValueAtTime(Math.max(1, to), t0 + d);
     gn.gain.setValueAtTime(.0001, t0);
-    gn.gain.linearRampToValueAtTime(g, t0 + .006);
+    gn.gain.linearRampToValueAtTime(g, t0 + .008);
     gn.gain.exponentialRampToValueAtTime(.0001, t0 + d);
-    o.connect(gn).connect(a.destination); o.start(t0); o.stop(t0 + d + .03);
+    o.connect(gn); gn.connect(bus);
+    if (reverb && busWet) { const sd = a.createGain(); sd.gain.value = reverb; gn.connect(sd); sd.connect(busWet.rev); }
+    o.start(t0); o.stop(t0 + d + .05);
   }
-  function noise(d = .1, g = .04) {
-    const a = ctx(); if (!a || muted) return;
+  function noise(d = .1, g = .04, reverb = 0) {
+    const a = ctx(); if (!a || muted || !bus) return;
     const n = (a.sampleRate * d) | 0, b = a.createBuffer(1, n, a.sampleRate), ch = b.getChannelData(0);
     for (let i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
     const s = a.createBufferSource(); s.buffer = b;
-    const gn = a.createGain(); gn.gain.value = g; s.connect(gn).connect(a.destination); s.start();
+    const gn = a.createGain(); gn.gain.value = g; s.connect(gn); gn.connect(bus);
+    if (reverb && busWet) { const sd = a.createGain(); sd.gain.value = reverb; gn.connect(sd); sd.connect(busWet.rev); }
+    s.start();
   }
-  // Layered low hum — two slightly detuned sines + an octave, faded in.
+  // Deep CRT background hum that *modulates* — detuned low sines through a
+  // resonant lowpass whose level AND cutoff slowly breathe via LFOs, plus a
+  // faint pitch shimmer. Subtle, deep, alive — the bed under everything.
   function startHum() {
     const a = ctx(); if (!a || muted || hum) return;
-    const mk = (f, g) => {
+    const out = a.createGain();
+    out.gain.setValueAtTime(.0001, a.currentTime);
+    out.gain.linearRampToValueAtTime(1, a.currentTime + 2.0);
+    const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 220; lp.Q.value = 6;
+    out.connect(lp).connect(bus);
+    const tones = [[50, .018], [50.4, .013], [100, .006], [60, .004]].map(([f, g]) => {
       const o = a.createOscillator(), gn = a.createGain();
-      o.type = 'sine'; o.frequency.value = f;
-      gn.gain.setValueAtTime(.0001, a.currentTime);
-      gn.gain.linearRampToValueAtTime(g, a.currentTime + 1.6);
-      o.connect(gn).connect(a.destination); o.start(); return { o, gn };
+      o.type = 'sine'; o.frequency.value = f; gn.gain.value = g;
+      o.connect(gn).connect(out); o.start(); return o;
+    });
+    const lfo = (freq, depth, target) => {
+      const o = a.createOscillator(), d = a.createGain();
+      o.type = 'sine'; o.frequency.value = freq; d.gain.value = depth;
+      o.connect(d); d.connect(target); o.start(); return o;
     };
-    hum = [mk(55, .016), mk(58.4, .012), mk(110, .006)];
+    const mods = [
+      lfo(.13, .28, out.gain),            // level breathes  ±0.28 (~7.7 s)
+      lfo(.075, 90, lp.frequency),        // filter opens/closes ±90 Hz (~13 s)
+      lfo(.09, .8, tones[1].frequency),   // faint pitch shimmer ±0.8 Hz
+    ];
+    hum = { osc: [...tones, ...mods], out };
   }
   function stopHum() {
     if (!hum) return; const a = ctx();
-    hum.forEach(h => { try { h.gn.gain.exponentialRampToValueAtTime(.0001, a.currentTime + .4); h.o.stop(a.currentTime + .5); } catch {} });
+    try {
+      hum.out.gain.cancelScheduledValues(a.currentTime);
+      hum.out.gain.setValueAtTime(Math.max(.0001, hum.out.gain.value), a.currentTime);
+      hum.out.gain.linearRampToValueAtTime(.0001, a.currentTime + .6);
+      hum.osc.forEach(o => { try { o.stop(a.currentTime + .65); } catch {} });
+    } catch {}
     hum = null;
   }
-  const clickTick = () => blip({ f: 480 + Math.random() * 120, type: 'triangle', d: .03, g: .03, to: 220 });
-  // Page power-on: CRT-style thunk → rising sweep → confirm note. Plays on the
-  // first gesture of every page so the whole site feels like it boots up.
+  // Subtle UI chirp — a quick clean up-glide, barely there.
+  const clickTick = () => blip({ f: 900 + Math.random() * 220, type: 'sine', d: .045, g: .018, to: 2100 });
+  // Page power-on swoop — sub thud, a long rising sine swoop, a soft confirm
+  // chirp in reverb space. The boot of every page.
   const loadSweep = () => {
-    blip({ f: 140, type: 'sine', d: .22, g: .07, to: 40 });
-    blip({ f: 200, type: 'sine', d: .5,  g: .035, to: 640, delay: .04 });
-    blip({ f: 880, type: 'sine', d: .12, g: .025, delay: .42 });
-    noise(.14, .02);
+    blip({ f: 120,  type: 'sine', d: .30, g: .055, to: 38 });
+    blip({ f: 150,  type: 'sine', d: .55, g: .028, to: 900,  delay: .05, reverb: .25 });
+    blip({ f: 1500, type: 'sine', d: .12, g: .018, to: 2300, delay: .46, reverb: .4 });
+    noise(.12, .013, .3);
   };
-  // Section transition: whoosh + select-rise + 2-note confirm — fires when you
-  // click into another page, so it sounds like "loading into" that section.
+  // Section transition — a clean descending swoop diving into a rising chirp,
+  // with space. Sounds like dropping into the section you picked.
   const transition = () => {
-    blip({ f: 1100, type: 'sawtooth', d: .26, g: .045, to: 90 });
-    blip({ f: 420,  type: 'square',   d: .05, g: .03, to: 880, delay: .02 });
-    blip({ f: 660,  type: 'sine',     d: .12, g: .03, delay: .14 });
-    blip({ f: 990,  type: 'sine',     d: .14, g: .03, delay: .2 });
-    noise(.12, .02);
+    blip({ f: 1700, type: 'sine',     d: .26, g: .032, to: 200,  reverb: .3 });
+    blip({ f: 300,  type: 'triangle', d: .18, g: .028, to: 1400, delay: .12, reverb: .35 });
+    blip({ f: 1046, type: 'sine',     d: .16, g: .022, delay: .26, reverb: .45 });
+    noise(.08, .010, .25);
   };
 
   // Start audio on the first user gesture (autoplay policy).
