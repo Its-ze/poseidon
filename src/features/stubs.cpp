@@ -30,3 +30,26 @@ void feat_about(void)
         if (k == PK_ESC) break;
     }
 }
+
+void feat_evil_twin(void)
+{
+    ui_clear_body();
+    auto &d = M5Cardputer.Display;
+    d.setTextColor(T_WARN, T_BG);
+    d.setCursor(4, BODY_Y + 2);
+    d.print("EVIL TWIN DISABLED");
+    d.drawFastHLine(4, BODY_Y + 12, 132, T_WARN);
+    d.setTextColor(T_FG, T_BG);
+    d.setCursor(4, BODY_Y + 24);
+    d.print("Stability build");
+    d.setCursor(4, BODY_Y + 38);
+    d.print("Use Portal/AP Clone");
+    d.setCursor(4, BODY_Y + 52);
+    d.print("separately for now.");
+    ui_draw_footer("`=back");
+    while (true) {
+        uint16_t k = input_poll();
+        if (k == PK_NONE) { delay(20); continue; }
+        if (k == PK_ESC) break;
+    }
+}
