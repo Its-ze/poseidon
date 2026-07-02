@@ -14,6 +14,7 @@
 #include "c5_cmd.h"
 #include "menu_carousel.h"
 #include "screensaver.h"
+#include <WiFi.h>
 #include <Preferences.h>
 
 /* ---- menu render style: NVS-backed terminal/carousel toggle ---- */
@@ -1290,6 +1291,26 @@ static void slide_to(const menu_node_t *p, int c, int dir) {
 
 #define FOOTER_HINTS "letter=go  ;/.=move  ENTER=sel  ==info  `=back"
 
+static void menu_cleanup_after_feature(void)
+{
+    radio_domain_t active = radio_current();
+    if (active == RADIO_WIFI && WiFi.status() == WL_CONNECTED) return;
+    if (active != RADIO_NONE) radio_switch(RADIO_NONE);
+}
+
+static void run_feature_action(const menu_node_t *item)
+{
+    if (!item || !item->action) return;
+    Serial.printf("[FEAT_ENTER] %s\n", item->label);
+    g_current_feature_item = item;
+    item->action();
+    g_current_feature_item = nullptr;
+    menu_cleanup_after_feature();
+    pinMode(44, OUTPUT);
+    digitalWrite(44, HIGH);
+    Serial.printf("[FEAT_EXIT] %s\n", item->label);
+}
+
 static void run_submenu(const menu_node_t *parent)
 {
     /* Style dispatch — when the user has selected the carousel layout
@@ -1346,15 +1367,7 @@ static void run_submenu(const menu_node_t *parent)
         if (k == PK_ENTER) {
             const menu_node_t *sel = &parent->children[cursor];
             if (sel->action) {
-                Serial.printf("[FEAT_ENTER] %s\n", sel->label);
-                g_current_feature_item = sel;
-                sel->action();
-                g_current_feature_item = nullptr;
-                /* Defensive IR park — IR features should self-park HIGH
-                 * but if any path skips that, the LED stays glowing.
-                 * Hard-set OFF here after every feature returns. */
-                pinMode(44, OUTPUT); digitalWrite(44, HIGH);
-                Serial.printf("[FEAT_EXIT] %s\n", sel->label);
+                run_feature_action(sel);
                 ui_draw_status(radio_name(), "");
                 ui_draw_footer(FOOTER_HINTS);
                 s_menu_force = true;
@@ -1383,13 +1396,7 @@ static void run_submenu(const menu_node_t *parent)
                     cursor = i;
                     draw_menu(parent, cursor);
                     if (ch->action) {
-                        Serial.printf("[FEAT_ENTER] %s\n", ch->label);
-                        g_current_feature_item = ch;
-                        ch->action();
-                        g_current_feature_item = nullptr;
-                        /* Defensive IR park — same as above. */
-                        pinMode(44, OUTPUT); digitalWrite(44, HIGH);
-                        Serial.printf("[FEAT_EXIT] %s\n", ch->label);
+                        run_feature_action(ch);
                         ui_draw_status(radio_name(), "");
                         ui_draw_footer(FOOTER_HINTS);
                         s_menu_force = true;

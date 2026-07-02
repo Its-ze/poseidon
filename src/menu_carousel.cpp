@@ -36,6 +36,7 @@
 #include "app.h"
 #include "screensaver.h"
 #include <M5Cardputer.h>
+#include <WiFi.h>
 #include <Arduino.h>
 #include <ctype.h>
 #include <string.h>
@@ -49,6 +50,13 @@ extern const menu_node_t *g_current_feature_item;
 extern void               ui_show_current_help(void);
 
 #define CAROUSEL_FOOTER ";/.=swipe  ENTER=open  =help  letter=jump  `=back"
+
+static void carousel_cleanup_after_feature(void)
+{
+    radio_domain_t active = radio_current();
+    if (active == RADIO_WIFI && WiFi.status() == WL_CONNECTED) return;
+    if (active != RADIO_NONE) radio_switch(RADIO_NONE);
+}
 
 static int count_children(const menu_node_t *parent)
 {
@@ -373,6 +381,7 @@ void carousel_run_submenu(const menu_node_t *parent)
                 g_current_feature_item = sel;
                 sel->action();
                 g_current_feature_item = nullptr;
+                carousel_cleanup_after_feature();
                 /* Defensive IR park — see menu.cpp comment. */
                 pinMode(44, OUTPUT); digitalWrite(44, HIGH);
                 Serial.printf("[FEAT_EXIT] %s\n", sel->label);
@@ -401,6 +410,7 @@ void carousel_run_submenu(const menu_node_t *parent)
                     g_current_feature_item = sel;
                     sel->action();
                     g_current_feature_item = nullptr;
+                    carousel_cleanup_after_feature();
                     /* Defensive IR park — same as regular path. */
                     pinMode(44, OUTPUT); digitalWrite(44, HIGH);
                     Serial.printf("[FEAT_EXIT] %s\n", sel->label);
