@@ -338,7 +338,7 @@ void feat_tabforge_direct(void)
     release_wifi_for_ble();
     NimBLEDevice::init("POSEIDON Direct");
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
-    NimBLEDevice::setSecurityAuth(true, false, true);
+    NimBLEDevice::setSecurityAuth(true, false, false);
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
     s_direct_disconnected = false;
     s_direct_rx = nullptr;
