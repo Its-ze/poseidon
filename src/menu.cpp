@@ -68,6 +68,8 @@ extern void feat_ap_signal_test(void);
 extern void feat_ble_scan(void);
 extern void feat_ble_spam(void);
 extern void feat_ble_hid(void);
+extern void feat_ble_keyboard(void);
+extern void feat_tabforge_direct(void);
 extern void feat_ble_tracker(void);
 extern void feat_ble_sniff(void);
 extern void feat_ble_beacon(void);
@@ -356,6 +358,14 @@ static const menu_node_t MENU_C5[] = {
 };
 
 static const menu_node_t MENU_BLE[] = {
+    { 'e', "BT Keyboard", "Full Bluetooth HID keyboard", nullptr, feat_ble_keyboard,
+      "Advertises as Cardputer Keyboard using the standard BLE HID profile. "
+      "Every physical key, modifier, and multi-key report is forwarded live. "
+      "Use the side button to disconnect and return." },
+    { 'u', "TabForge Direct", "Pair keyboard + display to Tab5", nullptr, feat_tabforge_direct,
+      "Connects directly to the TabForge Card Display app over authenticated "
+      "Bluetooth. Enter the four-digit code shown on Tab5, then type into Tab "
+      "fields while the Tab renders POSEIDON link and app status frames." },
     { 's', "Scan", "Discover BLE devices", nullptr, feat_ble_scan,
       "Passive NimBLE scan with device identification. ENTER on a device "
       "opens details where G/C/H/X/P hotkeys fire GATT/Clone/Bad-KB/Flood/Spam "
