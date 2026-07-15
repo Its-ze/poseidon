@@ -256,18 +256,31 @@ static bool direct_connect(void)
 {
     tf_direct_scan_cb scan_cb;
     NimBLEScan *scan = NimBLEDevice::getScan();
-    scan->setScanCallbacks(&scan_cb, true);
-    scan->setActiveScan(true);
+    scan->setScanCallbacks(&scan_cb, false);
+    scan->setActiveScan(false);
     scan->setInterval(80);
     scan->setWindow(50);
-    scan->setMaxResults(8);
+    /* Cardputer-Adv has no usable PSRAM. Keep advertisements callback-only
+     * so security/AES still has a contiguous internal-heap block. */
+    scan->setMaxResults(0);
     scan->getResults(12000, false);
-    if (!scan_cb.found) return false;
+    bool found = scan_cb.found;
+    NimBLEAddress address = scan_cb.address;
+    scan->clearResults();
+    scan->setScanCallbacks(nullptr);
+    if (!found) return false;
+
+    Serial.printf("[tab-direct] pre-connect heap=%u largest=%u\n",
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                  (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
 
     s_direct_client = NimBLEDevice::createClient();
     s_direct_client->setClientCallbacks(&s_direct_client_cb, false);
     s_direct_client->setConnectTimeout(8000);
-    if (!s_direct_client->connect(scan_cb.address)) return false;
+    if (!s_direct_client->connect(address)) return false;
+    Serial.printf("[tab-direct] pre-security heap=%u largest=%u\n",
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                  (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
     if (!s_direct_client->secureConnection()) return false;
 
     NimBLERemoteService *service = s_direct_client->getService(TF_SERVICE_UUID);
@@ -284,11 +297,13 @@ static bool direct_pair(const char *code, char *ack, size_t ack_size)
              "{\"tabforge\":\"cardputer.remote.pair\",\"device\":\"cardputer\",\"code\":\"%.7s\"}",
              code);
     if (!direct_write(json)) return false;
-    delay(250);
-    if (s_direct_tx && s_direct_tx->canRead()) {
+    uint32_t deadline = millis() + 2500;
+    while (s_direct_tx && s_direct_tx->canRead() && (int32_t)(deadline - millis()) > 0) {
+        delay(100);
         std::string response = s_direct_tx->readValue();
         strlcpy(ack, response.c_str(), ack_size);
-        return response.find("\"state\":\"paired\"") != std::string::npos;
+        if (response.find("\"state\":\"paired\"") != std::string::npos) return true;
+        if (response.find("\"state\":\"pair_failed\"") != std::string::npos) return false;
     }
     return false;
 }
