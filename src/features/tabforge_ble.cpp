@@ -268,6 +268,7 @@ static bool direct_connect(void)
     s_direct_client->setClientCallbacks(&s_direct_client_cb, false);
     s_direct_client->setConnectTimeout(8000);
     if (!s_direct_client->connect(scan_cb.address)) return false;
+    if (!s_direct_client->secureConnection()) return false;
 
     NimBLERemoteService *service = s_direct_client->getService(TF_SERVICE_UUID);
     if (!service) return false;
